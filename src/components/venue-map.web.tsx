@@ -3,7 +3,7 @@ import { View } from 'react-native';
 
 import { Text } from '@/components/ui/text';
 import { VIEW_RADIUS_METERS } from '@/lib/use-location';
-import type { NearbyVenue } from '@/lib/use-nearby-venues';
+import type { MapRegion, NearbyVenue } from '@/lib/use-nearby-venues';
 import type { SelectedPoi } from '@/lib/venues';
 
 const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY;
@@ -33,6 +33,7 @@ type VenueMapProps = {
   // AdvancedMarker, which silently no-ops without a paid mapId.
   venues: NearbyVenue[];
   onSelectVenue: (venue: NearbyVenue) => void;
+  onRegionSettled: (region: MapRegion) => void;
 };
 
 /**

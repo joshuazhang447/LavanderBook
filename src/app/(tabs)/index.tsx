@@ -4,6 +4,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { ReviewSheet } from '@/components/review-sheet';
 import { Text } from '@/components/ui/text';
 import { VenueMap } from '@/components/venue-map';
+import type { MapRegion } from '@/lib/use-nearby-venues';
 import { useNearbyVenues } from '@/lib/use-nearby-venues';
 import { useCurrentLocation, useWalkingAnchor } from '@/lib/use-location';
 import type { SelectedPoi } from '@/lib/venues';
@@ -15,9 +16,17 @@ export default function MapScreen() {
   const [selectedVenueId, setSelectedVenueId] = React.useState<string | undefined>(undefined);
   const location = useCurrentLocation();
   // Separate from `location`: this one updates as you walk, and must not reach
-  // the map's centre or the map would drag itself back under you.
+  // the map's centre or the map would drag itself back under you. It only
+  // nudges a refetch, so venues appear as you walk without panning.
   const anchor = useWalkingAnchor();
-  const venues = useNearbyVenues(anchor);
+  const [region, setRegion] = React.useState<MapRegion | null>(null);
+  const [savedCount, setSavedCount] = React.useState(0);
+  // Derived rather than an effect that bumps a counter: walking to a new anchor
+  // and saving a review are both just reasons to refetch.
+  const venues = useNearbyVenues(
+    region,
+    `${savedCount}:${anchor ? `${anchor.latitude},${anchor.longitude}` : ''}`
+  );
 
   // The map reads its centre once, on mount, so wait for the position rather
   // than mounting somewhere arbitrary and jumping afterwards.
@@ -62,6 +71,7 @@ export default function MapScreen() {
           });
         }}
         onDismiss={() => setSelected(null)}
+        onRegionSettled={setRegion}
       />
 
       {selected ? (
@@ -69,7 +79,11 @@ export default function MapScreen() {
           poi={selected}
           venueId={selectedVenueId}
           onClose={() => setSelected(null)}
-          onSaved={() => setSelected(null)}
+          onSaved={() => {
+            setSelected(null);
+            // Do not wait for a pan or a 50m walk to see your own review.
+            setSavedCount((count) => count + 1);
+          }}
         />
       ) : null}
 

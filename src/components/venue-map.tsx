@@ -2,7 +2,7 @@ import { StyleSheet } from 'react-native';
 import MapView from 'react-native-maps';
 
 import { VenueMarker } from '@/components/venue-marker';
-import type { NearbyVenue } from '@/lib/use-nearby-venues';
+import type { MapRegion, NearbyVenue } from '@/lib/use-nearby-venues';
 import type { SelectedPoi } from '@/lib/venues';
 import { VIEW_RADIUS_METERS } from '@/lib/use-location';
 
@@ -18,6 +18,8 @@ type VenueMapProps = {
   /** Reviewed venues nearby, drawn as rating boxes above their point. */
   venues: NearbyVenue[];
   onSelectVenue: (venue: NearbyVenue) => void;
+  /** Fires once panning or zooming settles, so venues can be fetched for it. */
+  onRegionSettled: (region: MapRegion) => void;
 };
 
 /**
@@ -33,6 +35,7 @@ export function VenueMap({
   onDismiss,
   venues,
   onSelectVenue,
+  onRegionSettled,
 }: VenueMapProps) {
   return (
     <MapView
@@ -43,6 +46,9 @@ export function VenueMap({
         latitudeDelta: LATITUDE_DELTA,
         longitudeDelta: LATITUDE_DELTA,
       }}
+      // Complete, not onRegionChange: the latter fires continuously through the
+      // whole gesture and would fire a query per frame.
+      onRegionChangeComplete={onRegionSettled}
       showsUserLocation
       // Google's own chrome, hidden to match the web map.
       showsMyLocationButton={false}
