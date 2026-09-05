@@ -26,6 +26,16 @@ import type { SelectedPoi } from '@/lib/venues';
  */
 const FOLLOW_REFETCH_METERS = VIEW_RADIUS_METERS / 2;
 
+/**
+ * How long the refresh button spins after a press.
+ *
+ * Deliberately a fixed duration rather than the fetch's own loading flag: that
+ * flag is true for every background refetch - panning, following, a realtime
+ * event - which made the icon flicker on its own. This button reflects the
+ * press and nothing else.
+ */
+const REFRESH_SPIN_MS = 900;
+
 export default function MapScreen() {
   const [selected, setSelected] = React.useState<SelectedPoi | null>(null);
   // Set when a rating box is tapped, so the sheet edits that venue directly
@@ -35,6 +45,7 @@ export default function MapScreen() {
   const [following, setFollowing] = React.useState(true);
   const [region, setRegion] = React.useState<MapRegion | null>(null);
   const [savedCount, setSavedCount] = React.useState(0);
+  const [refreshing, setRefreshing] = React.useState(false);
   // Boxes the user closed because they overlapped something. Session-only.
   const [dismissed, setDismissed] = React.useState<Set<string>>(new Set());
 
@@ -48,6 +59,21 @@ export default function MapScreen() {
   // Stable identity, or React.memo on the marker would hold a stale closure.
   const dismissVenue = React.useCallback((venueId: string) => {
     setDismissed((previous) => new Set(previous).add(venueId));
+  }, []);
+
+  const refreshTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  React.useEffect(
+    () => () => {
+      if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    },
+    []
+  );
+
+  const refresh = React.useCallback(() => {
+    setSavedCount((count) => count + 1);
+    setRefreshing(true);
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    refreshTimer.current = setTimeout(() => setRefreshing(false), REFRESH_SPIN_MS);
   }, []);
 
   // onRegionChangeComplete does not fire until the map is first moved, so seed
@@ -78,7 +104,7 @@ export default function MapScreen() {
     };
   }, [following, followAnchor, pannedRegion]);
 
-  const { venues: allVenues, loading } = useNearbyVenues(fetchRegion, String(savedCount));
+  const { venues: allVenues } = useNearbyVenues(fetchRegion, String(savedCount));
   const venues = React.useMemo(
     () => (dismissed.size === 0 ? allVenues : allVenues.filter((v) => !dismissed.has(v.id))),
     [allVenues, dismissed]
@@ -146,8 +172,8 @@ export default function MapScreen() {
       <MapControls
         mode={mode}
         onChangeMode={setMode}
-        refreshing={loading}
-        onRefresh={() => setSavedCount((count) => count + 1)}
+        refreshing={refreshing}
+        onRefresh={refresh}
       />
 
       {mode === 'map' ? (

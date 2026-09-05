@@ -1,6 +1,15 @@
 import { List, LocateFixed, Map as MapIcon, RotateCw } from 'lucide-react-native';
+import * as React from 'react';
 import { Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, {
+  cancelAnimation,
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { Icon } from '@/components/ui/icon';
 import { Text, TextClassContext } from '@/components/ui/text';
@@ -36,10 +45,38 @@ function Control({ active, label, onPress, children, className }: ControlProps) 
   );
 }
 
+/** One full turn per cycle, fast enough to read as activity, slow enough to follow. */
+const SPIN_MS = 700;
+
+function RefreshIcon({ spinning }: { spinning: boolean }) {
+  const rotation = useSharedValue(0);
+
+  React.useEffect(() => {
+    if (spinning) {
+      rotation.set(0);
+      rotation.set(
+        withRepeat(withTiming(360, { duration: SPIN_MS, easing: Easing.linear }), -1, false)
+      );
+    } else {
+      cancelAnimation(rotation);
+      rotation.set(withTiming(0, { duration: 150 }));
+    }
+  }, [spinning, rotation]);
+
+  const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${rotation.get()}deg` }] }));
+
+  return (
+    <Animated.View style={style}>
+      <Icon as={RotateCw} className="size-5" />
+    </Animated.View>
+  );
+}
+
 type MapControlsProps = {
   mode: MapViewMode;
   onChangeMode: (mode: MapViewMode) => void;
   onRefresh: () => void;
+  /** Driven only by pressing this button, never by background refetches. */
   refreshing: boolean;
 };
 
@@ -76,7 +113,7 @@ export function MapControls({ mode, onChangeMode, onRefresh, refreshing }: MapCo
 
       <View className="rounded-full bg-background p-1 shadow-md">
         <Control label={refreshing ? 'Refreshing' : 'Refresh'} onPress={onRefresh}>
-          <Icon as={RotateCw} className={cn('size-4', refreshing && 'opacity-40')} />
+          <RefreshIcon spinning={refreshing} />
         </Control>
       </View>
     </View>

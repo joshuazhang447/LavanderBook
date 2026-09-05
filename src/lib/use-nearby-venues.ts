@@ -49,20 +49,10 @@ function radiusForRegion(region: MapRegion): number {
  */
 export function useNearbyVenues(region: MapRegion | null, refreshKey: string) {
   const [venues, setVenues] = React.useState<NearbyVenue[]>([]);
-  // Derived rather than a flag set at the top of the effect, which would be a
-  // synchronous setState during an effect body. A request is in flight whenever
-  // what we want does not match what last came back.
-  const [loadedFor, setLoadedFor] = React.useState('');
   const zoomedOut = !region || region.latitudeDelta > MAX_VISIBLE_LAT_DELTA;
   // Bumped by the Realtime subscription, which must not itself depend on the
   // region or every pan would tear the channel down and rebuild it.
   const [liveKey, setLiveKey] = React.useState(0);
-
-  // Identity of the fetch the current inputs call for.
-  const wanted =
-    region && !zoomedOut
-      ? `${region.latitude.toFixed(5)},${region.longitude.toFixed(5)},${region.latitudeDelta.toFixed(5)},${refreshKey},${liveKey}`
-      : '';
 
   React.useEffect(() => {
     if (!region || zoomedOut) return;
@@ -76,15 +66,13 @@ export function useNearbyVenues(region: MapRegion | null, refreshKey: string) {
         p_radius_meters: radiusForRegion(region),
       })
       .then(({ data }) => {
-        if (!active) return;
-        setVenues(data ?? []);
-        setLoadedFor(wanted);
+        if (active) setVenues(data ?? []);
       });
 
     return () => {
       active = false;
     };
-  }, [region, zoomedOut, refreshKey, liveKey, wanted]);
+  }, [region, zoomedOut, refreshKey, liveKey]);
 
   React.useEffect(() => {
     const channel = supabase
@@ -105,5 +93,5 @@ export function useNearbyVenues(region: MapRegion | null, refreshKey: string) {
     };
   }, []);
 
-  return { venues: zoomedOut ? NONE : venues, loading: wanted !== '' && wanted !== loadedFor };
+  return { venues: zoomedOut ? NONE : venues };
 }
