@@ -59,10 +59,19 @@ function summarise(venue: NearbyVenue): string {
 type VenueMarkerProps = {
   venue: NearbyVenue;
   onPress: (venue: NearbyVenue) => void;
+};
+
+type VenueCloseMarkerProps = {
+  venue: NearbyVenue;
   onDismiss: (venueId: string) => void;
 };
 
-function VenueMarkerImpl({ venue, onPress, onDismiss }: VenueMarkerProps) {
+/**
+ * Kept out of a shared Fragment with the close marker on purpose. MapView walks
+ * its own children to track markers, and a component returning two of them
+ * inside a Fragment left the close marker behind when the pair unmounted.
+ */
+function VenueMarkerImpl({ venue, onPress }: VenueMarkerProps) {
   // On through the entrance animation, then off: leaving it on re-rasterises
   // every marker every frame.
   const [tracksViewChanges, setTracksViewChanges] = React.useState(true);
@@ -90,51 +99,67 @@ function VenueMarkerImpl({ venue, onPress, onDismiss }: VenueMarkerProps) {
   const zIndex = Math.round(-venue.lat * 1000);
 
   return (
-    <>
-      <Marker
-        ref={markerRef}
-        coordinate={coordinate}
-        onPress={() => onPress(venue)}
-        tracksViewChanges={tracksViewChanges}
-        // Southern markers draw over northern ones, the usual map-label look.
-        zIndex={zIndex}
-        // anchor is Google-only and centerOffset Apple-only, and this map sets no
-        // provider - so Android gets Google Maps and iOS gets Apple Maps.
-        {...Platform.select({
-          android: { anchor: BOX_ANCHOR },
-          ios: { centerOffset: BOX_OFFSET },
-          default: {},
-        })}>
-        {/*
-          Fixed pixel size via style, not className: NativeWind resolves classes on
-          a later pass that can land after Android has taken its snapshot.
-        */}
-        <Animated.View entering={FadeIn.duration(ENTER_MS)} style={styles.box}>
-          <Text style={styles.stars} numberOfLines={1}>
-            {starGlyphs(Number(venue.avg_stars ?? 0))}{' '}
-            <Text style={styles.average}>{Number(venue.avg_stars ?? 0).toFixed(1)}</Text>
-          </Text>
-          <Text style={styles.snippet} numberOfLines={1}>
-            {summarise(venue)}
-          </Text>
-        </Animated.View>
-      </Marker>
+    <Marker
+      ref={markerRef}
+      coordinate={coordinate}
+      onPress={() => onPress(venue)}
+      tracksViewChanges={tracksViewChanges}
+      // Southern markers draw over northern ones, the usual map-label look.
+      zIndex={zIndex}
+      // anchor is Google-only and centerOffset Apple-only, and this map sets no
+      // provider - so Android gets Google Maps and iOS gets Apple Maps.
+      {...Platform.select({
+        android: { anchor: BOX_ANCHOR },
+        ios: { centerOffset: BOX_OFFSET },
+        default: {},
+      })}>
+      {/*
+        Fixed pixel size via style, not className: NativeWind resolves classes on
+        a later pass that can land after Android has taken its snapshot.
+      */}
+      <Animated.View entering={FadeIn.duration(ENTER_MS)} style={styles.box}>
+        <Text style={styles.stars} numberOfLines={1}>
+          {starGlyphs(Number(venue.avg_stars ?? 0))}{' '}
+          <Text style={styles.average}>{Number(venue.avg_stars ?? 0).toFixed(1)}</Text>
+        </Text>
+        <Text style={styles.snippet} numberOfLines={1}>
+          {summarise(venue)}
+        </Text>
+      </Animated.View>
+    </Marker>
+  );
+}
 
-      <Marker
-        coordinate={coordinate}
-        onPress={() => onDismiss(venue.id)}
-        tracksViewChanges={tracksViewChanges}
-        zIndex={zIndex + 1}
-        {...Platform.select({
-          android: { anchor: CLOSE_ANCHOR },
-          ios: { centerOffset: CLOSE_OFFSET },
-          default: {},
-        })}>
-        <Animated.View entering={FadeIn.duration(ENTER_MS)} style={styles.close}>
-          <Text style={styles.closeGlyph}>x</Text>
-        </Animated.View>
-      </Marker>
-    </>
+/** The box's close button, a marker of its own: a marker view is rasterised to a
+ * bitmap on Android, so a Pressable nested in the box never gets its own tap. */
+function VenueCloseMarkerImpl({ venue, onDismiss }: VenueCloseMarkerProps) {
+  const [tracksViewChanges, setTracksViewChanges] = React.useState(true);
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => setTracksViewChanges(false), ENTER_MS + 120);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const coordinate = React.useMemo(
+    () => ({ latitude: venue.lat, longitude: venue.lng }),
+    [venue.lat, venue.lng]
+  );
+
+  return (
+    <Marker
+      coordinate={coordinate}
+      onPress={() => onDismiss(venue.id)}
+      tracksViewChanges={tracksViewChanges}
+      zIndex={Math.round(-venue.lat * 1000) + 1}
+      {...Platform.select({
+        android: { anchor: CLOSE_ANCHOR },
+        ios: { centerOffset: CLOSE_OFFSET },
+        default: {},
+      })}>
+      <Animated.View entering={FadeIn.duration(ENTER_MS)} style={styles.close}>
+        <Text style={styles.closeGlyph}>x</Text>
+      </Animated.View>
+    </Marker>
   );
 }
 
@@ -143,10 +168,14 @@ export const VenueMarker = React.memo(
   VenueMarkerImpl,
   (a, b) =>
     a.venue.id === b.venue.id &&
-    a.onDismiss === b.onDismiss &&
     a.venue.avg_stars === b.venue.avg_stars &&
     a.venue.review_count === b.venue.review_count &&
     a.venue.latest_review_body === b.venue.latest_review_body
+);
+
+export const VenueCloseMarker = React.memo(
+  VenueCloseMarkerImpl,
+  (a, b) => a.venue.id === b.venue.id && a.onDismiss === b.onDismiss
 );
 
 // StyleSheet rather than NativeWind for the same snapshot-timing reason as above.

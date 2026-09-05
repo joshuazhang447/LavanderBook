@@ -1,7 +1,7 @@
 import { StyleSheet } from 'react-native';
 import MapView from 'react-native-maps';
 
-import { VenueMarker } from '@/components/venue-marker';
+import { VenueCloseMarker, VenueMarker } from '@/components/venue-marker';
 import type { MapRegion, NearbyVenue } from '@/lib/use-nearby-venues';
 import type { SelectedPoi } from '@/lib/venues';
 import { INITIAL_LATITUDE_DELTA } from '@/lib/use-location';
@@ -63,13 +63,17 @@ export function VenueMap({
           longitude: coordinate.longitude,
         });
       }}>
+      {/*
+        Two flat lists rather than one component rendering both markers: MapView
+        tracks its own children, and a Fragment holding a pair left the close
+        marker on screen after the pair unmounted. Distinct keys also give React
+        an unambiguous identity for each native marker.
+      */}
       {venues.map((venue) => (
-        <VenueMarker
-          key={venue.id}
-          venue={venue}
-          onPress={onSelectVenue}
-          onDismiss={onDismissVenue}
-        />
+        <VenueMarker key={`${venue.id}-box`} venue={venue} onPress={onSelectVenue} />
+      ))}
+      {venues.map((venue) => (
+        <VenueCloseMarker key={`${venue.id}-close`} venue={venue} onDismiss={onDismissVenue} />
       ))}
     </MapView>
   );
