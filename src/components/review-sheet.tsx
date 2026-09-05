@@ -1,8 +1,9 @@
-import { Star, X } from 'lucide-react-native';
+import { Trash2, X } from 'lucide-react-native';
 import * as React from 'react';
 import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 
+import { StarRating, STAR_HINT } from '@/components/star-rating';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
@@ -23,21 +24,15 @@ const BATHROOM_OPTIONS: { value: Answer; label: string }[] = [
   { value: 'unsure', label: 'Not sure' },
 ];
 
-const STAR_HINT: Record<number, string> = {
-  1: 'Hostile',
-  2: 'Unwelcoming',
-  3: 'Neutral',
-  4: 'Welcoming',
-  5: 'Actively welcoming',
-};
-
 type ReviewSheetProps = {
   poi: SelectedPoi;
+  /** Known when opened from the reviews list; looked up by place id from the map. */
+  venueId?: string;
   onClose: () => void;
   onSaved: () => void;
 };
 
-export function ReviewSheet({ poi, onClose, onSaved }: ReviewSheetProps) {
+export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: ReviewSheetProps) {
   const { session, signInWithGoogle } = useAuth();
 
   const [stars, setStars] = React.useState<number | null>(null);
@@ -46,6 +41,9 @@ export function ReviewSheet({ poi, onClose, onSaved }: ReviewSheetProps) {
   const [loading, setLoading] = React.useState(true);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [venueId, setVenueId] = React.useState<string | null>(knownVenueId ?? null);
+  const [isExisting, setIsExisting] = React.useState(false);
+  const [confirmingDelete, setConfirmingDelete] = React.useState(false);
   const scrollRef = React.useRef<ScrollView>(null);
 
   const userId = session?.user.id ?? null;
@@ -56,24 +54,30 @@ export function ReviewSheet({ poi, onClose, onSaved }: ReviewSheetProps) {
     let active = true;
 
     (async () => {
-      if (!userId || !poi.placeId) {
+      if (!userId) {
         if (active) setLoading(false);
         return;
       }
 
-      const { data: venue } = await supabase
-        .from('venues')
-        .select('id')
-        .eq('google_place_id', poi.placeId)
-        .maybeSingle();
+      let resolvedVenueId = knownVenueId ?? null;
 
-      if (!active) return;
+      if (!resolvedVenueId && poi.placeId) {
+        const { data: venue } = await supabase
+          .from('venues')
+          .select('id')
+          .eq('google_place_id', poi.placeId)
+          .maybeSingle();
+        if (!active) return;
+        resolvedVenueId = venue?.id ?? null;
+      }
 
-      if (venue) {
+      if (resolvedVenueId) {
+        setVenueId(resolvedVenueId);
+
         const { data: review } = await supabase
           .from('reviews')
           .select('stars, trans_bathroom, body')
-          .eq('venue_id', venue.id)
+          .eq('venue_id', resolvedVenueId)
           .eq('author_id', userId)
           .maybeSingle();
 
@@ -82,6 +86,7 @@ export function ReviewSheet({ poi, onClose, onSaved }: ReviewSheetProps) {
           setStars(review.stars);
           setBathroom(review.trans_bathroom);
           setBody(review.body ?? '');
+          setIsExisting(true);
         }
       }
 
@@ -91,10 +96,30 @@ export function ReviewSheet({ poi, onClose, onSaved }: ReviewSheetProps) {
     return () => {
       active = false;
     };
-  }, [userId, poi.placeId]);
+  }, [userId, poi.placeId, knownVenueId]);
 
   const tooLong = body.length > MAX_BODY;
   const canSubmit = stars !== null && bathroom !== null && !tooLong && !busy;
+
+  async function remove() {
+    if (!venueId || !userId) return;
+
+    setError(null);
+    setBusy(true);
+    try {
+      const { error: deleteError } = await supabase
+        .from('reviews')
+        .delete()
+        .eq('venue_id', venueId)
+        .eq('author_id', userId);
+      if (deleteError) throw deleteError;
+      onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not delete your review.');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function submit() {
     // Guard again here, not just on the button: state could change between render
@@ -105,18 +130,18 @@ export function ReviewSheet({ poi, onClose, onSaved }: ReviewSheetProps) {
     setBusy(true);
     try {
       // Reuse the venue if somebody already added it; only insert when new.
-      let venueId: string | undefined;
+      let targetVenueId: string | undefined = venueId ?? undefined;
 
-      if (poi.placeId) {
+      if (!targetVenueId && poi.placeId) {
         const { data: existing } = await supabase
           .from('venues')
           .select('id')
           .eq('google_place_id', poi.placeId)
           .maybeSingle();
-        venueId = existing?.id;
+        targetVenueId = existing?.id;
       }
 
-      if (!venueId) {
+      if (!targetVenueId) {
         const { data: created, error: venueError } = await supabase
           .from('venues')
           .insert({
@@ -129,12 +154,12 @@ export function ReviewSheet({ poi, onClose, onSaved }: ReviewSheetProps) {
           .select('id')
           .single();
         if (venueError) throw venueError;
-        venueId = created.id;
+        targetVenueId = created.id;
       }
 
       const { error: reviewError } = await supabase.from('reviews').upsert(
         {
-          venue_id: venueId,
+          venue_id: targetVenueId,
           author_id: userId,
           stars,
           trans_bathroom: bathroom,
@@ -192,29 +217,7 @@ export function ReviewSheet({ poi, onClose, onSaved }: ReviewSheetProps) {
                 <Text className="font-medium text-foreground">
                   How LGBTQ+ friendly is this place?
                 </Text>
-                <View className="flex-row gap-1">
-                  {[1, 2, 3, 4, 5].map((value) => (
-                    <Pressable
-                      key={value}
-                      onPress={() => setStars(value)}
-                      accessibilityRole="radio"
-                      accessibilityState={{ selected: stars === value }}
-                      accessibilityLabel={`${value} of 5, ${STAR_HINT[value]}`}
-                      className="rounded-md p-1 active:bg-accent">
-                      <Icon
-                        as={Star}
-                        // Filled gold when earned, a solid grey outline when not.
-                        // opacity-30 left the empty stars invisible on white.
-                        className={
-                          stars !== null && value <= stars
-                            ? 'size-9 text-star'
-                            : 'size-9 text-muted-foreground'
-                        }
-                        fill={stars !== null && value <= stars ? 'currentColor' : 'none'}
-                      />
-                    </Pressable>
-                  ))}
-                </View>
+                <StarRating value={stars} onChange={setStars} />
                 <Text className="text-xs text-muted-foreground">
                   {stars ? STAR_HINT[stars] : '1 is hostile, 5 is actively welcoming'}
                 </Text>
@@ -262,8 +265,20 @@ export function ReviewSheet({ poi, onClose, onSaved }: ReviewSheetProps) {
               {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
 
               <Button disabled={!canSubmit} onPress={submit}>
-                <Text>{busy ? 'Saving...' : 'Post review'}</Text>
+                <Text>{busy ? 'Saving...' : isExisting ? 'Save changes' : 'Post review'}</Text>
               </Button>
+
+              {isExisting ? (
+                <Button
+                  variant={confirmingDelete ? 'destructive' : 'outline'}
+                  disabled={busy}
+                  // Two taps, because a delete here is unrecoverable and the
+                  // button sits right under the one people mean to press.
+                  onPress={() => (confirmingDelete ? remove() : setConfirmingDelete(true))}>
+                  <Icon as={Trash2} className="size-4" />
+                  <Text>{confirmingDelete ? 'Tap again to delete' : 'Delete review'}</Text>
+                </Button>
+              ) : null}
 
               {stars === null || bathroom === null ? (
                 <Text className="-mt-3 text-center text-xs text-muted-foreground">

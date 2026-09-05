@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Text } from '@/components/ui/text';
+import { MyReviewsList } from '@/components/my-reviews-list';
 import { useIsWideViewport } from '@/components/tab-bar';
 import { useAuth } from '@/lib/auth';
 
@@ -56,6 +57,10 @@ export default function AccountScreen() {
               </Button>
             </CardContent>
           </Card>
+        ) : null}
+
+        {session ? (
+          <MyReviewsList userId={session.user.id} />
         ) : (
           <Card>
             <CardHeader>
