@@ -1,6 +1,7 @@
 import * as React from 'react';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text } from 'react-native';
 import { Marker } from 'react-native-maps';
+import Animated, { FadeIn } from 'react-native-reanimated';
 
 import type { NearbyVenue } from '@/lib/use-nearby-venues';
 
@@ -10,6 +11,13 @@ const SNIPPET_CHARS = 40;
 /** Clearance above the point, so the box does not sit on Google's own label. */
 const LIFT = 35;
 const CLOSE_SIZE = 26;
+/**
+ * How long the pop-in runs, and therefore how long the marker keeps
+ * re-rasterising. Android snapshots the marker view to a bitmap, so an
+ * animation is only visible while tracksViewChanges is on - and that is
+ * expensive, so it is switched off the moment the animation lands.
+ */
+const ENTER_MS = 260;
 
 // Android takes `anchor` as a fraction of the marker view; iOS takes
 // `centerOffset` in points from the view's centre. Both are derived from the
@@ -55,9 +63,15 @@ type VenueMarkerProps = {
 };
 
 function VenueMarkerImpl({ venue, onPress, onDismiss }: VenueMarkerProps) {
-  // Starts true so the view is captured once content has settled, then off:
-  // leaving it on re-rasterises every marker every frame.
+  // On through the entrance animation, then off: leaving it on re-rasterises
+  // every marker every frame.
   const [tracksViewChanges, setTracksViewChanges] = React.useState(true);
+
+  React.useEffect(() => {
+    // A little past the animation so the final frame is the one that sticks.
+    const timer = setTimeout(() => setTracksViewChanges(false), ENTER_MS + 120);
+    return () => clearTimeout(timer);
+  }, []);
 
   const markerRef = React.useRef<React.ComponentRef<typeof Marker>>(null);
 
@@ -95,7 +109,7 @@ function VenueMarkerImpl({ venue, onPress, onDismiss }: VenueMarkerProps) {
           Fixed pixel size via style, not className: NativeWind resolves classes on
           a later pass that can land after Android has taken its snapshot.
         */}
-        <View style={styles.box} onLayout={() => setTracksViewChanges(false)}>
+        <Animated.View entering={FadeIn.duration(ENTER_MS)} style={styles.box}>
           <Text style={styles.stars} numberOfLines={1}>
             {starGlyphs(Number(venue.avg_stars ?? 0))}{' '}
             <Text style={styles.average}>{Number(venue.avg_stars ?? 0).toFixed(1)}</Text>
@@ -103,7 +117,7 @@ function VenueMarkerImpl({ venue, onPress, onDismiss }: VenueMarkerProps) {
           <Text style={styles.snippet} numberOfLines={1}>
             {summarise(venue)}
           </Text>
-        </View>
+        </Animated.View>
       </Marker>
 
       <Marker
@@ -116,9 +130,9 @@ function VenueMarkerImpl({ venue, onPress, onDismiss }: VenueMarkerProps) {
           ios: { centerOffset: CLOSE_OFFSET },
           default: {},
         })}>
-        <View style={styles.close}>
+        <Animated.View entering={FadeIn.duration(ENTER_MS)} style={styles.close}>
           <Text style={styles.closeGlyph}>x</Text>
-        </View>
+        </Animated.View>
       </Marker>
     </>
   );

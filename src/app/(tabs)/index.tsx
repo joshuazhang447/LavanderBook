@@ -6,7 +6,7 @@ import { Text } from '@/components/ui/text';
 import { VenueMap } from '@/components/venue-map';
 import type { MapRegion } from '@/lib/use-nearby-venues';
 import { useNearbyVenues } from '@/lib/use-nearby-venues';
-import { useCurrentLocation, useWalkingAnchor } from '@/lib/use-location';
+import { INITIAL_LATITUDE_DELTA, useCurrentLocation } from '@/lib/use-location';
 import type { SelectedPoi } from '@/lib/venues';
 
 export default function MapScreen() {
@@ -15,10 +15,6 @@ export default function MapScreen() {
   // rather than resolving it from a place id.
   const [selectedVenueId, setSelectedVenueId] = React.useState<string | undefined>(undefined);
   const location = useCurrentLocation();
-  // Separate from `location`: this one updates as you walk, and must not reach
-  // the map's centre or the map would drag itself back under you. It only
-  // nudges a refetch, so venues appear as you walk without panning.
-  const anchor = useWalkingAnchor();
   const [region, setRegion] = React.useState<MapRegion | null>(null);
   const [savedCount, setSavedCount] = React.useState(0);
   // Boxes the user closed because they overlapped something. Session-only, and
@@ -31,10 +27,22 @@ export default function MapScreen() {
   }, []);
   // Derived rather than an effect that bumps a counter: walking to a new anchor
   // and saving a review are both just reasons to refetch.
-  const allVenues = useNearbyVenues(
-    region,
-    `${savedCount}:${anchor ? `${anchor.latitude},${anchor.longitude}` : ''}`
+  // onRegionChangeComplete does not fire until the map is first moved, so seed
+  // the region from the opening view or nothing loads until the user pans.
+  const initialRegion = React.useMemo<MapRegion | null>(
+    () =>
+      location.status === 'granted'
+        ? {
+            latitude: location.latitude,
+            longitude: location.longitude,
+            latitudeDelta: INITIAL_LATITUDE_DELTA,
+            longitudeDelta: INITIAL_LATITUDE_DELTA,
+          }
+        : null,
+    [location]
   );
+
+  const allVenues = useNearbyVenues(region ?? initialRegion, String(savedCount));
   const venues = React.useMemo(
     () => (dismissed.size === 0 ? allVenues : allVenues.filter((v) => !dismissed.has(v.id))),
     [allVenues, dismissed]

@@ -4,11 +4,7 @@ import MapView from 'react-native-maps';
 import { VenueMarker } from '@/components/venue-marker';
 import type { MapRegion, NearbyVenue } from '@/lib/use-nearby-venues';
 import type { SelectedPoi } from '@/lib/venues';
-import { VIEW_RADIUS_METERS } from '@/lib/use-location';
-
-// One degree of latitude is ~111,320m everywhere, so a delta covering twice the
-// radius puts the user in the middle of roughly VIEW_RADIUS_METERS of ground.
-const LATITUDE_DELTA = (VIEW_RADIUS_METERS * 2) / 111320;
+import { INITIAL_LATITUDE_DELTA } from '@/lib/use-location';
 
 type VenueMapProps = {
   center: { latitude: number; longitude: number };
@@ -45,8 +41,8 @@ export function VenueMap({
       initialRegion={{
         latitude: center.latitude,
         longitude: center.longitude,
-        latitudeDelta: LATITUDE_DELTA,
-        longitudeDelta: LATITUDE_DELTA,
+        latitudeDelta: INITIAL_LATITUDE_DELTA,
+        longitudeDelta: INITIAL_LATITUDE_DELTA,
       }}
       // Complete, not onRegionChange: the latter fires continuously through the
       // whole gesture and would fire a query per frame.
