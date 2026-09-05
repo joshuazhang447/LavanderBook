@@ -20,6 +20,13 @@ export const STAR_HINT: Record<number, string> = {
 
 const VALUES = [1, 2, 3, 4, 5];
 
+/**
+ * Pixel sizes matching the size-N classes below. Needed as numbers because a
+ * partly-filled star is drawn by clipping a filled copy to a fraction of its
+ * width, and a clip needs a concrete width.
+ */
+const SIZE_PX = { sm: 16, lg: 36 } as const;
+
 function StarIcon({ earned, className }: { earned: boolean; className: string }) {
   return (
     <Icon
@@ -29,6 +36,44 @@ function StarIcon({ earned, className }: { earned: boolean; className: string })
       className={cn(className, earned ? 'text-star' : 'text-muted-foreground')}
       fill={earned ? 'currentColor' : 'none'}
     />
+  );
+}
+
+/**
+ * A star filled `fraction` of the way across.
+ *
+ * Two stacked copies with the filled one clipped, rather than lucide's StarHalf
+ * - that icon traces only the left half's outline, so on its own it renders as a
+ * floating half shape with no right-hand edge. This also handles 3.7 as easily
+ * as 3.5.
+ */
+function PartialStar({
+  fraction,
+  className,
+  sizePx,
+}: {
+  fraction: number;
+  className: string;
+  sizePx: number;
+}) {
+  if (fraction <= 0) return <StarIcon earned={false} className={className} />;
+  if (fraction >= 1) return <StarIcon earned className={className} />;
+
+  return (
+    <View style={{ width: sizePx, height: sizePx }}>
+      <StarIcon earned={false} className={className} />
+      <View
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          height: sizePx,
+          width: sizePx * fraction,
+          overflow: 'hidden',
+        }}>
+        <StarIcon earned className={className} />
+      </View>
+    </View>
   );
 }
 
@@ -88,10 +133,15 @@ export function StarRating({ value, onChange, size = 'lg' }: StarRatingProps) {
     <View className={cn('flex-row', size === 'lg' ? 'gap-1' : 'gap-0.5')}>
       {VALUES.map((star) =>
         onChange ? (
+          // Picking a rating is always a whole star; only averages are fractional.
           <StarButton key={star} star={star} value={value} className={starClass} onChange={onChange} />
         ) : (
           <View key={star}>
-            <StarIcon earned={value !== null && star <= value} className={starClass} />
+            <PartialStar
+              fraction={value === null ? 0 : Math.min(Math.max(value - (star - 1), 0), 1)}
+              className={starClass}
+              sizePx={SIZE_PX[size]}
+            />
           </View>
         )
       )}

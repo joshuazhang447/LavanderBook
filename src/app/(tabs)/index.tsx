@@ -6,13 +6,14 @@ import { MapControls, RecenterButton } from '@/components/map-controls';
 import { ReviewSheet } from '@/components/review-sheet';
 import { Text } from '@/components/ui/text';
 import { VenueMap } from '@/components/venue-map';
+import { VenueSheet } from '@/components/venue-sheet';
 import {
   INITIAL_LATITUDE_DELTA,
   useCurrentLocation,
   useFollowPosition,
   VIEW_RADIUS_METERS,
 } from '@/lib/use-location';
-import type { MapRegion } from '@/lib/use-nearby-venues';
+import type { MapRegion, NearbyVenue } from '@/lib/use-nearby-venues';
 import { useNearbyVenues } from '@/lib/use-nearby-venues';
 import type { SelectedPoi } from '@/lib/venues';
 
@@ -40,7 +41,9 @@ export default function MapScreen() {
   const [selected, setSelected] = React.useState<SelectedPoi | null>(null);
   // Set when a rating box is tapped, so the sheet edits that venue directly
   // rather than resolving it from a place id.
-  const [selectedVenueId, setSelectedVenueId] = React.useState<string | undefined>(undefined);
+  // Tapping one of our rating boxes opens the read-only detail sheet; tapping a
+  // Google place label still opens the review form.
+  const [viewingVenue, setViewingVenue] = React.useState<NearbyVenue | null>(null);
   const [mode, setMode] = React.useState<MapViewMode>('map');
   const [following, setFollowing] = React.useState(true);
   const [region, setRegion] = React.useState<MapRegion | null>(null);
@@ -141,19 +144,8 @@ export default function MapScreen() {
           center={location}
           venues={venues}
           followCenter={following ? followPosition : null}
-          onSelectPoi={(poi) => {
-            setSelectedVenueId(undefined);
-            setSelected(poi);
-          }}
-          onSelectVenue={(venue) => {
-            setSelectedVenueId(venue.id);
-            setSelected({
-              placeId: venue.google_place_id ?? undefined,
-              name: venue.name,
-              latitude: venue.lat,
-              longitude: venue.lng,
-            });
-          }}
+          onSelectPoi={setSelected}
+          onSelectVenue={setViewingVenue}
           onDismiss={() => setSelected(null)}
           onDismissVenue={dismissVenue}
           onUserPannedTo={(next) => {
@@ -180,10 +172,13 @@ export default function MapScreen() {
         <RecenterButton following={following} onPress={() => setFollowing(true)} />
       ) : null}
 
+      {viewingVenue ? (
+        <VenueSheet venue={viewingVenue} onClose={() => setViewingVenue(null)} />
+      ) : null}
+
       {selected ? (
         <ReviewSheet
           poi={selected}
-          venueId={selectedVenueId}
           onClose={() => setSelected(null)}
           onSaved={() => {
             setSelected(null);
