@@ -1,3 +1,4 @@
+import { useFocusEffect } from 'expo-router';
 import * as React from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 
@@ -26,10 +27,7 @@ type MyReviewsListProps = {
 export function MyReviewsList({ userId }: MyReviewsListProps) {
   const [reviews, setReviews] = React.useState<MyReview[] | null>(null);
   const [open, setOpen] = React.useState<MyReview | null>(null);
-  // Bumped after a save or delete to refetch the list.
-  const [reloadKey, setReloadKey] = React.useState(0);
-
-  React.useEffect(() => {
+  const refetch = React.useCallback(() => {
     let active = true;
 
     supabase
@@ -44,7 +42,11 @@ export function MyReviewsList({ userId }: MyReviewsListProps) {
     return () => {
       active = false;
     };
-  }, [userId, reloadKey]);
+  }, [userId]);
+
+  // On focus rather than only on mount: the tab navigator keeps screens mounted,
+  // so a review posted over on the Map tab would otherwise leave this stale.
+  useFocusEffect(refetch);
 
   if (reviews === null) {
     return (
@@ -104,7 +106,7 @@ export function MyReviewsList({ userId }: MyReviewsListProps) {
           onClose={() => setOpen(null)}
           onSaved={() => {
             setOpen(null);
-            setReloadKey((key) => key + 1);
+            refetch();
           }}
         />
       ) : null}
