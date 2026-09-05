@@ -4,8 +4,10 @@
   "version": "1.0.0",
   "dependencies": {
     "@expo/ui": "~57.0.16",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "@rn-primitives/portal": "^1.5.3",
     "@rn-primitives/slot": "^1.5.2",
+    "@supabase/supabase-js": "^2.115.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "expo": "~57.0.20",
