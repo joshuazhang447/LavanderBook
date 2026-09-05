@@ -1,32 +1,55 @@
 import * as React from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
+import type { MapViewMode } from '@/components/map-controls';
+import { MapControls, RecenterButton } from '@/components/map-controls';
 import { ReviewSheet } from '@/components/review-sheet';
 import { Text } from '@/components/ui/text';
 import { VenueMap } from '@/components/venue-map';
+import {
+  INITIAL_LATITUDE_DELTA,
+  useCurrentLocation,
+  useFollowPosition,
+  VIEW_RADIUS_METERS,
+} from '@/lib/use-location';
 import type { MapRegion } from '@/lib/use-nearby-venues';
 import { useNearbyVenues } from '@/lib/use-nearby-venues';
-import { INITIAL_LATITUDE_DELTA, useCurrentLocation } from '@/lib/use-location';
 import type { SelectedPoi } from '@/lib/venues';
+
+/**
+ * How far the user must travel before venues are refetched while following.
+ *
+ * Following is deliberately NOT wired to the region-settled path: the camera
+ * moves constantly while following, and refetching on every move would rebuild
+ * the venue list, remounting every marker and replaying its fade. Distance
+ * travelled severs that loop at the source.
+ */
+const FOLLOW_REFETCH_METERS = VIEW_RADIUS_METERS / 2;
 
 export default function MapScreen() {
   const [selected, setSelected] = React.useState<SelectedPoi | null>(null);
   // Set when a rating box is tapped, so the sheet edits that venue directly
   // rather than resolving it from a place id.
   const [selectedVenueId, setSelectedVenueId] = React.useState<string | undefined>(undefined);
-  const location = useCurrentLocation();
+  const [mode, setMode] = React.useState<MapViewMode>('map');
+  const [following, setFollowing] = React.useState(true);
   const [region, setRegion] = React.useState<MapRegion | null>(null);
   const [savedCount, setSavedCount] = React.useState(0);
-  // Boxes the user closed because they overlapped something. Session-only, and
-  // cleared whenever the venue list itself changes.
+  // Boxes the user closed because they overlapped something. Session-only.
   const [dismissed, setDismissed] = React.useState<Set<string>>(new Set());
+
+  const location = useCurrentLocation();
+  // No GPS at all in List view, or once the user has panned away.
+  const { position: followPosition, anchor: followAnchor } = useFollowPosition(
+    mode === 'map' && following,
+    FOLLOW_REFETCH_METERS
+  );
 
   // Stable identity, or React.memo on the marker would hold a stale closure.
   const dismissVenue = React.useCallback((venueId: string) => {
     setDismissed((previous) => new Set(previous).add(venueId));
   }, []);
-  // Derived rather than an effect that bumps a counter: walking to a new anchor
-  // and saving a review are both just reasons to refetch.
+
   // onRegionChangeComplete does not fire until the map is first moved, so seed
   // the region from the opening view or nothing loads until the user pans.
   const initialRegion = React.useMemo<MapRegion | null>(
@@ -42,7 +65,20 @@ export default function MapScreen() {
     [location]
   );
 
-  const allVenues = useNearbyVenues(region ?? initialRegion, String(savedCount));
+  const pannedRegion = region ?? initialRegion;
+
+  const fetchRegion = React.useMemo<MapRegion | null>(() => {
+    if (!following || !followAnchor || !pannedRegion) return pannedRegion;
+    // Keep whatever zoom the user chose; only the centre follows them.
+    return {
+      latitude: followAnchor.latitude,
+      longitude: followAnchor.longitude,
+      latitudeDelta: pannedRegion.latitudeDelta,
+      longitudeDelta: pannedRegion.longitudeDelta,
+    };
+  }, [following, followAnchor, pannedRegion]);
+
+  const { venues: allVenues, loading } = useNearbyVenues(fetchRegion, String(savedCount));
   const venues = React.useMemo(
     () => (dismissed.size === 0 ? allVenues : allVenues.filter((v) => !dismissed.has(v.id))),
     [allVenues, dismissed]
@@ -74,26 +110,49 @@ export default function MapScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <VenueMap
-        center={location}
-        venues={venues}
-        onSelectPoi={(poi) => {
-          setSelectedVenueId(undefined);
-          setSelected(poi);
-        }}
-        onSelectVenue={(venue) => {
-          setSelectedVenueId(venue.id);
-          setSelected({
-            placeId: venue.google_place_id ?? undefined,
-            name: venue.name,
-            latitude: venue.lat,
-            longitude: venue.lng,
-          });
-        }}
-        onDismiss={() => setSelected(null)}
-        onDismissVenue={dismissVenue}
-        onRegionSettled={setRegion}
+      {mode === 'map' ? (
+        <VenueMap
+          center={location}
+          venues={venues}
+          followCenter={following ? followPosition : null}
+          onSelectPoi={(poi) => {
+            setSelectedVenueId(undefined);
+            setSelected(poi);
+          }}
+          onSelectVenue={(venue) => {
+            setSelectedVenueId(venue.id);
+            setSelected({
+              placeId: venue.google_place_id ?? undefined,
+              name: venue.name,
+              latitude: venue.lat,
+              longitude: venue.lng,
+            });
+          }}
+          onDismiss={() => setSelected(null)}
+          onDismissVenue={dismissVenue}
+          onUserPannedTo={(next) => {
+            // A pan is the user taking over; following would otherwise drag the
+            // map back out from under them on the next fix.
+            setFollowing(false);
+            setRegion(next);
+          }}
+        />
+      ) : (
+        <View className="flex-1 items-center justify-center bg-muted">
+          <Text className="text-lg font-medium text-muted-foreground">List View</Text>
+        </View>
+      )}
+
+      <MapControls
+        mode={mode}
+        onChangeMode={setMode}
+        refreshing={loading}
+        onRefresh={() => setSavedCount((count) => count + 1)}
       />
+
+      {mode === 'map' ? (
+        <RecenterButton following={following} onPress={() => setFollowing(true)} />
+      ) : null}
 
       {selected ? (
         <ReviewSheet
@@ -102,12 +161,11 @@ export default function MapScreen() {
           onClose={() => setSelected(null)}
           onSaved={() => {
             setSelected(null);
-            // Do not wait for a pan or a 50m walk to see your own review.
+            // Do not wait for a pan or a walk to see your own review.
             setSavedCount((count) => count + 1);
           }}
         />
       ) : null}
-
     </View>
   );
 }

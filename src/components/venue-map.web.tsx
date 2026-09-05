@@ -3,6 +3,7 @@ import { View } from 'react-native';
 
 import { Text } from '@/components/ui/text';
 import { VIEW_RADIUS_METERS } from '@/lib/use-location';
+import type { Coords } from '@/lib/use-location';
 import type { MapRegion, NearbyVenue } from '@/lib/use-nearby-venues';
 import type { SelectedPoi } from '@/lib/venues';
 
@@ -34,7 +35,8 @@ type VenueMapProps = {
   venues: NearbyVenue[];
   onSelectVenue: (venue: NearbyVenue) => void;
   onDismissVenue: (venueId: string) => void;
-  onRegionSettled: (region: MapRegion) => void;
+  followCenter: Coords | null;
+  onUserPannedTo: (region: MapRegion) => void;
 };
 
 /**
