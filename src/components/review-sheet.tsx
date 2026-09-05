@@ -2,6 +2,7 @@ import { Trash2, X } from 'lucide-react-native';
 import * as React from 'react';
 import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 
 import { Portal } from '@rn-primitives/portal';
 
@@ -185,14 +186,24 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
     // the screen and land in the middle of the page.
     <Portal name="review-sheet">
       <View className="absolute inset-0 justify-end">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Close"
-          onPress={onClose}
-          className="absolute inset-0 bg-black/50"
-        />
+        <Animated.View
+          entering={FadeIn.duration(180)}
+          exiting={FadeOut.duration(160)}
+          className="absolute inset-0">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+            onPress={onClose}
+            className="flex-1 bg-black/50"
+          />
+        </Animated.View>
         <KeyboardAvoidingView behavior="padding">
-          <View className="max-h-[560px] rounded-t-3xl border-t border-border bg-background">
+          <Animated.View
+            // Springs up from the bottom edge, and slides back out on close
+            // rather than vanishing.
+            entering={SlideInDown.springify().damping(20).stiffness(180)}
+            exiting={SlideOutDown.duration(200)}
+            className="max-h-[560px] rounded-t-3xl border-t border-border bg-background">
             <View className="flex-row items-start gap-3 px-5 pb-2 pt-5">
               <View className="flex-1 gap-0.5">
                 <Text className="text-xl font-semibold text-foreground">{poi.name}</Text>
@@ -282,15 +293,17 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
                   </Button>
 
                   {isExisting ? (
-                    <Button
-                      variant={confirmingDelete ? 'destructive' : 'outline'}
-                      disabled={busy}
-                      // Two taps, because a delete here is unrecoverable and the
-                      // button sits right under the one people mean to press.
-                      onPress={() => (confirmingDelete ? remove() : setConfirmingDelete(true))}>
-                      <Icon as={Trash2} className="size-4" />
-                      <Text>{confirmingDelete ? 'Tap again to delete' : 'Delete review'}</Text>
-                    </Button>
+                    <Animated.View entering={FadeIn.duration(200)}>
+                      <Button
+                        variant={confirmingDelete ? 'destructive' : 'outline'}
+                        disabled={busy}
+                        // Two taps, because a delete here is unrecoverable and the
+                        // button sits right under the one people mean to press.
+                        onPress={() => (confirmingDelete ? remove() : setConfirmingDelete(true))}>
+                        <Icon as={Trash2} className="size-4" />
+                        <Text>{confirmingDelete ? 'Tap again to delete' : 'Delete review'}</Text>
+                      </Button>
+                    </Animated.View>
                   ) : null}
 
                   {stars === null || bathroom === null ? (
@@ -301,7 +314,7 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
                 </View>
               </ScrollView>
             )}
-          </View>
+          </Animated.View>
         </KeyboardAvoidingView>
       </View>
     </Portal>

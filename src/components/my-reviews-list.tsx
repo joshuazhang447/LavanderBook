@@ -1,12 +1,15 @@
 import { useFocusEffect } from 'expo-router';
 import * as React from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
+import Animated, { FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
 
 import { ReviewSheet } from '@/components/review-sheet';
 import { StarRating } from '@/components/star-rating';
 import { Text } from '@/components/ui/text';
 import { supabase } from '@/lib/supabase';
 import type { SelectedPoi } from '@/lib/venues';
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 type MyReview = {
   stars: number;
@@ -63,16 +66,24 @@ export function MyReviewsList({ userId }: MyReviewsListProps) {
       </Text>
 
       {reviews.length === 0 ? (
-        <View className="rounded-lg border border-dashed border-border p-6">
+        <Animated.View
+          entering={FadeIn.duration(220)}
+          className="rounded-lg border border-dashed border-border p-6">
           <Text className="text-center text-sm text-muted-foreground">
             No reviews yet. Tap a place on the map to add your first.
           </Text>
-        </View>
+        </Animated.View>
       ) : (
-        <View className="overflow-hidden rounded-lg border border-border">
+        <Animated.View
+          // Rows settle into place when one is deleted instead of jumping.
+          layout={LinearTransition.duration(220)}
+          className="overflow-hidden rounded-lg border border-border">
           {reviews.map((review, index) => (
-            <Pressable
+            <AnimatedPressable
               key={review.venue.id}
+              // Staggered so the list arrives as a sequence, not a slab.
+              entering={FadeInDown.duration(220).delay(index * 45)}
+              layout={LinearTransition.duration(220)}
               onPress={() => setOpen(review)}
               accessibilityRole="button"
               accessibilityLabel={`${review.venue.name}, ${review.stars} of 5`}
@@ -87,9 +98,9 @@ export function MyReviewsList({ userId }: MyReviewsListProps) {
                 </Text>
                 <StarRating value={review.stars} size="sm" />
               </View>
-            </Pressable>
+            </AnimatedPressable>
           ))}
-        </View>
+        </Animated.View>
       )}
 
       {open ? (
