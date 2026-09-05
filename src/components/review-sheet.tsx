@@ -1,6 +1,14 @@
 import { Star, X } from 'lucide-react-native';
 import * as React from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Keyboard,
+  Platform,
+  Pressable,
+  ScrollView,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
@@ -45,6 +53,30 @@ export function ReviewSheet({ poi, onClose, onSaved }: ReviewSheetProps) {
   const [loading, setLoading] = React.useState(true);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = React.useState(0);
+  const scrollRef = React.useRef<ScrollView>(null);
+  const { height: windowHeight } = useWindowDimensions();
+
+  // KeyboardAvoidingView does nothing on Android without native adjustResize,
+  // which would mean another rebuild. Track the keyboard ourselves and lift the
+  // sheet above it - one code path, no native config.
+  React.useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const show = Keyboard.addListener(showEvent, (event) =>
+      setKeyboardHeight(event.endCoordinates.height)
+    );
+    const hide = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
+
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+
+  // Shrink as well as lift, or a tall sheet runs off the top of the screen.
+  const sheetMaxHeight = Math.max(240, Math.min(560, windowHeight - keyboardHeight - 96));
 
   const userId = session?.user.id ?? null;
 
@@ -151,10 +183,10 @@ export function ReviewSheet({ poi, onClose, onSaved }: ReviewSheetProps) {
   }
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      className="absolute inset-x-0 bottom-0">
-      <View className="max-h-[560px] rounded-t-3xl border-t border-border bg-background">
+    <View className="absolute inset-x-0" style={{ bottom: keyboardHeight }}>
+      <View
+        className="rounded-t-3xl border-t border-border bg-background"
+        style={{ maxHeight: sheetMaxHeight }}>
         <View className="flex-row items-start gap-3 px-5 pb-2 pt-5">
           <View className="flex-1 gap-0.5">
             <Text className="text-xl font-semibold text-foreground">{poi.name}</Text>
@@ -186,7 +218,7 @@ export function ReviewSheet({ poi, onClose, onSaved }: ReviewSheetProps) {
             </Button>
           </View>
         ) : (
-          <ScrollView keyboardShouldPersistTaps="handled">
+          <ScrollView ref={scrollRef} keyboardShouldPersistTaps="handled">
             <View className="gap-6 p-5">
               <View className="gap-2">
                 <Text className="font-medium text-foreground">
@@ -246,6 +278,7 @@ export function ReviewSheet({ poi, onClose, onSaved }: ReviewSheetProps) {
                 <Textarea
                   value={body}
                   onChangeText={setBody}
+                  onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })}
                   maxLength={MAX_BODY}
                   placeholder="Anything worth knowing before someone else walks in."
                   numberOfLines={4}
@@ -273,6 +306,6 @@ export function ReviewSheet({ poi, onClose, onSaved }: ReviewSheetProps) {
           </ScrollView>
         )}
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
