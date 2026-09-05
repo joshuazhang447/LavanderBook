@@ -49,12 +49,12 @@ function StarButton({
   return (
     <Pressable
       onPress={() => {
-        // A quick overshoot and settle, so a tap feels like it landed.
+        // A small, quickly-damped nudge. Anything larger reads as a jump.
         // .set rather than .value =, which the React Compiler rejects as a mutation.
         scale.set(
           withSequence(
-            withSpring(1.35, { damping: 9, stiffness: 400 }),
-            withSpring(1, { damping: 14, stiffness: 260 })
+            withSpring(1.15, { damping: 18, stiffness: 450 }),
+            withSpring(1, { damping: 20, stiffness: 300 })
           )
         );
         onChange(star);

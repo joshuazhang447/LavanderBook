@@ -199,11 +199,13 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
         </Animated.View>
         <KeyboardAvoidingView behavior="padding">
           <Animated.View
-            // Springs up from the bottom edge, and slides back out on close
-            // rather than vanishing.
-            entering={SlideInDown.springify().damping(20).stiffness(180)}
+            // A plain timed slide. A spring overshoots the resting position and
+            // reads as the sheet bouncing.
+            entering={SlideInDown.duration(260)}
             exiting={SlideOutDown.duration(200)}
-            className="max-h-[560px] rounded-t-3xl border-t border-border bg-background">
+            // overflow-hidden matters: without it the form paints outside the
+            // card's max height and spills over the map behind.
+            className="overflow-hidden rounded-t-3xl border-t border-border bg-background">
             <View className="flex-row items-start gap-3 px-5 pb-2 pt-5">
               <View className="flex-1 gap-0.5">
                 <Text className="text-xl font-semibold text-foreground">{poi.name}</Text>
@@ -235,7 +237,13 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
                 </Button>
               </View>
             ) : (
-              <ScrollView ref={scrollRef} keyboardShouldPersistTaps="handled">
+              <ScrollView
+                ref={scrollRef}
+                // Bounded here rather than on the card: a max height on the parent
+                // does not reliably constrain a ScrollView, and the form spilled
+                // past the card and onto the map behind it.
+                className="max-h-[460px]"
+                keyboardShouldPersistTaps="handled">
                 <View className="gap-6 p-5">
                   <View className="gap-2">
                     <Text className="font-medium text-foreground">
