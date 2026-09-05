@@ -72,8 +72,52 @@ Sanity check after touching setup: `npx @react-native-reusables/cli@latest docto
 - `<PortalHost />` is rendered last in `src/app/_layout.tsx`. Overlay components
   (dialog, dropdown-menu, popover, tooltip, select) will not appear if it is removed.
 
-## Legacy template files
+## Navigation
 
-`src/components/themed-text.tsx`, `themed-view.tsx`, `hint-row.tsx`, `web-badge.tsx` and
-`src/constants/theme.ts` came from the Expo starter template. Prefer react-native-reusables
-+ NativeWind for anything new; delete these once nothing imports them.
+Routes live in `src/app/`. Tab screens go in the `src/app/(tabs)/` group; `(tabs)` is a
+group, so URLs are unaffected (`(tabs)/index.tsx` is `/`).
+
+- `src/app/_layout.tsx` — root `Stack`. Screens pushed here (venue detail, modals) cover
+  the tab bar. Keep `<PortalHost />` last.
+- `src/app/(tabs)/_layout.tsx` — the tab navigator, using `expo-router/ui` headless tabs.
+- `src/components/tab-bar.tsx` — the visible bars. Add or rename a tab by editing `TABS`
+  there **and** the matching `<TabTrigger>` in the hidden `<TabList>`.
+
+Three rules that are easy to break:
+
+1. **The hidden `<TabList>` must stay a direct child of `<Tabs>` and stay unconditional.**
+   expo-router discovers routes by walking `Fragment -> TabList -> TabTrigger` only; a
+   `TabList` inside a wrapper registers zero routes. Rendering it conditionally rebuilds
+   the navigator and remounts screens on resize.
+2. **Screens inside `(tabs)` never use `SafeAreaView`.** The layout owns every inset (the
+   header/spacer on top, the bottom bar below). A screen adding its own double-pads.
+   Screens pushed by the root `Stack` are full-screen and *should* use it.
+3. **In a `TabTrigger asChild` child, keep destructuring away the injected `style` prop.**
+   `TabTrigger` injects `flexDirection`/`justifyContent` inline, and an inline style beats
+   `className` in NativeWind.
+
+Wide viewports (>= 768dp) get a top header row; narrower ones get a bottom icons-only bar.
+The branch is `useWindowDimensions()` in `(tabs)/_layout.tsx`, not a `md:` class — we need
+two structurally different trees, and the installed `react-native-css-interop` compares
+`max-width` with a strict `<`, so `max-md:` is off by one. Note `app.json` sets
+`orientation: "portrait"`, so phones never reach 768dp; the header is web/tablet only.
+
+## Icons
+
+`lucide-react-native` (matches shadcn) rendered through `src/components/ui/icon.tsx`:
+
+```tsx
+import { Star } from 'lucide-react-native';
+<Icon as={Star} className="size-6" />
+```
+
+`Icon` reads `TextClassContext`, so an icon inside a component that sets that context
+inherits its text color with no color prop — that is how the tab bar colors icon and
+label together. Lucide's `Map` export shadows the JS `Map` global; alias it
+(`Map as MapIcon`).
+
+## Known gaps
+
+- `_layout.tsx` uses `useColorScheme()` from `react-native`. With `web.output: "static"`,
+  a prerendered light page hydrating into dark can mismatch. If that shows up, add a
+  hydration-safe wrapper rather than reaching for the deleted template hook.
