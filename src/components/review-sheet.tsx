@@ -1,6 +1,6 @@
 import { Trash2, X } from 'lucide-react-native';
 import * as React from 'react';
-import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 
@@ -48,6 +48,11 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
   const [isExisting, setIsExisting] = React.useState(false);
   const [confirmingDelete, setConfirmingDelete] = React.useState(false);
   const scrollRef = React.useRef<ScrollView>(null);
+  const { height: windowHeight } = useWindowDimensions();
+  // An explicit pixel height, not a className. A max height on the card did not
+  // reliably reach the ScrollView, so the sheet came up full sometimes and
+  // collapsed to a scrollable sliver other times.
+  const formMaxHeight = Math.round(windowHeight * 0.55);
 
   const userId = session?.user.id ?? null;
 
@@ -239,10 +244,7 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
             ) : (
               <ScrollView
                 ref={scrollRef}
-                // Bounded here rather than on the card: a max height on the parent
-                // does not reliably constrain a ScrollView, and the form spilled
-                // past the card and onto the map behind it.
-                className="max-h-[460px]"
+                style={{ maxHeight: formMaxHeight }}
                 keyboardShouldPersistTaps="handled">
                 <View className="gap-6 p-5">
                   <View className="gap-2">
