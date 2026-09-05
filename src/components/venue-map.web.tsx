@@ -42,8 +42,14 @@ export function VenueMap(_props: VenueMapProps) {
           defaultCenter={INITIAL_CENTER}
           defaultZoom={15}
           gestureHandling="greedy"
-          disableDefaultUI={false}
           clickableIcons
+          // Strip Google's default chrome - this is our UI, not theirs.
+          mapTypeControl={false}
+          fullscreenControl={false}
+          streetViewControl={false}
+          cameraControl={false}
+          rotateControl={false}
+          zoomControl={false}
         />
       </APIProvider>
     </View>
