@@ -5,7 +5,7 @@ import * as React from 'react';
  * How much ground the map shows around the user, in metres. Roughly the radius
  * from the centre to the nearer screen edge.
  */
-export const VIEW_RADIUS_METERS = 150;
+export const VIEW_RADIUS_METERS = 200;
 
 export type LocationState =
   | { status: 'loading' }
