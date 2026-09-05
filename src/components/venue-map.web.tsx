@@ -27,6 +27,7 @@ function zoomForRadius(latitude: number, radiusMeters: number): number {
 type VenueMapProps = {
   center: { latitude: number; longitude: number };
   onSelectPoi: (poi: SelectedPoi) => void;
+  onDismiss: () => void;
 };
 
 /**
@@ -37,7 +38,7 @@ type VenueMapProps = {
  * place name for free, but the JS API's click event carries only a placeId -
  * resolving it to a name needs a Places lookup, which is a billable call.
  */
-export function VenueMap({ center }: VenueMapProps) {
+export function VenueMap({ center, onDismiss }: VenueMapProps) {
   if (!apiKey) {
     return (
       <View className="flex-1 items-center justify-center gap-2 bg-muted px-6">
@@ -59,6 +60,7 @@ export function VenueMap({ center }: VenueMapProps) {
           defaultZoom={zoomForRadius(center.latitude, VIEW_RADIUS_METERS)}
           gestureHandling="greedy"
           clickableIcons
+          onClick={onDismiss}
           // Strip Google's default chrome - this is our UI, not theirs.
           mapTypeControl={false}
           fullscreenControl={false}

@@ -11,6 +11,8 @@ const LATITUDE_DELTA = (VIEW_RADIUS_METERS * 2) / 111320;
 type VenueMapProps = {
   center: { latitude: number; longitude: number };
   onSelectPoi: (poi: SelectedPoi) => void;
+  /** Tapping bare map, away from any place label. */
+  onDismiss: () => void;
 };
 
 /**
@@ -20,7 +22,7 @@ type VenueMapProps = {
  * No provider is forced: Android gets Google Maps, iOS gets Apple Maps. Apple
  * Maps has no place IDs, so `placeId` is undefined there.
  */
-export function VenueMap({ center, onSelectPoi }: VenueMapProps) {
+export function VenueMap({ center, onSelectPoi, onDismiss }: VenueMapProps) {
   return (
     <MapView
       style={StyleSheet.absoluteFill}
@@ -35,6 +37,8 @@ export function VenueMap({ center, onSelectPoi }: VenueMapProps) {
       showsMyLocationButton={false}
       showsCompass={false}
       toolbarEnabled={false}
+      // Google routes POI taps to onPoiClick only, so this fires just for bare map.
+      onPress={onDismiss}
       onPoiClick={(event) => {
         const { placeId, name, coordinate } = event.nativeEvent;
         onSelectPoi({

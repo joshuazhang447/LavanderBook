@@ -111,8 +111,8 @@ export function BottomTabBar() {
         paddingRight: insets.right,
       }}
       className="border-t border-border bg-background">
-      {/* Bar height. h-12 = 48px; h-14 was 56. The safe-area inset below is on top of this. */}
-      <View className="h-12 flex-row items-center justify-around">
+      {/* Bar height. h-11 = 48px; h-14 was 56. The safe-area inset below is on top of this. */}
+      <View className="h-11 flex-row items-center justify-around">
         {TABS.map((tab) => (
           <TabTrigger key={tab.name} name={tab.name} asChild>
             <TabButton icon={tab.icon} label={tab.label} />

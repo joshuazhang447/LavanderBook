@@ -36,7 +36,11 @@ export default function MapScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <VenueMap center={location} onSelectPoi={setSelected} />
+      <VenueMap
+        center={location}
+        onSelectPoi={setSelected}
+        onDismiss={() => setSelected(null)}
+      />
 
       {selected ? (
         <View className="absolute inset-x-0 bottom-0 gap-1 border-t border-border bg-background p-4">
