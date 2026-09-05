@@ -49,10 +49,11 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
   const [confirmingDelete, setConfirmingDelete] = React.useState(false);
   const scrollRef = React.useRef<ScrollView>(null);
   const { height: windowHeight } = useWindowDimensions();
-  // An explicit pixel height, not a className. A max height on the card did not
-  // reliably reach the ScrollView, so the sheet came up full sometimes and
-  // collapsed to a scrollable sliver other times.
-  const formMaxHeight = Math.round(windowHeight * 0.55);
+  // The card needs a definite height for the ScrollView inside it to flex into.
+  // maxHeight alone is only a cap: with no height to fill, the ScrollView
+  // collapsed and the sheet came up as a sliver. 60% leaves room for the
+  // keyboard to lift the whole card without pushing its top off screen.
+  const sheetHeight = Math.round(windowHeight * 0.6);
 
   const userId = session?.user.id ?? null;
 
@@ -210,6 +211,7 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
             exiting={SlideOutDown.duration(200)}
             // overflow-hidden matters: without it the form paints outside the
             // card's max height and spills over the map behind.
+            style={!loading && session ? { height: sheetHeight } : undefined}
             className="overflow-hidden rounded-t-3xl border-t border-border bg-background">
             <View className="flex-row items-start gap-3 px-5 pb-2 pt-5">
               <View className="flex-1 gap-0.5">
@@ -244,7 +246,7 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
             ) : (
               <ScrollView
                 ref={scrollRef}
-                style={{ maxHeight: formMaxHeight }}
+                className="flex-1"
                 keyboardShouldPersistTaps="handled">
                 <View className="gap-6 p-5">
                   <View className="gap-2">
