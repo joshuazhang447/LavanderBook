@@ -1,19 +1,9 @@
 import { TabList, TabSlot, TabTrigger, Tabs } from 'expo-router/ui';
-import { useWindowDimensions, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { BottomTabBar, TopTabBar } from '@/components/tab-bar';
-
-const WIDE_BREAKPOINT = 768;
+import { BottomTabBar, TopTabBar, useIsWideViewport } from '@/components/tab-bar';
 
 export default function TabsLayout() {
-  const { width } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
-
-  // width is 0 during the static web prerender, where there is no window. Treat that as
-  // "unknown" and render neither bar, so the HTML never ships the wrong one.
-  const isWide = width >= WIDE_BREAKPOINT;
-  const isNarrow = width > 0 && width < WIDE_BREAKPOINT;
+  const { isWide, isNarrow } = useIsWideViewport();
 
   return (
     <Tabs>
@@ -28,8 +18,12 @@ export default function TabsLayout() {
         <TabTrigger name="account" href="/account" />
       </TabList>
 
-      {/* JSX order is layout order: header above the slot, tab bar below it. */}
-      {isWide ? <TopTabBar /> : <View style={{ height: insets.top }} className="bg-background" />}
+      {/*
+        JSX order is layout order: header above the slot, tab bar below it. No status-bar
+        spacer on narrow - the map is meant to run edge to edge under the notch, so screens
+        that need to clear it pad themselves.
+      */}
+      {isWide ? <TopTabBar /> : null}
       <TabSlot />
       {isNarrow ? <BottomTabBar /> : null}
     </Tabs>

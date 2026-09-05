@@ -2,6 +2,7 @@ import '@/global.css';
 
 import { PortalHost } from '@rn-primitives/portal';
 import { Stack, ThemeProvider } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { useColorScheme } from 'react-native';
 
@@ -17,6 +18,8 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <ThemeProvider value={NAV_THEME[colorScheme]}>
+        {/* Icons were white on a white map, so invisible. Contrast the scheme. */}
+        <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
         <AnimatedSplashOverlay />
         <Stack screenOptions={{ headerShown: false }} />
         <PortalHost />

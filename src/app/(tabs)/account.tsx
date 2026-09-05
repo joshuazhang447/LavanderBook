@@ -1,13 +1,19 @@
 import * as React from 'react';
 import { ActivityIndicator, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Text } from '@/components/ui/text';
+import { useIsWideViewport } from '@/components/tab-bar';
 import { useAuth } from '@/lib/auth';
 
 export default function AccountScreen() {
   const { session, profile, loading, signInWithGoogle, signOut } = useAuth();
+  const insets = useSafeAreaInsets();
+  const { isWide } = useIsWideViewport();
+  // On wide the header row already clears the status bar; on narrow nothing does.
+  const topInset = isWide ? 0 : insets.top;
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -32,7 +38,7 @@ export default function AccountScreen() {
   }
 
   return (
-    <View className="flex-1 bg-background">
+    <View className="flex-1 bg-background" style={{ paddingTop: topInset }}>
       <View className="w-full max-w-md gap-6 self-center px-6 pt-8">
         <Text className="text-3xl font-bold text-foreground">My Account</Text>
 

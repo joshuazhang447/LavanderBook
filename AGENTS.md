@@ -89,9 +89,12 @@ Three rules that are easy to break:
    expo-router discovers routes by walking `Fragment -> TabList -> TabTrigger` only; a
    `TabList` inside a wrapper registers zero routes. Rendering it conditionally rebuilds
    the navigator and remounts screens on resize.
-2. **Screens inside `(tabs)` never use `SafeAreaView`.** The layout owns every inset (the
-   header/spacer on top, the bottom bar below). A screen adding its own double-pads.
-   Screens pushed by the root `Stack` are full-screen and *should* use it.
+2. **The tabs layout does not pad for the status bar; screens do.** The map deliberately
+   runs edge to edge under the notch, so the layout adds no top spacer. A screen that
+   needs to clear the status bar applies `useSafeAreaInsets().top` itself, skipping it
+   when `useIsWideViewport().isWide` (the header row already clears it). The bottom bar
+   still owns the bottom inset, so screens must not add that. Screens pushed by the root
+   `Stack` are full-screen and should use `SafeAreaView`.
 3. **In a `TabTrigger asChild` child, keep destructuring away the injected `style` prop.**
    `TabTrigger` injects `flexDirection`/`justifyContent` inline, and an inline style beats
    `className` in NativeWind.

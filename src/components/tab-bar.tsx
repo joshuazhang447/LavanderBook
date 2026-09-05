@@ -1,6 +1,6 @@
 import { TabTrigger, type TabTriggerSlotProps } from 'expo-router/ui';
 import { CircleUser, Map as MapIcon, type LucideIcon } from 'lucide-react-native';
-import { Platform, Pressable, View } from 'react-native';
+import { Platform, Pressable, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/ui/icon';
@@ -20,6 +20,22 @@ const TABS = [
 ] as const satisfies readonly { name: string; label: string; icon: LucideIcon }[];
 
 export type TabName = (typeof TABS)[number]['name'];
+
+export const WIDE_BREAKPOINT = 768;
+
+/**
+ * Wide viewports get the header row, narrow ones the bottom bar. Screens need
+ * this too: the layout no longer pads for the status bar, so each screen
+ * decides whether to sit under it (the map) or clear it (everything else).
+ */
+export function useIsWideViewport() {
+  const { width } = useWindowDimensions();
+  return {
+    isWide: width >= WIDE_BREAKPOINT,
+    // width is 0 during the static web prerender - treat that as unknown.
+    isNarrow: width > 0 && width < WIDE_BREAKPOINT,
+  };
+}
 
 type TabButtonProps = TabTriggerSlotProps & {
   icon: LucideIcon;
