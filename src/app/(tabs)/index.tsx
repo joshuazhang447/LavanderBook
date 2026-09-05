@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
+import { ReviewSheet } from '@/components/review-sheet';
 import { Text } from '@/components/ui/text';
 import { VenueMap } from '@/components/venue-map';
 import { useCurrentLocation } from '@/lib/use-location';
@@ -43,16 +44,13 @@ export default function MapScreen() {
       />
 
       {selected ? (
-        <View className="absolute inset-x-0 bottom-0 gap-1 border-t border-border bg-background p-4">
-          <Text className="text-lg font-semibold text-foreground">{selected.name}</Text>
-          <Text className="text-xs text-muted-foreground">
-            {selected.placeId ? `Place ID: ${selected.placeId}` : 'No place ID (Apple Maps)'}
-          </Text>
-          <Text className="text-xs text-muted-foreground">
-            {selected.latitude.toFixed(5)}, {selected.longitude.toFixed(5)}
-          </Text>
-        </View>
+        <ReviewSheet
+          poi={selected}
+          onClose={() => setSelected(null)}
+          onSaved={() => setSelected(null)}
+        />
       ) : null}
+
     </View>
   );
 }

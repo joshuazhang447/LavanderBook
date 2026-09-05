@@ -63,7 +63,6 @@ export type Database = {
           body: string | null
           created_at: string
           id: string
-          lgbtq_friendly: Database["public"]["Enums"]["answer"]
           stars: number
           trans_bathroom: Database["public"]["Enums"]["answer"]
           updated_at: string
@@ -74,9 +73,8 @@ export type Database = {
           body?: string | null
           created_at?: string
           id?: string
-          lgbtq_friendly?: Database["public"]["Enums"]["answer"]
           stars: number
-          trans_bathroom?: Database["public"]["Enums"]["answer"]
+          trans_bathroom: Database["public"]["Enums"]["answer"]
           updated_at?: string
           venue_id: string
         }
@@ -85,7 +83,6 @@ export type Database = {
           body?: string | null
           created_at?: string
           id?: string
-          lgbtq_friendly?: Database["public"]["Enums"]["answer"]
           stars?: number
           trans_bathroom?: Database["public"]["Enums"]["answer"]
           updated_at?: string
@@ -153,9 +150,6 @@ export type Database = {
       venue_ratings: {
         Row: {
           avg_stars: number | null
-          lgbtq_friendly_no: number | null
-          lgbtq_friendly_unsure: number | null
-          lgbtq_friendly_yes: number | null
           review_count: number | null
           trans_bathroom_no: number | null
           trans_bathroom_unsure: number | null
