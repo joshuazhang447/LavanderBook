@@ -8,7 +8,7 @@ const BOX_WIDTH = 168;
 const BOX_HEIGHT = 44;
 const SNIPPET_CHARS = 40;
 /** Clearance above the point, so the box does not sit on Google's own label. */
-const LIFT = 44;
+const LIFT = 35;
 const CLOSE_SIZE = 26;
 
 // Android takes `anchor` as a fraction of the marker view; iOS takes
