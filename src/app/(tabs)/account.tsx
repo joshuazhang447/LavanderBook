@@ -1,4 +1,3 @@
-import * as Linking from 'expo-linking';
 import * as React from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
@@ -69,20 +68,6 @@ export default function AccountScreen() {
         )}
 
         {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
-
-        {/*
-          Dev-only. Supabase silently falls back to the Site URL when redirectTo
-          is not in its allowlist, which strands mobile on localhost. Showing the
-          exact value makes that mismatch obvious instead of mysterious.
-        */}
-        {__DEV__ ? (
-          <View className="gap-1 rounded-md bg-muted p-3">
-            <Text className="text-xs font-semibold text-muted-foreground">
-              Redirect URI (dev only)
-            </Text>
-            <Text className="text-xs text-foreground">{Linking.createURL('/')}</Text>
-          </View>
-        ) : null}
       </View>
     </View>
   );
