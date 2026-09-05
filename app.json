@@ -17,7 +17,8 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.lavenderbook.app"
     },
     "web": {
       "output": "static",
@@ -37,6 +38,12 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "LavenderBook uses your location to show venues near you."
+        }
+      ],
+      [
+        "react-native-maps",
+        {
+          "androidGoogleMapsApiKey": "REPLACE_WITH_ANDROID_MAPS_KEY"
         }
       ]
     ],
