@@ -21,10 +21,20 @@ type AuthState = {
 
 const AuthContext = React.createContext<AuthState | null>(null);
 
-/** Pull the PKCE `code` out of the URL the browser redirects back to. */
-function readAuthCode(url: string): string | null {
-  const match = /[?&]code=([^&#]+)/.exec(url);
-  return match ? decodeURIComponent(match[1]) : null;
+/**
+ * Read a parameter from either the query string or the fragment. Supabase puts
+ * a PKCE `code` in the query, but the implicit flow returns tokens in the hash.
+ */
+function readParam(url: string, name: string): string | null {
+  const match = new RegExp(`[?#&]${name}=([^&#]+)`).exec(url);
+  return match ? decodeURIComponent(match[1].replace(/\+/g, ' ')) : null;
+}
+
+/** Parameter names only - never their values, which may contain tokens. */
+function describeParams(url: string): string {
+  const afterPath = url.replace(/^[^?#]*/, '');
+  const names = Array.from(afterPath.matchAll(/[?#&]([^=&]+)=/g)).map((m) => m[1]);
+  return names.length > 0 ? names.join(', ') : '(none)';
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -98,11 +108,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
     if (result.type !== 'success') return; // user dismissed the browser
 
-    const code = readAuthCode(result.url);
-    if (!code) throw new Error('Google sign-in did not return an authorization code.');
+    // Supabase sends back a PKCE code when the flow is honoured...
+    const code = readParam(result.url, 'code');
+    if (code) {
+      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+      if (exchangeError) throw exchangeError;
+      return;
+    }
 
-    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-    if (exchangeError) throw exchangeError;
+    // ...but falls back to the implicit flow in some paths, where the tokens
+    // arrive in the URL fragment instead.
+    const accessToken = readParam(result.url, 'access_token');
+    const refreshToken = readParam(result.url, 'refresh_token');
+    if (accessToken && refreshToken) {
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      });
+      if (sessionError) throw sessionError;
+      return;
+    }
+
+    const description = readParam(result.url, 'error_description');
+    throw new Error(
+      description ?? `Sign-in returned no code or tokens. Received: ${describeParams(result.url)}`
+    );
   }, []);
 
   const signOut = React.useCallback(async () => {
