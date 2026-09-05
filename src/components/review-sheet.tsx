@@ -203,11 +203,14 @@ export function ReviewSheet({ poi, onClose, onSaved }: ReviewSheetProps) {
                       className="rounded-md p-1 active:bg-accent">
                       <Icon
                         as={Star}
+                        // Filled gold when earned, a solid grey outline when not.
+                        // opacity-30 left the empty stars invisible on white.
                         className={
                           stars !== null && value <= stars
-                            ? 'size-9 text-primary'
-                            : 'size-9 text-muted-foreground opacity-30'
+                            ? 'size-9 text-star'
+                            : 'size-9 text-muted-foreground'
                         }
+                        fill={stars !== null && value <= stars ? 'currentColor' : 'none'}
                       />
                     </Pressable>
                   ))}
