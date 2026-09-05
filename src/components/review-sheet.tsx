@@ -49,10 +49,9 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
   const [confirmingDelete, setConfirmingDelete] = React.useState(false);
   const scrollRef = React.useRef<ScrollView>(null);
   const { height: windowHeight } = useWindowDimensions();
-  // The card needs a definite height for the ScrollView inside it to flex into.
-  // maxHeight alone is only a cap: with no height to fill, the ScrollView
-  // collapsed and the sheet came up as a sliver. 60% leaves room for the
-  // keyboard to lift the whole card without pushing its top off screen.
+  // The card needs a definite height for the ScrollView inside it to flex into;
+  // maxHeight alone is only a cap. 60% leaves room for the keyboard to lift the
+  // whole card without pushing its top off screen.
   const sheetHeight = Math.round(windowHeight * 0.6);
 
   const userId = session?.user.id ?? null;
@@ -211,7 +210,11 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
             exiting={SlideOutDown.duration(200)}
             // overflow-hidden matters: without it the form paints outside the
             // card's max height and spills over the map behind.
-            style={!loading && session ? { height: sheetHeight } : undefined}
+            // Unconditional. When this depended on `loading`, the card rendered
+            // short while the existing-review lookup was in flight, the entering
+            // animation captured that height, and the sheet opened as a sliver -
+            // intermittently, because sometimes the lookup won the race.
+            style={{ height: sheetHeight }}
             className="overflow-hidden rounded-t-3xl border-t border-border bg-background">
             <View className="flex-row items-start gap-3 px-5 pb-2 pt-5">
               <View className="flex-1 gap-0.5">
@@ -230,11 +233,11 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
             </View>
 
             {loading ? (
-              <View className="items-center gap-2 p-8">
+              <View className="flex-1 items-center justify-center gap-2 p-8">
                 <ActivityIndicator />
               </View>
             ) : !session ? (
-              <View className="gap-4 p-5">
+              <View className="flex-1 justify-center gap-4 p-5">
                 <Text className="text-sm text-muted-foreground">
                   Sign in to review this place. You post under an anonymous handle, never your real
                   name.
