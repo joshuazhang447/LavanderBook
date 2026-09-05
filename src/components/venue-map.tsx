@@ -1,6 +1,8 @@
 import { StyleSheet } from 'react-native';
 import MapView from 'react-native-maps';
 
+import { VenueMarker } from '@/components/venue-marker';
+import type { NearbyVenue } from '@/lib/use-nearby-venues';
 import type { SelectedPoi } from '@/lib/venues';
 import { VIEW_RADIUS_METERS } from '@/lib/use-location';
 
@@ -13,6 +15,9 @@ type VenueMapProps = {
   onSelectPoi: (poi: SelectedPoi) => void;
   /** Tapping bare map, away from any place label. */
   onDismiss: () => void;
+  /** Reviewed venues nearby, drawn as rating boxes above their point. */
+  venues: NearbyVenue[];
+  onSelectVenue: (venue: NearbyVenue) => void;
 };
 
 /**
@@ -22,7 +27,13 @@ type VenueMapProps = {
  * No provider is forced: Android gets Google Maps, iOS gets Apple Maps. Apple
  * Maps has no place IDs, so `placeId` is undefined there.
  */
-export function VenueMap({ center, onSelectPoi, onDismiss }: VenueMapProps) {
+export function VenueMap({
+  center,
+  onSelectPoi,
+  onDismiss,
+  venues,
+  onSelectVenue,
+}: VenueMapProps) {
   return (
     <MapView
       style={StyleSheet.absoluteFill}
@@ -47,7 +58,10 @@ export function VenueMap({ center, onSelectPoi, onDismiss }: VenueMapProps) {
           latitude: coordinate.latitude,
           longitude: coordinate.longitude,
         });
-      }}
-    />
+      }}>
+      {venues.map((venue) => (
+        <VenueMarker key={venue.id} venue={venue} onPress={onSelectVenue} />
+      ))}
+    </MapView>
   );
 }

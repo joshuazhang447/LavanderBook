@@ -161,6 +161,26 @@ export type Database = {
     }
     Functions: {
       generate_display_name: { Args: never; Returns: string }
+      venues_near: {
+        Args: {
+          p_lat: number
+          p_limit?: number
+          p_lng: number
+          p_radius_meters?: number
+        }
+        Returns: {
+          avg_stars: number
+          distance_meters: number
+          google_place_id: string
+          id: string
+          lat: number
+          latest_review_at: string
+          latest_review_body: string
+          lng: number
+          name: string
+          review_count: number
+        }[]
+      }
     }
     Enums: {
       answer: "yes" | "no" | "unsure"

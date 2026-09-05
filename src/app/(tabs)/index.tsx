@@ -4,12 +4,20 @@ import { ActivityIndicator, View } from 'react-native';
 import { ReviewSheet } from '@/components/review-sheet';
 import { Text } from '@/components/ui/text';
 import { VenueMap } from '@/components/venue-map';
-import { useCurrentLocation } from '@/lib/use-location';
+import { useNearbyVenues } from '@/lib/use-nearby-venues';
+import { useCurrentLocation, useWalkingAnchor } from '@/lib/use-location';
 import type { SelectedPoi } from '@/lib/venues';
 
 export default function MapScreen() {
   const [selected, setSelected] = React.useState<SelectedPoi | null>(null);
+  // Set when a rating box is tapped, so the sheet edits that venue directly
+  // rather than resolving it from a place id.
+  const [selectedVenueId, setSelectedVenueId] = React.useState<string | undefined>(undefined);
   const location = useCurrentLocation();
+  // Separate from `location`: this one updates as you walk, and must not reach
+  // the map's centre or the map would drag itself back under you.
+  const anchor = useWalkingAnchor();
+  const venues = useNearbyVenues(anchor);
 
   // The map reads its centre once, on mount, so wait for the position rather
   // than mounting somewhere arbitrary and jumping afterwards.
@@ -39,13 +47,27 @@ export default function MapScreen() {
     <View className="flex-1 bg-background">
       <VenueMap
         center={location}
-        onSelectPoi={setSelected}
+        venues={venues}
+        onSelectPoi={(poi) => {
+          setSelectedVenueId(undefined);
+          setSelected(poi);
+        }}
+        onSelectVenue={(venue) => {
+          setSelectedVenueId(venue.id);
+          setSelected({
+            placeId: venue.google_place_id ?? undefined,
+            name: venue.name,
+            latitude: venue.lat,
+            longitude: venue.lng,
+          });
+        }}
         onDismiss={() => setSelected(null)}
       />
 
       {selected ? (
         <ReviewSheet
           poi={selected}
+          venueId={selectedVenueId}
           onClose={() => setSelected(null)}
           onSaved={() => setSelected(null)}
         />
