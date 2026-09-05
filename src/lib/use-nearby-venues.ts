@@ -18,6 +18,15 @@ const METERS_PER_DEGREE_LAT = 111320;
 const OVERSCAN = 1.25;
 /** Zoomed right out, stop asking for the whole country. */
 const MAX_RADIUS_METERS = 20000;
+/**
+ * Past this the boxes are unreadable clutter rather than information, so they
+ * are not drawn - and the query is skipped rather than thrown away.
+ * ~0.05 degrees of latitude is roughly 5.5km of map on screen.
+ */
+const MAX_VISIBLE_LAT_DELTA = 0.05;
+
+/** Stable so a hidden map does not hand back a new array every render. */
+const NONE: NearbyVenue[] = [];
 
 function radiusForRegion(region: MapRegion): number {
   const halfHeight = (region.latitudeDelta * METERS_PER_DEGREE_LAT) / 2;
@@ -40,12 +49,13 @@ function radiusForRegion(region: MapRegion): number {
  */
 export function useNearbyVenues(region: MapRegion | null, refreshKey: string) {
   const [venues, setVenues] = React.useState<NearbyVenue[]>([]);
+  const zoomedOut = !region || region.latitudeDelta > MAX_VISIBLE_LAT_DELTA;
   // Bumped by the Realtime subscription, which must not itself depend on the
   // region or every pan would tear the channel down and rebuild it.
   const [liveKey, setLiveKey] = React.useState(0);
 
   React.useEffect(() => {
-    if (!region) return;
+    if (!region || zoomedOut) return;
 
     let active = true;
 
@@ -62,7 +72,7 @@ export function useNearbyVenues(region: MapRegion | null, refreshKey: string) {
     return () => {
       active = false;
     };
-  }, [region, refreshKey, liveKey]);
+  }, [region, zoomedOut, refreshKey, liveKey]);
 
   React.useEffect(() => {
     const channel = supabase
@@ -83,5 +93,5 @@ export function useNearbyVenues(region: MapRegion | null, refreshKey: string) {
     };
   }, []);
 
-  return venues;
+  return zoomedOut ? NONE : venues;
 }

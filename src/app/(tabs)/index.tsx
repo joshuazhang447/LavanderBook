@@ -21,11 +21,23 @@ export default function MapScreen() {
   const anchor = useWalkingAnchor();
   const [region, setRegion] = React.useState<MapRegion | null>(null);
   const [savedCount, setSavedCount] = React.useState(0);
+  // Boxes the user closed because they overlapped something. Session-only, and
+  // cleared whenever the venue list itself changes.
+  const [dismissed, setDismissed] = React.useState<Set<string>>(new Set());
+
+  // Stable identity, or React.memo on the marker would hold a stale closure.
+  const dismissVenue = React.useCallback((venueId: string) => {
+    setDismissed((previous) => new Set(previous).add(venueId));
+  }, []);
   // Derived rather than an effect that bumps a counter: walking to a new anchor
   // and saving a review are both just reasons to refetch.
-  const venues = useNearbyVenues(
+  const allVenues = useNearbyVenues(
     region,
     `${savedCount}:${anchor ? `${anchor.latitude},${anchor.longitude}` : ''}`
+  );
+  const venues = React.useMemo(
+    () => (dismissed.size === 0 ? allVenues : allVenues.filter((v) => !dismissed.has(v.id))),
+    [allVenues, dismissed]
   );
 
   // The map reads its centre once, on mount, so wait for the position rather
@@ -71,6 +83,7 @@ export default function MapScreen() {
           });
         }}
         onDismiss={() => setSelected(null)}
+        onDismissVenue={dismissVenue}
         onRegionSettled={setRegion}
       />
 

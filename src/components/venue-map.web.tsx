@@ -33,6 +33,7 @@ type VenueMapProps = {
   // AdvancedMarker, which silently no-ops without a paid mapId.
   venues: NearbyVenue[];
   onSelectVenue: (venue: NearbyVenue) => void;
+  onDismissVenue: (venueId: string) => void;
   onRegionSettled: (region: MapRegion) => void;
 };
 

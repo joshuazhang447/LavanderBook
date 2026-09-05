@@ -18,6 +18,7 @@ type VenueMapProps = {
   /** Reviewed venues nearby, drawn as rating boxes above their point. */
   venues: NearbyVenue[];
   onSelectVenue: (venue: NearbyVenue) => void;
+  onDismissVenue: (venueId: string) => void;
   /** Fires once panning or zooming settles, so venues can be fetched for it. */
   onRegionSettled: (region: MapRegion) => void;
 };
@@ -35,6 +36,7 @@ export function VenueMap({
   onDismiss,
   venues,
   onSelectVenue,
+  onDismissVenue,
   onRegionSettled,
 }: VenueMapProps) {
   return (
@@ -66,7 +68,12 @@ export function VenueMap({
         });
       }}>
       {venues.map((venue) => (
-        <VenueMarker key={venue.id} venue={venue} onPress={onSelectVenue} />
+        <VenueMarker
+          key={venue.id}
+          venue={venue}
+          onPress={onSelectVenue}
+          onDismiss={onDismissVenue}
+        />
       ))}
     </MapView>
   );
