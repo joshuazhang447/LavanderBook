@@ -1,7 +1,7 @@
-import { router, useLocalSearchParams } from 'expo-router';
 import * as React from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
+import { clearMapFocus, useMapFocus } from '@/lib/map-focus';
 import type { MapViewMode } from '@/components/map-controls';
 import { MapControls, RecenterButton } from '@/components/map-controls';
 import { ReviewSheet } from '@/components/review-sheet';
@@ -55,20 +55,17 @@ export default function MapScreen() {
   const [region, setRegion] = React.useState<MapRegion | null>(null);
   const [savedCount, setSavedCount] = React.useState(0);
   // Bumped to re-run the camera move even when the target has not changed.
-  const [focusToken, setFocusToken] = React.useState(0);
+  const [recenterToken, setRecenterToken] = React.useState(0);
   const [refreshing, setRefreshing] = React.useState(false);
   // Boxes the user closed because they overlapped something. Session-only.
   const [dismissed, setDismissed] = React.useState<Set<string>>(new Set());
 
-  // Set by "Go to" on a review in the account tab.
-  const params = useLocalSearchParams<{ lat?: string; lng?: string; goto?: string }>();
-  const goTo = React.useMemo(() => {
-    const latitude = Number(params.lat);
-    const longitude = Number(params.lng);
-    return params.goto && Number.isFinite(latitude) && Number.isFinite(longitude)
-      ? { latitude, longitude }
-      : null;
-  }, [params.goto, params.lat, params.lng]);
+  // Set by Locate on a review over in the account tab.
+  const focus = useMapFocus();
+  const goTo = React.useMemo(
+    () => (focus ? { latitude: focus.latitude, longitude: focus.longitude } : null),
+    [focus]
+  );
 
   // Derived rather than switched off in an effect: arriving at a venue and
   // following the user are mutually exclusive, and following would otherwise
@@ -171,7 +168,8 @@ export default function MapScreen() {
           center={goTo ?? location}
           venues={venues}
           followCenter={goTo ?? (following ? followPosition : null)}
-          focusToken={focusToken}
+          // Either a new Locate request or a recentre press re-issues the move.
+          focusToken={(focus?.token ?? 0) + recenterToken}
           onSelectPoi={(poi) => {
             setSelectedVenueId(undefined);
             setSelected(poi);
@@ -206,10 +204,10 @@ export default function MapScreen() {
             setFollowPref(true);
             // Always re-issue the camera move. Pressing while already following
             // used to be a no-op, because the target value had not changed.
-            setFocusToken((token) => token + 1);
+            setRecenterToken((token) => token + 1);
             // Clear the venue target, or `following` stays false and the button
             // would light up without the map actually tracking anyone.
-            if (goTo) router.setParams({ lat: undefined, lng: undefined, goto: undefined });
+            clearMapFocus();
           }}
         />
       ) : null}

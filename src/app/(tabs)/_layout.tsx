@@ -24,7 +24,13 @@ export default function TabsLayout() {
         that need to clear it pad themselves.
       */}
       {isWide ? <TopTabBar /> : null}
-      <TabSlot />
+      {/*
+        detachInactiveScreens defaults to true, which tears the map's native view
+        down while you are on another tab. A camera move issued during the
+        re-attach window is silently dropped - which is why Locate moved the map
+        only sometimes. Two screens is cheap to keep alive.
+      */}
+      <TabSlot detachInactiveScreens={false} />
       {isNarrow ? <BottomTabBar /> : null}
     </Tabs>
   );

@@ -1,5 +1,6 @@
+import { useFocusEffect } from 'expo-router';
+import { useTabTrigger } from 'expo-router/ui';
 import { MapPin } from 'lucide-react-native';
-import { router, useFocusEffect } from 'expo-router';
 import * as React from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
@@ -8,6 +9,7 @@ import { ReviewSheet } from '@/components/review-sheet';
 import { StarRating } from '@/components/star-rating';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
+import { focusMapOn } from '@/lib/map-focus';
 import { supabase } from '@/lib/supabase';
 import type { SelectedPoi } from '@/lib/venues';
 
@@ -30,6 +32,9 @@ type MyReviewsListProps = {
 };
 
 export function MyReviewsList({ userId }: MyReviewsListProps) {
+  // switchTab rather than router.navigate: this is the mechanism the tab bar
+  // itself uses, so it lands on the tab rather than pushing over it.
+  const { switchTab } = useTabTrigger({ name: 'map' });
   const [reviews, setReviews] = React.useState<MyReview[] | null>(null);
   const [open, setOpen] = React.useState<MyReview | null>(null);
   const refetch = React.useCallback(() => {
@@ -103,18 +108,13 @@ export function MyReviewsList({ userId }: MyReviewsListProps) {
 
               {review.venue.lat !== null && review.venue.lng !== null ? (
                 <Pressable
-                  onPress={() =>
-                    router.navigate({
-                      pathname: '/',
-                      params: {
-                        lat: String(review.venue.lat),
-                        lng: String(review.venue.lng),
-                        // A nonce, so going to the same venue twice still counts
-                        // as a parameter change and re-centres the map.
-                        goto: String(Date.now()),
-                      },
-                    })
-                  }
+                  onPress={() => {
+                    focusMapOn({
+                      latitude: review.venue.lat as number,
+                      longitude: review.venue.lng as number,
+                    });
+                    switchTab('map', {});
+                  }}
                   accessibilityRole="button"
                   accessibilityLabel={`Show ${review.venue.name} on the map`}
                   className="flex-row items-center gap-1 rounded-full border border-border px-3 py-1.5 active:bg-accent">

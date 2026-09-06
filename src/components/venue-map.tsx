@@ -56,6 +56,7 @@ export function VenueMap({
   onUserPannedTo,
 }: VenueMapProps) {
   const mapRef = React.useRef<MapView>(null);
+  const [ready, setReady] = React.useState(false);
   const programmaticRef = React.useRef(false);
   const programmaticTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   // Where the camera was last driven to, for the distance backstop below.
@@ -68,7 +69,9 @@ export function VenueMap({
   });
 
   React.useEffect(() => {
-    if (!followCenter) return;
+    // Waiting on onMapReady rather than firing at mount: a camera move issued
+    // before the native view exists goes nowhere, with no error.
+    if (!followCenter || !ready) return;
 
     followedRef.current = followCenter;
     programmaticRef.current = true;
@@ -81,7 +84,7 @@ export function VenueMap({
     // preserves the user's zoom, where animateToRegion forces a span and on
     // Android fits to bounds, so the zoom drifts on every step.
     mapRef.current?.animateCamera({ center: followCenter }, { duration: FOLLOW_ANIMATION_MS });
-  }, [followCenter, focusToken]);
+  }, [followCenter, focusToken, ready]);
 
   React.useEffect(
     () => () => {
@@ -128,6 +131,7 @@ export function VenueMap({
 
         onUserPannedTo(region);
       }}
+      onMapReady={() => setReady(true)}
       showsUserLocation
       // Google's own chrome, hidden to match the web map. The my-location button
       // is deliberately off: react-native-maps registers no click listener for
