@@ -1,10 +1,12 @@
-import { useFocusEffect } from 'expo-router';
+import { MapPin } from 'lucide-react-native';
+import { router, useFocusEffect } from 'expo-router';
 import * as React from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
 
 import { ReviewSheet } from '@/components/review-sheet';
 import { StarRating } from '@/components/star-rating';
+import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { supabase } from '@/lib/supabase';
 import type { SelectedPoi } from '@/lib/venues';
@@ -98,6 +100,28 @@ export function MyReviewsList({ userId }: MyReviewsListProps) {
                 </Text>
                 <StarRating value={review.stars} size="sm" />
               </View>
+
+              {review.venue.lat !== null && review.venue.lng !== null ? (
+                <Pressable
+                  onPress={() =>
+                    router.navigate({
+                      pathname: '/',
+                      params: {
+                        lat: String(review.venue.lat),
+                        lng: String(review.venue.lng),
+                        // A nonce, so going to the same venue twice still counts
+                        // as a parameter change and re-centres the map.
+                        goto: String(Date.now()),
+                      },
+                    })
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel={`Show ${review.venue.name} on the map`}
+                  className="flex-row items-center gap-1 rounded-full border border-border px-3 py-1.5 active:bg-accent">
+                  <Icon as={MapPin} className="size-3.5 text-muted-foreground" />
+                  <Text className="text-xs font-medium text-foreground">Go to</Text>
+                </Pressable>
+              ) : null}
             </AnimatedPressable>
           ))}
         </Animated.View>

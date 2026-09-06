@@ -1,3 +1,4 @@
+import { router, useLocalSearchParams } from 'expo-router';
 import * as React from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
@@ -48,12 +49,29 @@ export default function MapScreen() {
   // sheet edits that venue rather than resolving it from a place id.
   const [selectedVenueId, setSelectedVenueId] = React.useState<string | undefined>(undefined);
   const [mode, setMode] = React.useState<MapViewMode>('map');
-  const [following, setFollowing] = React.useState(true);
+  // The preference. Actual following is this AND not currently showing a venue
+  // arrived at from the reviews list - see `following` below.
+  const [followPref, setFollowPref] = React.useState(true);
   const [region, setRegion] = React.useState<MapRegion | null>(null);
   const [savedCount, setSavedCount] = React.useState(0);
   const [refreshing, setRefreshing] = React.useState(false);
   // Boxes the user closed because they overlapped something. Session-only.
   const [dismissed, setDismissed] = React.useState<Set<string>>(new Set());
+
+  // Set by "Go to" on a review in the account tab.
+  const params = useLocalSearchParams<{ lat?: string; lng?: string; goto?: string }>();
+  const goTo = React.useMemo(() => {
+    const latitude = Number(params.lat);
+    const longitude = Number(params.lng);
+    return params.goto && Number.isFinite(latitude) && Number.isFinite(longitude)
+      ? { latitude, longitude }
+      : null;
+  }, [params.goto, params.lat, params.lng]);
+
+  // Derived rather than switched off in an effect: arriving at a venue and
+  // following the user are mutually exclusive, and following would otherwise
+  // drag the map off the venue on the very next fix.
+  const following = followPref && !goTo;
 
   const location = useCurrentLocation();
   // No GPS at all in List view, or once the user has panned away.
@@ -100,15 +118,16 @@ export default function MapScreen() {
   const pannedRegion = region ?? initialRegion;
 
   const fetchRegion = React.useMemo<MapRegion | null>(() => {
-    if (!following || !followAnchor || !pannedRegion) return pannedRegion;
-    // Keep whatever zoom the user chose; only the centre follows them.
+    const centre = goTo ?? (following ? followAnchor : null);
+    if (!centre || !pannedRegion) return pannedRegion;
+    // Keep whatever zoom the user chose; only the centre moves.
     return {
-      latitude: followAnchor.latitude,
-      longitude: followAnchor.longitude,
+      latitude: centre.latitude,
+      longitude: centre.longitude,
       latitudeDelta: pannedRegion.latitudeDelta,
       longitudeDelta: pannedRegion.longitudeDelta,
     };
-  }, [following, followAnchor, pannedRegion]);
+  }, [goTo, following, followAnchor, pannedRegion]);
 
   const { venues: allVenues } = useNearbyVenues(fetchRegion, String(savedCount));
   const venues = React.useMemo(
@@ -146,7 +165,7 @@ export default function MapScreen() {
         <VenueMap
           center={location}
           venues={venues}
-          followCenter={following ? followPosition : null}
+          followCenter={goTo ?? (following ? followPosition : null)}
           onSelectPoi={(poi) => {
             setSelectedVenueId(undefined);
             setSelected(poi);
@@ -157,7 +176,7 @@ export default function MapScreen() {
           onUserPannedTo={(next) => {
             // A pan is the user taking over; following would otherwise drag the
             // map back out from under them on the next fix.
-            setFollowing(false);
+            setFollowPref(false);
             setRegion(next);
           }}
         />
@@ -175,7 +194,15 @@ export default function MapScreen() {
       />
 
       {mode === 'map' ? (
-        <RecenterButton following={following} onPress={() => setFollowing(true)} />
+        <RecenterButton
+          following={following}
+          onPress={() => {
+            setFollowPref(true);
+            // Clear the venue target, or `following` stays false and the button
+            // would light up without the map actually tracking anyone.
+            if (goTo) router.setParams({ lat: undefined, lng: undefined, goto: undefined });
+          }}
+        />
       ) : null}
 
       {viewingVenue ? (
