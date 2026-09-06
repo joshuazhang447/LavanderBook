@@ -44,6 +44,9 @@ export default function MapScreen() {
   // Tapping one of our rating boxes opens the read-only detail sheet; tapping a
   // Google place label still opens the review form.
   const [viewingVenue, setViewingVenue] = React.useState<NearbyVenue | null>(null);
+  // Set when the review form is opened from a venue we already know, so the
+  // sheet edits that venue rather than resolving it from a place id.
+  const [selectedVenueId, setSelectedVenueId] = React.useState<string | undefined>(undefined);
   const [mode, setMode] = React.useState<MapViewMode>('map');
   const [following, setFollowing] = React.useState(true);
   const [region, setRegion] = React.useState<MapRegion | null>(null);
@@ -144,7 +147,10 @@ export default function MapScreen() {
           center={location}
           venues={venues}
           followCenter={following ? followPosition : null}
-          onSelectPoi={setSelected}
+          onSelectPoi={(poi) => {
+            setSelectedVenueId(undefined);
+            setSelected(poi);
+          }}
           onSelectVenue={setViewingVenue}
           onDismiss={() => setSelected(null)}
           onDismissVenue={dismissVenue}
@@ -173,12 +179,27 @@ export default function MapScreen() {
       ) : null}
 
       {viewingVenue ? (
-        <VenueSheet venue={viewingVenue} onClose={() => setViewingVenue(null)} />
+        <VenueSheet
+          venue={viewingVenue}
+          onClose={() => setViewingVenue(null)}
+          onWriteReview={() => {
+            const venue = viewingVenue;
+            setViewingVenue(null);
+            setSelectedVenueId(venue.id);
+            setSelected({
+              placeId: venue.google_place_id ?? undefined,
+              name: venue.name,
+              latitude: venue.lat,
+              longitude: venue.lng,
+            });
+          }}
+        />
       ) : null}
 
       {selected ? (
         <ReviewSheet
           poi={selected}
+          venueId={selectedVenueId}
           onClose={() => setSelected(null)}
           onSaved={() => {
             setSelected(null);

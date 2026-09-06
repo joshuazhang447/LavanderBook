@@ -5,8 +5,10 @@ import { ActivityIndicator, Pressable, ScrollView, useWindowDimensions, View } f
 import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 
 import { StarRating } from '@/components/star-rating';
+import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
+import { useAuth } from '@/lib/auth';
 import type { Database } from '@/lib/database.types';
 import { supabase } from '@/lib/supabase';
 import type { NearbyVenue } from '@/lib/use-nearby-venues';
@@ -15,6 +17,7 @@ type Answer = Database['public']['Enums']['answer'];
 
 type VenueReview = {
   id: string;
+  author_id: string;
   stars: number;
   body: string | null;
   created_at: string;
@@ -76,16 +79,19 @@ function ReviewRow({ review }: { review: VenueReview }) {
 type VenueSheetProps = {
   venue: NearbyVenue;
   onClose: () => void;
+  /** Hands off to the review form for this venue. */
+  onWriteReview: () => void;
 };
 
 /**
- * Read-only detail for a reviewed venue. Writing happens from the Google place
- * label, which opens the review form instead - this sheet never edits.
+ * Detail for a reviewed venue: everyone's reviews, read-only, with a single
+ * button handing off to the review form.
  *
  * The sheet chrome mirrors ReviewSheet rather than sharing it: that one wraps a
  * keyboard-avoiding form, this one a scroll list, and the shared part is small.
  */
-export function VenueSheet({ venue, onClose }: VenueSheetProps) {
+export function VenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
+  const { session } = useAuth();
   const [ratings, setRatings] = React.useState<Ratings | null>(null);
   const [reviews, setReviews] = React.useState<VenueReview[] | null>(null);
   const { height: windowHeight } = useWindowDimensions();
@@ -107,7 +113,7 @@ export function VenueSheet({ venue, onClose }: VenueSheetProps) {
 
     supabase
       .from('reviews')
-      .select('id, stars, body, created_at, author:profiles(display_name)')
+      .select('id, author_id, stars, body, created_at, author:profiles(display_name)')
       .eq('venue_id', venue.id)
       .order('created_at', { ascending: false })
       .then(({ data }) => {
@@ -122,6 +128,8 @@ export function VenueSheet({ venue, onClose }: VenueSheetProps) {
   const average = Number(ratings?.avg_stars ?? venue.avg_stars ?? 0);
   const count = ratings?.review_count ?? venue.review_count;
   const bathroom = ratings ? bathroomConsensus(ratings) : null;
+  // Signed out, we cannot know - the review sheet will ask them to sign in.
+  const hasOwnReview = !!session && !!reviews?.some((r) => r.author_id === session.user.id);
 
   return (
     <Portal name="venue-sheet">
@@ -175,7 +183,7 @@ export function VenueSheet({ venue, onClose }: VenueSheetProps) {
               <ActivityIndicator />
             </View>
           ) : (
-            <ScrollView className="flex-1" contentContainerClassName="px-5 pb-6">
+            <ScrollView className="flex-1" contentContainerClassName="px-5 pb-4">
               {reviews.length === 0 ? (
                 <Text className="py-8 text-center text-sm text-muted-foreground">
                   No written reviews yet.
@@ -185,6 +193,14 @@ export function VenueSheet({ venue, onClose }: VenueSheetProps) {
               )}
             </ScrollView>
           )}
+
+          {/* Pinned below the list rather than inside it, so it stays reachable
+              however many reviews a venue has. */}
+          <View className="border-t border-border px-5 pb-6 pt-4">
+            <Button onPress={onWriteReview}>
+              <Text>{hasOwnReview ? 'Edit your review' : 'Post review'}</Text>
+            </Button>
+          </View>
         </Animated.View>
       </View>
     </Portal>
