@@ -54,6 +54,8 @@ export default function MapScreen() {
   const [followPref, setFollowPref] = React.useState(true);
   const [region, setRegion] = React.useState<MapRegion | null>(null);
   const [savedCount, setSavedCount] = React.useState(0);
+  // Bumped to re-run the camera move even when the target has not changed.
+  const [focusToken, setFocusToken] = React.useState(0);
   const [refreshing, setRefreshing] = React.useState(false);
   // Boxes the user closed because they overlapped something. Session-only.
   const [dismissed, setDismissed] = React.useState<Set<string>>(new Set());
@@ -163,9 +165,13 @@ export default function MapScreen() {
     <View className="flex-1 bg-background">
       {mode === 'map' ? (
         <VenueMap
-          center={location}
+          // If we arrived here from Locate, open at the venue rather than
+          // opening on the user and animating across: an animate issued the
+          // instant the map mounts can be dropped before it is ready.
+          center={goTo ?? location}
           venues={venues}
           followCenter={goTo ?? (following ? followPosition : null)}
+          focusToken={focusToken}
           onSelectPoi={(poi) => {
             setSelectedVenueId(undefined);
             setSelected(poi);
@@ -198,6 +204,9 @@ export default function MapScreen() {
           following={following}
           onPress={() => {
             setFollowPref(true);
+            // Always re-issue the camera move. Pressing while already following
+            // used to be a no-op, because the target value had not changed.
+            setFocusToken((token) => token + 1);
             // Clear the venue target, or `following` stays false and the button
             // would light up without the map actually tracking anyone.
             if (goTo) router.setParams({ lat: undefined, lng: undefined, goto: undefined });

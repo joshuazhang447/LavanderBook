@@ -28,6 +28,11 @@ type VenueMapProps = {
   onDismissVenue: (venueId: string) => void;
   /** Where the camera should sit while following. Null pauses following. */
   followCenter: Coords | null;
+  /**
+   * Bumped to re-run the camera move even when followCenter is unchanged.
+   * Without it, pressing recentre while already centred does nothing.
+   */
+  focusToken: number;
   /** Fires only for a pan or zoom the user performed, never our own camera moves. */
   onUserPannedTo: (region: MapRegion) => void;
 };
@@ -47,6 +52,7 @@ export function VenueMap({
   onSelectVenue,
   onDismissVenue,
   followCenter,
+  focusToken,
   onUserPannedTo,
 }: VenueMapProps) {
   const mapRef = React.useRef<MapView>(null);
@@ -75,7 +81,7 @@ export function VenueMap({
     // preserves the user's zoom, where animateToRegion forces a span and on
     // Android fits to bounds, so the zoom drifts on every step.
     mapRef.current?.animateCamera({ center: followCenter }, { duration: FOLLOW_ANIMATION_MS });
-  }, [followCenter]);
+  }, [followCenter, focusToken]);
 
   React.useEffect(
     () => () => {

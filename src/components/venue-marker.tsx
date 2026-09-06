@@ -17,7 +17,7 @@ const CLOSE_SIZE = 26;
  * animation is only visible while tracksViewChanges is on - and that is
  * expensive, so it is switched off the moment the animation lands.
  */
-const ENTER_MS = 260;
+const ENTER_MS = 160;
 
 // Android takes `anchor` as a fraction of the marker view; iOS takes
 // `centerOffset` in points from the view's centre. Both are derived from the

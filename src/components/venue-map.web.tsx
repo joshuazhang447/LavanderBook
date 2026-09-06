@@ -36,6 +36,7 @@ type VenueMapProps = {
   onSelectVenue: (venue: NearbyVenue) => void;
   onDismissVenue: (venueId: string) => void;
   followCenter: Coords | null;
+  focusToken: number;
   onUserPannedTo: (region: MapRegion) => void;
 };
 

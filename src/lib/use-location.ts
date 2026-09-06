@@ -57,6 +57,19 @@ export function useCurrentLocation(): LocationState {
           return;
         }
 
+        // A cached fix returns instantly where a fresh one can take seconds on
+        // a cold GPS start - and the map, and everything that waits on it,
+        // cannot draw until we have some position.
+        const cached = await Location.getLastKnownPositionAsync();
+        if (!active) return;
+        if (cached) {
+          setState({
+            status: 'granted',
+            latitude: cached.coords.latitude,
+            longitude: cached.coords.longitude,
+          });
+        }
+
         const position = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.High,
         });
