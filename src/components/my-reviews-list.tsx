@@ -119,7 +119,7 @@ export function MyReviewsList({ userId }: MyReviewsListProps) {
                   accessibilityLabel={`Show ${review.venue.name} on the map`}
                   className="flex-row items-center gap-1 rounded-full border border-border px-3 py-1.5 active:bg-accent">
                   <Icon as={MapPin} className="size-3.5 text-muted-foreground" />
-                  <Text className="text-xs font-medium text-foreground">Go to</Text>
+                  <Text className="text-xs font-medium text-foreground">Locate</Text>
                 </Pressable>
               ) : null}
             </AnimatedPressable>
