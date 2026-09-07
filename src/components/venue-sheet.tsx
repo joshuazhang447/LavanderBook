@@ -4,6 +4,7 @@ import * as React from 'react';
 import { ActivityIndicator, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 
+import { DirectionsButton } from '@/components/directions-button';
 import { StarRating } from '@/components/star-rating';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
@@ -169,6 +170,12 @@ export function VenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
                 </Text>
               ) : null}
             </View>
+            <DirectionsButton
+              name={venue.name}
+              latitude={venue.lat}
+              longitude={venue.lng}
+              placeId={venue.google_place_id}
+            />
             <Pressable
               onPress={onClose}
               accessibilityRole="button"

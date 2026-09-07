@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/ui/button';
@@ -40,46 +40,50 @@ export default function AccountScreen() {
 
   return (
     <View className="flex-1 bg-background" style={{ paddingTop: topInset }}>
-      <View className="w-full max-w-md gap-6 self-center px-6 pt-8">
-        <Text className="text-3xl font-bold text-foreground">My Account</Text>
+      {/* The reviews list grows with every review posted, so this has to scroll.
+          Bottom padding only - the tab bar owns the bottom inset itself. */}
+      <ScrollView className="flex-1" contentContainerClassName="pb-10">
+        <View className="w-full max-w-md gap-6 self-center px-6 pt-8">
+          <Text className="text-3xl font-bold text-foreground">My Account</Text>
 
-        {session ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>{profile?.display_name ?? 'Loading name...'}</CardTitle>
-              <CardDescription>
-                This is the only name shown on your reviews. Your email is never public.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button variant="outline" disabled={busy} onPress={() => run(signOut)}>
-                <Text>Sign out</Text>
-              </Button>
-            </CardContent>
-          </Card>
-        ) : null}
+          {session ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>{profile?.display_name ?? 'Loading name...'}</CardTitle>
+                <CardDescription>
+                  This is the only name shown on your reviews. Your email is never public.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button variant="outline" disabled={busy} onPress={() => run(signOut)}>
+                  <Text>Sign out</Text>
+                </Button>
+              </CardContent>
+            </Card>
+          ) : null}
 
-        {session ? (
-          <MyReviewsList userId={session.user.id} />
-        ) : (
-          <Card>
-            <CardHeader>
-              <CardTitle>Sign in</CardTitle>
-              <CardDescription>
-                An account lets you post reviews. You are given an anonymous name, so nothing
-                you write is tied to your real identity in public.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button disabled={busy} onPress={() => run(signInWithGoogle)}>
-                <Text>{busy ? 'Opening Google...' : 'Continue with Google'}</Text>
-              </Button>
-            </CardContent>
-          </Card>
-        )}
+          {session ? (
+            <MyReviewsList userId={session.user.id} />
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle>Sign in</CardTitle>
+                <CardDescription>
+                  An account lets you post reviews. You are given an anonymous name, so nothing
+                  you write is tied to your real identity in public.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button disabled={busy} onPress={() => run(signInWithGoogle)}>
+                  <Text>{busy ? 'Opening Google...' : 'Continue with Google'}</Text>
+                </Button>
+              </CardContent>
+            </Card>
+          )}
 
-        {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
-      </View>
+          {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
+        </View>
+      </ScrollView>
     </View>
   );
 }

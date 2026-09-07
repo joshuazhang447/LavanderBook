@@ -1,18 +1,31 @@
 import { Image } from 'expo-image';
 import * as SplashScreen from 'expo-splash-screen';
 import { useState } from 'react';
-import { Dimensions, StyleSheet, View } from 'react-native';
+import { Dimensions, StyleSheet, useColorScheme, View } from 'react-native';
 import Animated, { Easing, Keyframe } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
 const INITIAL_SCALE_FACTOR = Dimensions.get('screen').height / 90;
 const DURATION = 600;
 
+/**
+ * Must match the expo-splash-screen config in app.json exactly - background,
+ * image and width. This overlay replaces the native splash the moment it is
+ * hidden, so any difference shows up as a flicker between the two.
+ */
+const SPLASH_BACKGROUND = { light: '#E8DEF8', dark: '#2E1A47' };
+const SPLASH_IMAGE_WIDTH = 180;
+/** splash-icon.png is 512x622; keep the book's proportions. */
+const SPLASH_IMAGE_HEIGHT = Math.round((SPLASH_IMAGE_WIDTH * 622) / 512);
+
 export function AnimatedSplashOverlay() {
+  const scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
   const [animate, setAnimate] = useState(false);
   const [visible, setVisible] = useState(true);
 
   if (!visible) return null;
+
+  const overlayStyle = [styles.splashOverlay, { backgroundColor: SPLASH_BACKGROUND[scheme] }];
 
   const splashKeyframe = new Keyframe({
     0: {
@@ -33,7 +46,9 @@ export function AnimatedSplashOverlay() {
     },
   });
 
-  const image = <Image style={styles.image} source={require('@/assets/images/expo-logo.png')} />;
+  const image = (
+    <Image style={styles.splashImage} source={require('@/assets/images/splash-icon.png')} />
+  );
 
   return animate ? (
     <Animated.View
@@ -43,7 +58,7 @@ export function AnimatedSplashOverlay() {
           scheduleOnRN(setVisible, false);
         }
       })}
-      style={styles.splashOverlay}>
+      style={overlayStyle}>
       {image}
     </Animated.View>
   ) : (
@@ -53,7 +68,7 @@ export function AnimatedSplashOverlay() {
           setAnimate(true);
         });
       }}
-      style={styles.splashOverlay}>
+      style={overlayStyle}>
       {image}
     </View>
   );
@@ -138,9 +153,12 @@ const styles = StyleSheet.create({
     height: 128,
     position: 'absolute',
   },
+  splashImage: {
+    width: SPLASH_IMAGE_WIDTH,
+    height: SPLASH_IMAGE_HEIGHT,
+  },
   splashOverlay: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: '#208AEF',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1000,

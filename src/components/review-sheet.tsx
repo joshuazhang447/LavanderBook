@@ -6,6 +6,7 @@ import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-nati
 
 import { Portal } from '@rn-primitives/portal';
 
+import { DirectionsButton } from '@/components/directions-button';
 import { StarRating, STAR_HINT } from '@/components/star-rating';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
@@ -223,6 +224,12 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
                   {poi.latitude.toFixed(4)}, {poi.longitude.toFixed(4)}
                 </Text>
               </View>
+              <DirectionsButton
+                name={poi.name}
+                latitude={poi.latitude}
+                longitude={poi.longitude}
+                placeId={poi.placeId}
+              />
               <Pressable
                 onPress={onClose}
                 accessibilityRole="button"

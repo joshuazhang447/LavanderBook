@@ -1,4 +1,5 @@
 import { TabList, TabSlot, TabTrigger, Tabs } from 'expo-router/ui';
+import { Platform } from 'react-native';
 
 import { BottomTabBar, TopTabBar, useIsWideViewport } from '@/components/tab-bar';
 
@@ -29,8 +30,25 @@ export default function TabsLayout() {
         down while you are on another tab. A camera move issued during the
         re-attach window is silently dropped - which is why Locate moved the map
         only sometimes. Two screens is cheap to keep alive.
+
+        Native only. react-native-screens' web Screen drops the style prop
+        outright on its not-detaching path, discarding both expo-router's
+        `flex: 1, height: 100%` - so no screen is height-bounded and nothing on
+        one can scroll - and the `display: none` that hides the inactive tab.
+        The web map is a DOM node that survives being hidden anyway, so it has
+        nothing to gain here.
       */}
-      <TabSlot detachInactiveScreens={false} />
+      {/*
+        flexShrink overrides expo-router's own `flexShrink: 0` on this container.
+        With it at 0 the container grows to fit its content instead of being
+        bounded by the window, so a screen taller than the viewport overflows it
+        and a ScrollView inside can never scroll - it is handed the full content
+        height and has nothing left to scroll. Shrinking keeps it window-sized.
+      */}
+      <TabSlot
+        detachInactiveScreens={Platform.OS === 'web'}
+        style={{ flexShrink: 1 }}
+      />
       {isNarrow ? <BottomTabBar /> : null}
     </Tabs>
   );

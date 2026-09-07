@@ -86,6 +86,16 @@ type MapControlsProps = {
  * The tabs layout adds no top padding - the map runs edge to edge under the
  * notch on purpose - so this clears the status bar itself.
  */
+/**
+ * Vertical space the floating controls occupy below the status bar: the 12pt
+ * offset above them, the 44pt control row, and a 12pt gap under it.
+ *
+ * They are absolutely positioned, so they overlap whatever shares the screen.
+ * That is the point in map mode; content that must sit clear of them (the list)
+ * pads its top by this.
+ */
+export const MAP_CONTROLS_CLEARANCE = 68;
+
 export function MapControls({ mode, onChangeMode, onRefresh, refreshing }: MapControlsProps) {
   const insets = useSafeAreaInsets();
 

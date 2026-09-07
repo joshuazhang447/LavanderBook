@@ -1,7 +1,8 @@
 import * as React from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
-import { clearMapFocus, useMapFocus } from '@/lib/map-focus';
+import { VenueList } from '@/components/venue-list';
+import { clearMapFocus, focusMapOn, useMapFocus } from '@/lib/map-focus';
 import type { MapViewMode } from '@/components/map-controls';
 import { MapControls, RecenterButton } from '@/components/map-controls';
 import { ReviewSheet } from '@/components/review-sheet';
@@ -94,6 +95,10 @@ export default function MapScreen() {
 
   const refresh = React.useCallback(() => {
     setSavedCount((count) => count + 1);
+    // Bring back every box closed with its x. Refresh means "show me what is
+    // here again", and dismissing is otherwise one-way - there is no undo.
+    // Returning previous when it is already empty lets React skip the render.
+    setDismissed((previous) => (previous.size === 0 ? previous : new Set()));
     setRefreshing(true);
     if (refreshTimer.current) clearTimeout(refreshTimer.current);
     refreshTimer.current = setTimeout(() => setRefreshing(false), REFRESH_SPIN_MS);
@@ -185,9 +190,19 @@ export default function MapScreen() {
           }}
         />
       ) : (
-        <View className="flex-1 items-center justify-center bg-muted">
-          <Text className="text-lg font-medium text-muted-foreground">List View</Text>
-        </View>
+        <VenueList
+          // Already fetched for the visible region: opening the list is free.
+          venues={venues}
+          // Search results are ordered from the same point the distances are
+          // measured from, so the two agree.
+          origin={fetchRegion}
+          onSelectVenue={setViewingVenue}
+          onLocateVenue={(venue) => {
+            focusMapOn({ latitude: venue.lat, longitude: venue.lng });
+            // A mode of this same screen, so a local switch - not switchTab.
+            setMode('map');
+          }}
+        />
       )}
 
       <MapControls

@@ -1,4 +1,6 @@
 import '@/global.css';
+// Side-effect import: registers className support on reanimated components.
+import '@/lib/nativewind-animated';
 
 import { PortalHost } from '@rn-primitives/portal';
 import { Stack, ThemeProvider } from 'expo-router';

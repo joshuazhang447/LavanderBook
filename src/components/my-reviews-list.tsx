@@ -13,8 +13,6 @@ import { focusMapOn } from '@/lib/map-focus';
 import { supabase } from '@/lib/supabase';
 import type { SelectedPoi } from '@/lib/venues';
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
 type MyReview = {
   stars: number;
   updated_at: string;
@@ -86,25 +84,29 @@ export function MyReviewsList({ userId }: MyReviewsListProps) {
           layout={LinearTransition.duration(220)}
           className="overflow-hidden rounded-lg border border-border">
           {reviews.map((review, index) => (
-            <AnimatedPressable
+            // The row and Locate are siblings, not nested pressables:
+            // react-native-web renders each as a <button>, and a button inside a
+            // button is invalid HTML that breaks hydration.
+            <Animated.View
               key={review.venue.id}
               // Staggered so the list arrives as a sequence, not a slab.
               entering={FadeInDown.duration(220).delay(index * 45)}
               layout={LinearTransition.duration(220)}
-              onPress={() => setOpen(review)}
-              accessibilityRole="button"
-              accessibilityLabel={`${review.venue.name}, ${review.stars} of 5`}
-              className={`flex-row items-center gap-3 bg-card p-4 active:bg-accent ${
+              className={`flex-row items-center bg-card ${
                 index > 0 ? 'border-t border-border' : ''
               }`}>
-              <View className="flex-1 gap-1">
+              <Pressable
+                onPress={() => setOpen(review)}
+                accessibilityRole="button"
+                accessibilityLabel={`${review.venue.name}, ${review.stars} of 5`}
+                className="flex-1 gap-1 p-4 active:bg-accent">
                 {/* numberOfLines truncates with an ellipsis rather than wrapping
                     a long venue name across the row. */}
                 <Text numberOfLines={1} className="font-medium text-foreground">
                   {review.venue.name}
                 </Text>
                 <StarRating value={review.stars} size="sm" />
-              </View>
+              </Pressable>
 
               {review.venue.lat !== null && review.venue.lng !== null ? (
                 <Pressable
@@ -117,12 +119,12 @@ export function MyReviewsList({ userId }: MyReviewsListProps) {
                   }}
                   accessibilityRole="button"
                   accessibilityLabel={`Show ${review.venue.name} on the map`}
-                  className="flex-row items-center gap-1 rounded-full border border-border px-3 py-1.5 active:bg-accent">
+                  className="mr-4 flex-row items-center gap-1 rounded-full border border-border px-3 py-1.5 active:bg-accent">
                   <Icon as={MapPin} className="size-3.5 text-muted-foreground" />
                   <Text className="text-xs font-medium text-foreground">Locate</Text>
                 </Pressable>
               ) : null}
-            </AnimatedPressable>
+            </Animated.View>
           ))}
         </Animated.View>
       )}
