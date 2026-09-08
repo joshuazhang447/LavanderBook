@@ -1,6 +1,6 @@
 import { Trash2, X } from 'lucide-react-native';
 import * as React from 'react';
-import { ActivityIndicator, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 
@@ -27,6 +27,23 @@ const BATHROOM_OPTIONS: { value: Answer; label: string }[] = [
   { value: 'no', label: 'No' },
   { value: 'unsure', label: 'Not sure' },
 ];
+
+/**
+ * Fades the delete button in on native, and does nothing on the web.
+ *
+ * Reanimated implements entering and exiting on the web by taking ownership of
+ * the DOM node and removing it itself. This one sits inside the sheet card,
+ * which has an exiting animation of its own, so on close the parent is torn
+ * down first and React is left removing a node that is already gone - "Failed
+ * to execute 'removeChild' on 'Node'". Only a venue you have already reviewed
+ * renders this button, which is why the crash needed an existing review.
+ *
+ * Native is unaffected, so it keeps the animation.
+ */
+function DeleteButtonEntrance({ children }: React.PropsWithChildren) {
+  if (Platform.OS === 'web') return <View>{children}</View>;
+  return <Animated.View entering={FadeIn.duration(200)}>{children}</Animated.View>;
+}
 
 type ReviewSheetProps = {
   poi: SelectedPoi;
@@ -315,7 +332,7 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
                   </Button>
 
                   {isExisting ? (
-                    <Animated.View entering={FadeIn.duration(200)}>
+                    <DeleteButtonEntrance>
                       <Button
                         variant={confirmingDelete ? 'destructive' : 'outline'}
                         disabled={busy}
@@ -325,7 +342,7 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
                         <Icon as={Trash2} className="size-4" />
                         <Text>{confirmingDelete ? 'Tap again to delete' : 'Delete review'}</Text>
                       </Button>
-                    </Animated.View>
+                    </DeleteButtonEntrance>
                   ) : null}
 
                   {stars === null || bathroom === null ? (
