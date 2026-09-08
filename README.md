@@ -1,3 +1,5 @@
+https://chipper-faloodeh-46cf99.netlify.app/?code=bff66d5a-b998-4e82-bfe2-693df9a37a49
+
 # Welcome to your Expo app 👋
 
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
