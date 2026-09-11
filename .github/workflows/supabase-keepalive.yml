@@ -1,0 +1,54 @@
+name: Supabase keepalive
+
+# Supabase pauses Free-plan projects after ~7 days of low activity, measured by
+# incoming API requests. Hitting a real PostgREST endpoint twice a week keeps the
+# project awake with plenty of margin, and exercises Postgres rather than just the
+# edge — an auth/health probe is not proof the database answered.
+
+on:
+  schedule:
+    # Mondays and Thursdays. Deliberately off the hour: GitHub queues every
+    # top-of-hour cron in the world at once, and a delayed run is a skipped run.
+    - cron: '17 9 * * 1,4'
+  # So you can prove it works without waiting for Monday.
+  workflow_dispatch:
+
+# A second ping while one is already running buys nothing.
+concurrency:
+  group: supabase-keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Query Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_ANON_KEY:-}" ]; then
+            echo "::error::Set the SUPABASE_URL and SUPABASE_ANON_KEY repository secrets (Settings > Secrets and variables > Actions)."
+            exit 1
+          fi
+
+          # venues is granted SELECT to anon and its RLS policy is `using (true)`,
+          # so the anon key is enough. select=id&limit=1 keeps the payload tiny.
+          status=$(curl -sS \
+            --max-time 30 --retry 3 --retry-delay 10 --retry-all-errors \
+            -o response.json -w '%{http_code}' \
+            "${SUPABASE_URL%/}/rest/v1/venues?select=id&limit=1" \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}")
+
+          if [ "$status" != "200" ]; then
+            echo "::error::Supabase ping returned HTTP ${status} — the project may be paused or the secrets may be stale."
+            cat response.json
+            exit 1
+          fi
+
+          echo "HTTP 200 — project is awake."
