@@ -5,6 +5,7 @@ import { VenueList } from '@/components/venue-list';
 import { clearMapFocus, focusMapOn, useMapFocus } from '@/lib/map-focus';
 import type { MapViewMode } from '@/components/map-controls';
 import { MapControls, RecenterButton } from '@/components/map-controls';
+import { MapSearch } from '@/components/map-search';
 import { ReviewSheet } from '@/components/review-sheet';
 import { Text } from '@/components/ui/text';
 import { VenueMap } from '@/components/venue-map';
@@ -17,6 +18,8 @@ import {
 } from '@/lib/use-location';
 import type { MapRegion, NearbyVenue } from '@/lib/use-nearby-venues';
 import { useNearbyVenues } from '@/lib/use-nearby-venues';
+import type { PlaceResult } from '@/lib/place-search';
+import { poiFromPlace } from '@/lib/place-search';
 import type { SelectedPoi } from '@/lib/venues';
 
 /**
@@ -60,6 +63,12 @@ export default function MapScreen() {
   const [refreshing, setRefreshing] = React.useState(false);
   // Boxes the user closed because they overlapped something. Session-only.
   const [dismissed, setDismissed] = React.useState<Set<string>>(new Set());
+  // The place picked out of the search box, pinned on the map until cleared.
+  // Not a NearbyVenue: nobody has reviewed it yet, and it may never be reviewed.
+  const [searchResult, setSearchResult] = React.useState<PlaceResult | null>(null);
+  // Lifted out of MapSearch: on a phone the rest of the controls row stands
+  // down while the field is open, so the row has to know about it too.
+  const [searchOpen, setSearchOpen] = React.useState(false);
 
   // Set by Locate on a review over in the account tab.
   const focus = useMapFocus();
@@ -139,6 +148,22 @@ export default function MapScreen() {
     [allVenues, dismissed]
   );
 
+  // Searching for somewhere that already has reviews draws its rating box, and
+  // a pin for the same point would sit on top of it - two labels, one place.
+  // The rating box wins: it says more, and it is what the search confirmed.
+  const searchPin = React.useMemo(() => {
+    if (!searchResult) return null;
+    // A city, a region, a street. Searching one moves the map there, which is
+    // useful, but it is not somewhere you can walk into and form a view about.
+    // Explicitly false, never falsy: an older function omits the field, and
+    // that must not silently make everything unreviewable.
+    if (searchResult.reviewable === false) return null;
+    const alreadyDrawn = venues.some(
+      (venue) => venue.google_place_id === searchResult.placeId
+    );
+    return alreadyDrawn ? null : searchResult;
+  }, [searchResult, venues]);
+
   // The map reads its centre once, on mount, so wait for the position rather
   // than mounting somewhere arbitrary and jumping afterwards.
   if (location.status === 'loading') {
@@ -182,10 +207,21 @@ export default function MapScreen() {
           onSelectVenue={setViewingVenue}
           onDismiss={() => setSelected(null)}
           onDismissVenue={dismissVenue}
+          searchResult={searchPin}
+          onSelectSearchResult={(place) => {
+            // No venue id: nobody has reviewed this place yet, so the sheet
+            // resolves it by place id and creates the row on first save.
+            setSelectedVenueId(undefined);
+            setSelected(poiFromPlace(place));
+          }}
           onUserPannedTo={(next) => {
             // A pan is the user taking over; following would otherwise drag the
             // map back out from under them on the next fix.
             setFollowPref(false);
+            // And the focus target has to go with it, or fetchRegion keeps
+            // centring on wherever Locate or a search result sent us and no new
+            // venues load however far the user pans.
+            clearMapFocus();
             setRegion(next);
           }}
         />
@@ -210,7 +246,25 @@ export default function MapScreen() {
         onChangeMode={setMode}
         refreshing={refreshing}
         onRefresh={refresh}
-      />
+        searchOpen={searchOpen}>
+        {/* In the controls row, expanding in place. Map only: List has its own
+            search box, over reviewed venues, and two search affordances on one
+            screen would be a coin toss which one you get. */}
+        {mode === 'map' ? (
+          <MapSearch
+            origin={fetchRegion}
+            onPick={(place) => {
+              setSearchResult(place);
+              // The same path Locate uses from the account tab: it moves the
+              // camera and suspends following, both of which are wanted here.
+              focusMapOn({ latitude: place.latitude, longitude: place.longitude });
+            }}
+            onClear={() => setSearchResult(null)}
+            open={searchOpen}
+            onOpenChange={setSearchOpen}
+          />
+        ) : null}
+      </MapControls>
 
       {mode === 'map' ? (
         <RecenterButton
@@ -252,6 +306,9 @@ export default function MapScreen() {
           onClose={() => setSelected(null)}
           onSaved={() => {
             setSelected(null);
+            // The place now has a review, so it draws as a rating box of its
+            // own. Leaving the search pin up would stack two labels on it.
+            setSearchResult(null);
             // Do not wait for a pan or a walk to see your own review.
             setSavedCount((count) => count + 1);
           }}

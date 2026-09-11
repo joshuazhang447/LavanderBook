@@ -2,7 +2,9 @@ import * as React from 'react';
 import { StyleSheet } from 'react-native';
 import MapView from 'react-native-maps';
 
+import { SearchMarker } from '@/components/search-marker';
 import { VenueCloseMarker, VenueMarker } from '@/components/venue-marker';
+import type { PlaceResult } from '@/lib/place-search';
 import type { Coords } from '@/lib/use-location';
 import { distanceMeters, INITIAL_LATITUDE_DELTA } from '@/lib/use-location';
 import type { MapRegion, NearbyVenue } from '@/lib/use-nearby-venues';
@@ -26,6 +28,9 @@ type VenueMapProps = {
   venues: NearbyVenue[];
   onSelectVenue: (venue: NearbyVenue) => void;
   onDismissVenue: (venueId: string) => void;
+  /** The place the user searched for, pinned until they clear the box. */
+  searchResult: PlaceResult | null;
+  onSelectSearchResult: (place: PlaceResult) => void;
   /** Where the camera should sit while following. Null pauses following. */
   followCenter: Coords | null;
   /**
@@ -51,6 +56,8 @@ export function VenueMap({
   venues,
   onSelectVenue,
   onDismissVenue,
+  searchResult,
+  onSelectSearchResult,
   followCenter,
   focusToken,
   onUserPannedTo,
@@ -162,6 +169,17 @@ export function VenueMap({
       {venues.map((venue) => (
         <VenueCloseMarker key={`${venue.id}-close`} venue={venue} onDismiss={onDismissVenue} />
       ))}
+      {/* Last, so it draws over the rating boxes when a searched place happens
+          to sit among reviewed ones. Keyed by place: a new search remounts the
+          pin rather than moving it, which replays the entrance and re-captures
+          the marker bitmap on Android. */}
+      {searchResult ? (
+        <SearchMarker
+          key={searchResult.placeId}
+          place={searchResult}
+          onPress={onSelectSearchResult}
+        />
+      ) : null}
     </MapView>
   );
 }

@@ -9,6 +9,8 @@ import * as React from 'react';
 import { Pressable, View } from 'react-native';
 
 import { Text } from '@/components/ui/text';
+import type { PlaceResult } from '@/lib/place-search';
+import { lookupPlace } from '@/lib/place-search';
 import { supabase } from '@/lib/supabase';
 import { VIEW_RADIUS_METERS } from '@/lib/use-location';
 import type { Coords } from '@/lib/use-location';
@@ -209,6 +211,93 @@ function VenueBox({ venue, onSelect, onDismiss }: VenueBoxProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Search pin
+//
+// The web twin of search-marker.tsx, for the same reason VenueBox is the twin
+// of venue-marker.tsx: that file imports react-native-maps, which has no web
+// build. The numbers are copied deliberately so the platforms look alike.
+// ---------------------------------------------------------------------------
+
+const SEARCH_BOX_WIDTH = 200;
+const SEARCH_BOX_HEIGHT = 40;
+
+const searchBoxStyle: React.CSSProperties = {
+  boxSizing: 'border-box',
+  width: SEARCH_BOX_WIDTH,
+  height: SEARCH_BOX_HEIGHT,
+  display: 'flex',
+  flexDirection: 'column',
+  justifyContent: 'center',
+  padding: '0 12px',
+  borderRadius: 10,
+  // Filled dark where the rating boxes are white: a rating box is somewhere
+  // other people have been, this is the one place you asked about.
+  background: '#171717',
+  boxShadow: '0 2px 5px rgba(0,0,0,0.3)',
+  cursor: 'pointer',
+  userSelect: 'none',
+};
+
+const searchNameStyle: React.CSSProperties = {
+  ...lineStyle,
+  fontSize: 13,
+  lineHeight: '16px',
+  fontWeight: 600,
+  color: '#fafafa',
+};
+
+const searchHintStyle: React.CSSProperties = {
+  ...lineStyle,
+  fontSize: 11,
+  lineHeight: '14px',
+  color: '#a3a3a3',
+};
+
+type SearchPinProps = {
+  place: PlaceResult;
+  onSelect: (place: PlaceResult) => void;
+};
+
+function SearchPin({ place, onSelect }: SearchPinProps) {
+  // Mount-only, exactly like VenueBox. The parent keys this component by place
+  // id, so a new search remounts it and the fade replays from here.
+  const [shown, setShown] = React.useState(false);
+  React.useEffect(() => {
+    const frame = requestAnimationFrame(() => setShown(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  return (
+    <AdvancedMarker
+      position={{ lat: place.latitude, lng: place.longitude }}
+      clickable
+      anchorLeft="-50%"
+      anchorTop={`calc(-100% - ${LIFT}px)`}
+      // Above every rating box - their ceiling is (90 - lat) * 1000 - and
+      // positive, or it drops behind the map's overlay panes and stops
+      // receiving clicks.
+      zIndex={1_000_000}>
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label={`Rate ${place.name}`}
+        onClick={() => onSelect(place)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') onSelect(place);
+        }}
+        style={{
+          ...searchBoxStyle,
+          opacity: shown ? 1 : 0,
+          transition: `opacity ${ENTER_MS}ms ease-out`,
+        }}>
+        <div style={searchNameStyle}>{place.name}</div>
+        <div style={searchHintStyle}>Click to rate</div>
+      </div>
+    </AdvancedMarker>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Camera
 // ---------------------------------------------------------------------------
 
@@ -282,6 +371,9 @@ type VenueMapProps = {
   venues: NearbyVenue[];
   onSelectVenue: (venue: NearbyVenue) => void;
   onDismissVenue: (venueId: string) => void;
+  /** The place the user searched for, pinned until they clear the box. */
+  searchResult: PlaceResult | null;
+  onSelectSearchResult: (place: PlaceResult) => void;
   /** Where the camera should sit while following. Null pauses following. */
   followCenter: Coords | null;
   focusToken: number;
@@ -293,11 +385,13 @@ type VenueMapProps = {
  * Web uses the Maps JavaScript API; native uses react-native-maps, which has no
  * web support. Metro picks this file for web, so the two never collide.
  *
- * One deliberate difference from native, and it is a platform limit rather than
- * a choice: Android's onPoiClick hands back a place's name for free, but the JS
- * API's click event carries only a place id. Turning that into a name means
- * Place Details Pro, which bills. So a label the app already knows about opens
- * the review form as it does on a phone, and an unknown place says so instead.
+ * Tapping a label opens the review form here exactly as it does on a phone.
+ * That took a detour: Android's onPoiClick hands back a place's name with the
+ * tap, while the JS API's click event carries only an id, so the web build has
+ * to fetch the name. Doing that from the browser would have meant a billable
+ * Places key in the bundle, so for a while web could only open places somebody
+ * had already reviewed. The edge function proxy removed that constraint - the
+ * lookup happens server-side now, and both platforms behave the same.
  */
 export function VenueMap({
   center,
@@ -306,6 +400,8 @@ export function VenueMap({
   venues,
   onSelectVenue,
   onDismissVenue,
+  searchResult,
+  onSelectSearchResult,
   followCenter,
   focusToken,
   onUserPannedTo,
@@ -329,24 +425,46 @@ export function VenueMap({
 
   const selectPlace = React.useCallback(
     async (placeId: string, at: google.maps.LatLngLiteral | null) => {
-      // Our own table, so this is free. A place we already hold has a name, and
-      // that is all the review form needs to open exactly as it does on mobile.
+      // Our own table first, and free. A place somebody has already reviewed
+      // has a name here, so there is nothing to look up.
       const { data } = await supabase
         .from('venues')
         .select('name, lat, lng')
         .eq('google_place_id', placeId)
         .maybeSingle();
 
-      if (!data) {
-        showNotice('Only places that already have a review can be opened here. Add the first one from the LavenderBook app on your phone.');
+      if (data) {
+        onSelectPoi({
+          placeId,
+          name: data.name,
+          latitude: data.lat ?? at?.lat ?? 0,
+          longitude: data.lng ?? at?.lng ?? 0,
+        });
+        return;
+      }
+
+      // Nobody has reviewed it, so the name has to be fetched - one Place
+      // Details call through the same proxy search uses, and cached there.
+      // The coordinates from the click are the fallback: they are where the
+      // user actually pointed, which is good enough if Google's differ.
+      const outcome = await lookupPlace(placeId);
+      if (!outcome.ok) {
+        showNotice(outcome.message);
+        return;
+      }
+
+      // Zoomed out, the clickable labels are cities and regions. They are not
+      // places you walk into, so there is nothing to review about them.
+      if (outcome.place.reviewable === false) {
+        showNotice(`${outcome.place.name} is a place on the map, not somewhere you can visit - so there is nothing to review. Zoom in and pick a venue.`);
         return;
       }
 
       onSelectPoi({
         placeId,
-        name: data.name,
-        latitude: data.lat ?? at?.lat ?? 0,
-        longitude: data.lng ?? at?.lng ?? 0,
+        name: outcome.place.name,
+        latitude: outcome.place.latitude ?? at?.lat ?? 0,
+        longitude: outcome.place.longitude ?? at?.lng ?? 0,
       });
     },
     [onSelectPoi, showNotice]
@@ -418,6 +536,16 @@ export function VenueMap({
               onDismiss={onDismissVenue}
             />
           ))}
+
+          {/* Keyed by place: a new search remounts the pin rather than moving
+              it, which is what replays the entrance fade. */}
+          {searchResult ? (
+            <SearchPin
+              key={searchResult.placeId}
+              place={searchResult}
+              onSelect={onSelectSearchResult}
+            />
+          ) : null}
         </Map>
       </APIProvider>
 

@@ -11,6 +11,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { useIsWideViewport } from '@/components/tab-bar';
 import { Icon } from '@/components/ui/icon';
 import { Text, TextClassContext } from '@/components/ui/text';
 import { cn } from '@/lib/utils';
@@ -48,6 +49,9 @@ function Control({ active, label, onPress, children, className }: ControlProps) 
 /** One full turn per cycle, fast enough to read as activity, slow enough to follow. */
 const SPIN_MS = 700;
 
+/** Matches EXPAND_MS in map-search.tsx, so giving way and growing are one move. */
+const YIELD_MS = 220;
+
 function RefreshIcon({ spinning }: { spinning: boolean }) {
   const rotation = useSharedValue(0);
 
@@ -78,6 +82,17 @@ type MapControlsProps = {
   onRefresh: () => void;
   /** Driven only by pressing this button, never by background refetches. */
   refreshing: boolean;
+  /**
+   * Rendered at the end of the row. The search pill lives here rather than in
+   * this file because it expands into the space left on screen, and only the
+   * thing that expands should have to know how much that is.
+   */
+  children?: React.ReactNode;
+  /**
+   * Whether that search pill is expanded. A narrow screen cannot show both it
+   * and these buttons, so on a phone these give way while it is open.
+   */
+  searchOpen?: boolean;
 };
 
 /**
@@ -96,36 +111,91 @@ type MapControlsProps = {
  */
 export const MAP_CONTROLS_CLEARANCE = 68;
 
-export function MapControls({ mode, onChangeMode, onRefresh, refreshing }: MapControlsProps) {
+export function MapControls({
+  mode,
+  onChangeMode,
+  onRefresh,
+  refreshing,
+  children,
+  searchOpen = false,
+}: MapControlsProps) {
   const insets = useSafeAreaInsets();
+  const { isWide } = useIsWideViewport();
+
+  /**
+   * On a phone the row cannot hold these and an open search field: the field
+   * would be squeezed to a couple of words, or run off the right edge. So they
+   * stand down for as long as it is open, which also puts the field at the left
+   * margin where a text field belongs. A wide viewport has room for both.
+   */
+  const yieldToSearch = searchOpen && !isWide;
+
+  // Measured once at natural size, then held, so collapsing to zero has a
+  // number to animate from and the buttons inside never reflow on the way out.
+  const [groupWidth, setGroupWidth] = React.useState(0);
+
+  const collapse = useSharedValue(0);
+  React.useEffect(() => {
+    collapse.set(
+      withTiming(yieldToSearch ? 1 : 0, {
+        // Same curve and duration as the field's expand, so the two read as one
+        // movement rather than two things happening near each other.
+        duration: YIELD_MS,
+        easing: Easing.out(Easing.cubic),
+      })
+    );
+  }, [yieldToSearch, collapse]);
+
+  const groupStyle = useAnimatedStyle(() => ({
+    width: groupWidth === 0 ? undefined : groupWidth * (1 - collapse.get()),
+    opacity: 1 - collapse.get(),
+  }));
 
   return (
     <View
       pointerEvents="box-none"
       style={{ top: insets.top + 12, left: 12 }}
-      className="absolute flex-row gap-2">
-      <View className="flex-row gap-1 rounded-full bg-background p-1 shadow-md">
-        <Control
-          active={mode === 'map'}
-          label="Map view"
-          onPress={() => onChangeMode('map')}>
-          <Icon as={MapIcon} className="size-4" />
-          <Text className="text-sm font-medium">Map</Text>
-        </Control>
-        <Control
-          active={mode === 'list'}
-          label="List view"
-          onPress={() => onChangeMode('list')}>
-          <Icon as={List} className="size-4" />
-          <Text className="text-sm font-medium">List</Text>
-        </Control>
-      </View>
+      // No gap: the spacing lives inside the collapsing group as pr-2, so it
+      // animates away too rather than leaving the search pill off the margin.
+      className="absolute flex-row">
+      {/* py/-my: the clip that makes the collapse work would otherwise cut the
+          pills' own shadow off square, which reads as a grey box behind them.
+          The padding gives the shadow somewhere to land; the matching negative
+          margin keeps the row's geometry exactly as it was. */}
+      <Animated.View style={groupStyle} className="overflow-hidden py-3 -my-3">
+        <View
+          onLayout={(event) => {
+            const measured = event.nativeEvent.layout.width;
+            if (measured > 0 && groupWidth === 0) setGroupWidth(measured);
+          }}
+          style={groupWidth > 0 ? { width: groupWidth } : undefined}
+          className="flex-row gap-2 pr-2">
+          <View className="flex-row gap-1 rounded-full bg-background p-1 shadow-md">
+            <Control
+              active={mode === 'map'}
+              label="Map view"
+              onPress={() => onChangeMode('map')}>
+              <Icon as={MapIcon} className="size-4" />
+              <Text className="text-sm font-medium">Map</Text>
+            </Control>
+            <Control
+              active={mode === 'list'}
+              label="List view"
+              onPress={() => onChangeMode('list')}>
+              <Icon as={List} className="size-4" />
+              <Text className="text-sm font-medium">List</Text>
+            </Control>
+          </View>
 
-      <View className="rounded-full bg-background p-1 shadow-md">
-        <Control label={refreshing ? 'Refreshing' : 'Refresh'} onPress={onRefresh}>
-          <RefreshIcon spinning={refreshing} />
-        </Control>
-      </View>
+          <View className="rounded-full bg-background p-1 shadow-md">
+            <Control label={refreshing ? 'Refreshing' : 'Refresh'} onPress={onRefresh}>
+              <RefreshIcon spinning={refreshing} />
+            </Control>
+          </View>
+        </View>
+      </Animated.View>
+
+      {children}
     </View>
   );
 }

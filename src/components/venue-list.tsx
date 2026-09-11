@@ -176,12 +176,14 @@ export function VenueList({ venues, origin, onSelectVenue, onLocateVenue }: Venu
                 No reviewed places match “{trimmed}”.
               </Text>
               {/*
-                The honest free answer. Searching places nobody has reviewed means
-                the Places API, which bills; tapping a label on the map returns
-                the same name and id for nothing.
+                This list is reviewed venues only, and free because it never
+                leaves Postgres. Finding somewhere nobody has reviewed means a
+                billed Places call, which is what Map view's search box is for -
+                so point at it rather than pretending there is no answer.
               */}
               <Text className="text-center text-sm text-muted-foreground">
-                Not here? Find it on the map and tap it to add the first review.
+                Not here? Search for it in Map view, or tap its label on the map, to
+                add the first review.
               </Text>
             </>
           ) : (
