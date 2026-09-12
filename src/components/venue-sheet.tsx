@@ -156,11 +156,24 @@ export function VenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
             <View className="flex-1 gap-2">
               <Text className="text-xl font-semibold text-foreground">{venue.name}</Text>
               <View className="flex-row items-center gap-2">
-                <StarRating value={average} size="sm" />
-                <Text className="text-sm font-medium text-foreground">{average.toFixed(1)}</Text>
-                <Text className="text-sm text-muted-foreground">
-                  {count === 1 ? '1 review' : `${count} reviews`}
-                </Text>
+                {/* No star row before anyone has rated it. An empty one reads as
+                    zero out of five rather than as "not rated yet", and this
+                    sheet is where someone decides whether to go somewhere. */}
+                {count === 0 ? (
+                  <Text className="text-sm text-muted-foreground">
+                    Listed by LavenderBook · no reviews yet
+                  </Text>
+                ) : (
+                  <>
+                    <StarRating value={average} size="sm" />
+                    <Text className="text-sm font-medium text-foreground">
+                      {average.toFixed(1)}
+                    </Text>
+                    <Text className="text-sm text-muted-foreground">
+                      {count === 1 ? '1 review' : `${count} reviews`}
+                    </Text>
+                  </>
+                )}
               </View>
               {bathroom ? (
                 <Text className="text-sm text-muted-foreground">

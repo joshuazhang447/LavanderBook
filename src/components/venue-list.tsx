@@ -32,6 +32,12 @@ type VenueRowProps = {
 
 function VenueRow({ venue, index, onSelect, onLocate }: VenueRowProps) {
   const average = Number(venue.avg_stars ?? 0);
+  // Listed by us, not yet reviewed by anyone. Drawing an empty star row here
+  // would read as a rating of zero rather than as no rating at all.
+  const unreviewed = venue.review_count === 0;
+  const tags = (Array.isArray(venue.tags) ? venue.tags : [])
+    .map((entry) => (entry as { label?: unknown } | null)?.label)
+    .filter((label): label is string => typeof label === 'string');
 
   return (
     // The row and Locate are siblings, not nested pressables: react-native-web
@@ -44,7 +50,11 @@ function VenueRow({ venue, index, onSelect, onLocate }: VenueRowProps) {
       <Pressable
         onPress={() => onSelect(venue)}
         accessibilityRole="button"
-        accessibilityLabel={`${venue.name}, ${average.toFixed(1)} of 5, ${formatDistance(venue.distance_meters)}`}
+        accessibilityLabel={
+          unreviewed
+            ? `${venue.name}, listed, not yet reviewed, ${formatDistance(venue.distance_meters)}`
+            : `${venue.name}, ${average.toFixed(1)} of 5, ${formatDistance(venue.distance_meters)}`
+        }
         className="flex-1 gap-1 p-4 active:bg-accent">
         <View className="flex-row items-center gap-2">
           {/* Truncates rather than wrapping a long venue name across the row. */}
@@ -56,10 +66,18 @@ function VenueRow({ venue, index, onSelect, onLocate }: VenueRowProps) {
           </Text>
         </View>
         <View className="flex-row items-center gap-2">
-          <StarRating value={average} size="sm" />
-          <Text className="text-xs text-muted-foreground">
-            {venue.review_count === 1 ? '1 review' : `${venue.review_count} reviews`}
-          </Text>
+          {unreviewed ? (
+            <Text className="text-xs text-muted-foreground">
+              {tags.length > 0 ? `${tags.join(' · ')} · ` : ''}Listed by LavenderBook · no reviews yet
+            </Text>
+          ) : (
+            <>
+              <StarRating value={average} size="sm" />
+              <Text className="text-xs text-muted-foreground">
+                {venue.review_count === 1 ? '1 review' : `${venue.review_count} reviews`}
+              </Text>
+            </>
+          )}
         </View>
       </Pressable>
 

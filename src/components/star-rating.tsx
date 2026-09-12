@@ -18,7 +18,8 @@ export const STAR_HINT: Record<number, string> = {
   5: 'Actively welcoming',
 };
 
-const VALUES = [1, 2, 3, 4, 5];
+/** The default scale. Reviews are always out of five; tag questions may differ. */
+const DEFAULT_MAX = 5;
 
 /**
  * Pixel sizes matching the size-N classes below. Needed as numbers because a
@@ -120,18 +121,25 @@ type StarRatingProps = {
   /** Omit to render read-only, as in the list. */
   onChange?: (value: number) => void;
   size?: 'sm' | 'lg';
+  /**
+   * How many stars. Five everywhere in the app itself - a review's friendliness
+   * rating is out of five by definition - but a `rating` tag question carries
+   * its own max in config, so this has to be a parameter rather than a constant.
+   */
+  max?: number;
 };
 
 /**
  * One component for both the editable rating in the sheet and the read-only row
  * in the list, so the two can never drift out of step.
  */
-export function StarRating({ value, onChange, size = 'lg' }: StarRatingProps) {
+export function StarRating({ value, onChange, size = 'lg', max = DEFAULT_MAX }: StarRatingProps) {
   const starClass = size === 'lg' ? 'size-9' : 'size-4';
+  const stars = Array.from({ length: Math.max(1, Math.round(max)) }, (_, index) => index + 1);
 
   return (
     <View className={cn('flex-row', size === 'lg' ? 'gap-1' : 'gap-0.5')}>
-      {VALUES.map((star) =>
+      {stars.map((star) =>
         onChange ? (
           // Picking a rating is always a whole star; only averages are fractional.
           <StarButton key={star} star={star} value={value} className={starClass} onChange={onChange} />

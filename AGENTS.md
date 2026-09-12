@@ -119,6 +119,35 @@ inherits its text color with no color prop — that is how the tab bar colors ic
 label together. Lucide's `Map` export shadows the JS `Map` global; alias it
 (`Map as MapIcon`).
 
+## Admin area
+
+`/admin` is **web only**. `src/app/admin.web.tsx` is the real screen; `src/app/admin.tsx`
+is a `<Redirect href="/" />` that exists solely because expo-router refuses a route that
+has only a platform extension ("does not have a fallback sibling file without a platform
+extension"). The panel lives in `src/components/admin/` and nothing in the native bundle
+imports it.
+
+There is no admin password, secret or token anywhere in the repo. An admin is an ordinary
+Supabase Auth user whose id is in `public.admins`; `public.is_admin()` is what authorises,
+and it is called inside every admin RPC rather than trusted from the client. Adding an
+admin is a manual `insert` with the service role — see the header of
+`supabase/migrations/20260911061500_admin_roles_and_moderation.sql`.
+
+The panel says **Custom fields**; the schema says `questions`, `question_options` and
+`question_tags`. Same thing — the tables were not renamed for a label. A question belongs
+to no tag, one, or many (`question_tags`), and its position is per-tag: `sort_order` lives
+on the join, not on the question, because a shared question sits in a different place in
+each tag that asks it.
+
+Two rules follow from that:
+
+1. **Anything the panel does needs its own `security definer` function that opens with
+   `if not public.is_admin() then raise exception ... using errcode = '42501'`.** Rendering
+   the panel is a client-side decision and can be forced; the function is the boundary.
+2. **Do not grant an admin capability with an RLS policy where a function will do.** A
+   policy grants the whole row — `admin_set_banned` exists so the panel can toggle
+   `banned_at` and nothing else.
+
 ## Known gaps
 
 - `_layout.tsx` uses `useColorScheme()` from `react-native`. With `web.output: "static"`,

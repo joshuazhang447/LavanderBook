@@ -48,11 +48,28 @@ function starGlyphs(average: number): string {
   return '★'.repeat(full) + (rounded - full === 0.5 ? '½' : '');
 }
 
+/**
+ * The tag labels on a venue, or null when it carries none.
+ *
+ * venues_near returns these as jsonb, so the shape is whatever the database
+ * sent - narrowed here rather than trusted.
+ */
+function tagLabels(venue: NearbyVenue): string | null {
+  const tags = Array.isArray(venue.tags) ? venue.tags : [];
+  const labels = tags
+    .map((entry) => (entry as { label?: unknown } | null)?.label)
+    .filter((label): label is string => typeof label === 'string');
+  return labels.length > 0 ? labels.join(' · ') : null;
+}
+
 function summarise(venue: NearbyVenue): string {
   const body = venue.latest_review_body?.trim();
   if (body) {
     return body.length > SNIPPET_CHARS ? `${body.slice(0, SNIPPET_CHARS).trimEnd()}...` : body;
   }
+  // A tagged venue nobody has reviewed is here because WE listed it, so say so
+  // rather than counting to zero.
+  if (venue.review_count === 0) return tagLabels(venue) ?? 'Listed by LavenderBook';
   return venue.review_count === 1 ? '1 review' : `${venue.review_count} reviews`;
 }
 
@@ -118,10 +135,24 @@ function VenueMarkerImpl({ venue, onPress }: VenueMarkerProps) {
         a later pass that can land after Android has taken its snapshot.
       */}
       <Animated.View entering={FadeIn.duration(ENTER_MS)} style={styles.box}>
-        <Text style={styles.stars} numberOfLines={1}>
-          {starGlyphs(Number(venue.avg_stars ?? 0))}{' '}
-          <Text style={styles.average}>{Number(venue.avg_stars ?? 0).toFixed(1)}</Text>
-        </Text>
+        {/*
+          No star row at all when nobody has reviewed it.
+
+          `avg_stars ?? 0` would draw an unreviewed venue as "0.0" with no stars,
+          and a rating of zero out of five is very close to the worst thing this
+          app can say about a place - especially one we listed ourselves because
+          it is a shelter. An absent rating has to look absent.
+        */}
+        {venue.review_count > 0 ? (
+          <Text style={styles.stars} numberOfLines={1}>
+            {starGlyphs(Number(venue.avg_stars ?? 0))}{' '}
+            <Text style={styles.average}>{Number(venue.avg_stars ?? 0).toFixed(1)}</Text>
+          </Text>
+        ) : (
+          <Text style={styles.stars} numberOfLines={1}>
+            <Text style={styles.average}>Listed</Text>
+          </Text>
+        )}
         <Text style={styles.snippet} numberOfLines={1}>
           {summarise(venue)}
         </Text>
@@ -170,6 +201,9 @@ export const VenueMarker = React.memo(
     a.venue.id === b.venue.id &&
     a.venue.avg_stars === b.venue.avg_stars &&
     a.venue.review_count === b.venue.review_count &&
+    // Tagging a venue changes what the box says, so a stale bitmap would keep
+    // showing the old label until something else forced a redraw.
+    tagLabels(a.venue) === tagLabels(b.venue) &&
     a.venue.latest_review_body === b.venue.latest_review_body
 );
 

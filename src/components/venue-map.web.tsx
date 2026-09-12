@@ -72,11 +72,23 @@ function starGlyphs(average: number): string {
   return '★'.repeat(full) + (rounded - full === 0.5 ? '½' : '');
 }
 
+/** Matches venue-marker.tsx: the tag labels on a venue, or null for none. */
+function tagLabels(venue: NearbyVenue): string | null {
+  const tags = Array.isArray(venue.tags) ? venue.tags : [];
+  const labels = tags
+    .map((entry) => (entry as { label?: unknown } | null)?.label)
+    .filter((label): label is string => typeof label === 'string');
+  return labels.length > 0 ? labels.join(' · ') : null;
+}
+
 function summarise(venue: NearbyVenue): string {
   const body = venue.latest_review_body?.trim();
   if (body) {
     return body.length > SNIPPET_CHARS ? `${body.slice(0, SNIPPET_CHARS).trimEnd()}...` : body;
   }
+  // Tagged but unreviewed: it is on the map because we listed it, so say that
+  // rather than counting to zero.
+  if (venue.review_count === 0) return tagLabels(venue) ?? 'Listed by LavenderBook';
   return venue.review_count === 1 ? '1 review' : `${venue.review_count} reviews`;
 }
 
@@ -161,6 +173,10 @@ function VenueBox({ venue, onSelect, onDismiss }: VenueBoxProps) {
   }, []);
 
   const average = Number(venue.avg_stars ?? 0);
+  // `avg_stars ?? 0` would draw a venue nobody has reviewed as "0.0" - a rating
+  // of zero out of five, about a place we listed ourselves. An absent rating has
+  // to look absent. Same branch as venue-marker.tsx.
+  const unreviewed = venue.review_count === 0;
 
   return (
     <AdvancedMarker
@@ -183,14 +199,24 @@ function VenueBox({ venue, onSelect, onDismiss }: VenueBoxProps) {
       <div
         role="button"
         tabIndex={0}
-        aria-label={`${venue.name}, ${average.toFixed(1)} of 5`}
+        aria-label={
+          unreviewed
+            ? `${venue.name}, listed, not yet reviewed`
+            : `${venue.name}, ${average.toFixed(1)} of 5`
+        }
         onClick={() => onSelect(venue)}
         onKeyDown={(event) => {
           if (event.key === 'Enter' || event.key === ' ') onSelect(venue);
         }}
         style={{ ...boxStyle, opacity: shown ? 1 : 0, transition: `opacity ${ENTER_MS}ms ease-out` }}>
         <div style={starsStyle}>
-          {starGlyphs(average)} <span style={{ color: '#0a0a0a' }}>{average.toFixed(1)}</span>
+          {unreviewed ? (
+            <span style={{ color: '#0a0a0a' }}>Listed</span>
+          ) : (
+            <>
+              {starGlyphs(average)} <span style={{ color: '#0a0a0a' }}>{average.toFixed(1)}</span>
+            </>
+          )}
         </div>
         <div style={snippetStyle}>{summarise(venue)}</div>
 
