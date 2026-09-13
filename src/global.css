@@ -33,6 +33,11 @@
     --ring: 0 0% 63%;
     --radius: 0.625rem;
     --star: 38 92% 50%;
+    /* Marks an administrator in the admin users list. Its own token rather
+       than a primary/accent reuse because it means one specific thing, and
+       because primary here is near-black in light and near-white in dark -
+       there is no blue in the palette to borrow. */
+    --admin: 221 83% 53%;
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
@@ -61,6 +66,7 @@
     --input: 0 0% 14.9%;
     --ring: 300 0% 45%;
     --star: 38 95% 58%;
+    --admin: 213 94% 68%;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;

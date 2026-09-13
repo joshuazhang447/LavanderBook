@@ -1,6 +1,7 @@
 import type { PostgrestError } from '@supabase/supabase-js';
 import * as React from 'react';
 
+import type { Answer } from '@/lib/answers';
 import { useAuth } from '@/lib/auth';
 import type { Database, Json } from '@/lib/database.types';
 import { supabase } from '@/lib/supabase';
@@ -28,9 +29,11 @@ export type AdminUser = {
   /** Null means active. */
   bannedAt: string | null;
   reviewCount: number;
+  /** Whether this account has a row in public.admins. */
+  isAdmin: boolean;
 };
 
-export type AdminUserStatus = 'all' | 'active' | 'banned';
+export type AdminUserStatus = 'all' | 'active' | 'banned' | 'admin';
 
 /** The sortable columns, matching the whitelist inside admin_list_profiles. */
 export type AdminUserSort = 'id' | 'display_name' | 'created_at' | 'review_count';
@@ -150,6 +153,7 @@ export async function listAdminUsers(query: AdminUserQuery): Promise<AdminUserPa
     // types this as string. It is null for every account that is not banned.
     bannedAt: (row.banned_at as string | null) ?? null,
     reviewCount: Number(row.review_count),
+    isAdmin: row.is_admin,
   }));
 
   // total_count rides on every row, so an empty page is genuinely an empty set.
@@ -166,6 +170,214 @@ export async function setUserBanned(id: string, banned: boolean): Promise<string
   if (error) throw new Error(describe(error));
 
   return (data as string | null) ?? null;
+}
+
+/**
+ * Grant or revoke admin access. Returns the membership as it stands afterwards.
+ *
+ * This is the one admin action that can create another admin, so treat it as
+ * such: there is no undo beyond calling it again, and the server refuses to
+ * revoke the caller's own access precisely so the panel cannot be emptied of
+ * admins. See supabase/migrations/20260912050000_admins_can_grant_admin.sql.
+ */
+export async function setUserAdmin(id: string, isAdmin: boolean): Promise<boolean> {
+  const { data, error } = await supabase.rpc('admin_set_admin', {
+    p_user: id,
+    p_is_admin: isAdmin,
+  });
+
+  if (error) throw new Error(describe(error));
+
+  return data === true;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Reviews                                                                   */
+/* -------------------------------------------------------------------------- */
+
+/** One row of the Reviews list: the review, plus who and where it is about. */
+export type AdminReview = {
+  id: string;
+  venueId: string;
+  venueName: string;
+  venueAddress: string | null;
+  authorId: string;
+  authorName: string;
+  /** Null means the author is active. */
+  authorBannedAt: string | null;
+  authorIsAdmin: boolean;
+  /** LGBTQ friendliness: 1 hostile, 5 actively welcoming. Not general quality. */
+  stars: number;
+  transBathroom: Answer;
+  body: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** Set when an administrator has edited this review. See admin_update_review. */
+  adminEditedAt: string | null;
+  /** How many tag questions this review answered. */
+  answerCount: number;
+  venueTags: TagRef[];
+};
+
+/** 'with' is a review that has prose; 'without' is a rating on its own. */
+export type ReviewBodyFilter = 'any' | 'with' | 'without';
+export type ReviewAuthorStatus = 'any' | 'active' | 'banned';
+
+/** The sortable columns, matching the whitelist inside admin_list_reviews. */
+export type ReviewSort = 'created_at' | 'updated_at' | 'stars' | 'venue_name' | 'author_name';
+
+export type AdminReviewQuery = {
+  search: string;
+  /** The two link-throughs. Null means unfiltered; they are never both set. */
+  venueId: string | null;
+  authorId: string | null;
+  minStars: number | null;
+  maxStars: number | null;
+  body: ReviewBodyFilter;
+  bathroom: Answer | null;
+  tagId: string | null;
+  authorStatus: ReviewAuthorStatus;
+  /** ISO timestamp, or null for any time. */
+  postedAfter: string | null;
+  sort: ReviewSort;
+  descending: boolean;
+  limit: number;
+  offset: number;
+};
+
+export type AdminReviewPage = {
+  rows: AdminReview[];
+  /** Size of the whole filtered set, not of this page. */
+  total: number;
+};
+
+/**
+ * One stored answer, in the wording the reviewer was actually asked.
+ *
+ * The value arrives in whichever column its kind uses rather than pre-rendered
+ * as a string, because only the client knows a `rating` is stars and a
+ * `currency` needs its code out of config. See the map on public.review_answers.
+ */
+export type ReviewAnswer = {
+  questionId: string;
+  prompt: string;
+  helpText: string | null;
+  kind: QuestionKind;
+  config: Record<string, unknown>;
+  /** The question has since been archived - usually because it was reworded. */
+  archived: boolean;
+  valueText: string | null;
+  valueNumber: number | null;
+  valueBool: boolean | null;
+  valueAnswer: Answer | null;
+  /** Already resolved to labels; a choice deleted since reads '(removed option)'. */
+  optionLabels: string[] | null;
+  answeredAt: string;
+};
+
+/** The editable half of a review. Author and venue are deliberately absent. */
+export type ReviewDraft = {
+  stars: number;
+  bathroom: Answer;
+  body: string;
+};
+
+export async function listAdminReviews(query: AdminReviewQuery): Promise<AdminReviewPage> {
+  const { data, error } = await supabase.rpc('admin_list_reviews', {
+    p_search: query.search.trim() || undefined,
+    p_venue_id: query.venueId ?? undefined,
+    p_author_id: query.authorId ?? undefined,
+    p_min_stars: query.minStars ?? undefined,
+    p_max_stars: query.maxStars ?? undefined,
+    p_body: query.body,
+    p_bathroom: query.bathroom ?? undefined,
+    p_tag_id: query.tagId ?? undefined,
+    p_author_status: query.authorStatus,
+    p_posted_after: query.postedAfter ?? undefined,
+    p_sort: query.sort,
+    p_desc: query.descending,
+    p_limit: query.limit,
+    p_offset: query.offset,
+  });
+
+  if (error) throw new Error(describe(error));
+
+  const rows = (data ?? []).map((row) => ({
+    id: row.id,
+    venueId: row.venue_id,
+    venueName: row.venue_name,
+    // The generator cannot see that a RETURNS TABLE column is nullable, so the
+    // ones that are get narrowed here rather than trusted.
+    venueAddress: (row.venue_address as string | null) ?? null,
+    authorId: row.author_id,
+    authorName: row.author_name,
+    authorBannedAt: (row.author_banned_at as string | null) ?? null,
+    authorIsAdmin: row.author_is_admin,
+    stars: Number(row.stars),
+    transBathroom: row.trans_bathroom,
+    body: (row.body as string | null) ?? null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    adminEditedAt: (row.admin_edited_at as string | null) ?? null,
+    answerCount: Number(row.answer_count),
+    venueTags: toTagRefs(row.venue_tags),
+  }));
+
+  // total_count rides on every row, so an empty page is genuinely an empty set.
+  return { rows, total: data?.length ? Number(data[0].total_count) : 0 };
+}
+
+/** One review's answers. Fetched when a row is expanded, not with the list. */
+export async function listReviewAnswers(reviewId: string): Promise<ReviewAnswer[]> {
+  const { data, error } = await supabase.rpc('admin_review_answers', {
+    p_review_id: reviewId,
+  });
+
+  if (error) throw new Error(describe(error));
+
+  return (data ?? []).map((row) => ({
+    questionId: row.question_id,
+    prompt: row.prompt,
+    helpText: (row.help_text as string | null) ?? null,
+    kind: row.kind,
+    config: toConfig(row.config),
+    archived: row.archived,
+    valueText: (row.value_text as string | null) ?? null,
+    valueNumber: row.value_number === null ? null : Number(row.value_number),
+    valueBool: (row.value_bool as boolean | null) ?? null,
+    valueAnswer: (row.value_answer as Answer | null) ?? null,
+    optionLabels: (row.option_labels as string[] | null) ?? null,
+    answeredAt: row.answered_at,
+  }));
+}
+
+/**
+ * Edit a review somebody else wrote.
+ *
+ * Stamps admin_edited_at so the change is not mistaken for the author editing
+ * their own words - `updated_at` alone cannot tell those apart. Only the three
+ * fields in ReviewDraft move: not the author, not the venue, and not a single
+ * stored answer to a tag question.
+ */
+export async function updateReview(id: string, draft: ReviewDraft): Promise<void> {
+  const { error } = await supabase.rpc('admin_update_review', {
+    p_id: id,
+    p_stars: draft.stars,
+    p_bathroom: draft.bathroom,
+    // Sent as a plain string, empty included: admin_update_review runs it
+    // through nullif(btrim(...), '') and stores null. The column is nullable
+    // precisely so a rating with no words is a first-class thing, and '' is not
+    // a second way of spelling that.
+    p_body: draft.body.trim(),
+  });
+
+  if (error) throw new Error(describe(error));
+}
+
+/** Deletes a review and, by cascade, its answers. Not reversible. */
+export async function deleteReview(id: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_delete_review', { p_id: id });
+  if (error) throw new Error(describe(error));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -292,6 +504,27 @@ export type TagRef = {
   textColor: string | null;
 };
 
+/**
+ * The `tags` jsonb every admin list carries, narrowed to TagRef[].
+ *
+ * The generator types every jsonb column as Json, which includes null, so each
+ * entry is narrowed rather than the array asserted wholesale. Three callers
+ * build the identical shape from the identical `jsonb_agg` in SQL, so it is one
+ * function rather than three copies drifting apart.
+ */
+function toTagRefs(value: unknown): TagRef[] {
+  return (Array.isArray(value) ? value : []).map((entry) => {
+    const tag = (entry ?? {}) as Record<string, unknown>;
+    return {
+      id: tag.id as string,
+      slug: tag.slug as string,
+      label: tag.label as string,
+      color: tag.color as string,
+      textColor: (tag.text_color as string | null) ?? null,
+    };
+  });
+}
+
 /** One field in the bank. */
 export type AdminQuestion = {
   id: string;
@@ -357,16 +590,7 @@ export async function listAdminQuestions(
     options: toOptions(row.options),
     // The generator types every jsonb column as Json, which includes null, so
     // each entry is narrowed rather than asserted wholesale.
-    tags: (Array.isArray(row.tags) ? row.tags : []).map((entry) => {
-      const tag = (entry ?? {}) as Record<string, unknown>;
-      return {
-        id: tag.id as string,
-        slug: tag.slug as string,
-        label: tag.label as string,
-        color: tag.color as string,
-        textColor: (tag.text_color as string | null) ?? null,
-      };
-    }),
+    tags: toTagRefs(row.tags),
   }));
 }
 
@@ -566,16 +790,7 @@ export async function listAdminVenues(query: VenueQuery): Promise<AdminVenuePage
     avgStars: row.avg_stars === null ? null : Number(row.avg_stars),
     noteCount: Number(row.note_count),
     onMap: row.on_map,
-    tags: (Array.isArray(row.tags) ? row.tags : []).map((entry) => {
-      const tag = (entry ?? {}) as Record<string, unknown>;
-      return {
-        id: tag.id as string,
-        slug: tag.slug as string,
-        label: tag.label as string,
-        color: tag.color as string,
-        textColor: (tag.text_color as string | null) ?? null,
-      };
-    }),
+    tags: toTagRefs(row.tags),
   }));
 
   // total_count rides on every row, so an empty page is genuinely an empty set.

@@ -129,9 +129,11 @@ imports it.
 
 There is no admin password, secret or token anywhere in the repo. An admin is an ordinary
 Supabase Auth user whose id is in `public.admins`; `public.is_admin()` is what authorises,
-and it is called inside every admin RPC rather than trusted from the client. Adding an
+and it is called inside every admin RPC rather than trusted from the client. The **first**
 admin is a manual `insert` with the service role — see the header of
-`supabase/migrations/20260911061500_admin_roles_and_moderation.sql`.
+`supabase/migrations/20260911061500_admin_roles_and_moderation.sql`. After that, an admin
+grants and revokes access from Users → row actions, via `admin_set_admin`, which refuses
+to revoke the caller's own row so the panel cannot be left with no admins in it.
 
 The panel says **Custom fields**; the schema says `questions`, `question_options` and
 `question_tags`. Same thing — the tables were not renamed for a label. A question belongs
@@ -147,6 +149,31 @@ Two rules follow from that:
 2. **Do not grant an admin capability with an RLS policy where a function will do.** A
    policy grants the whole row — `admin_set_banned` exists so the panel can toggle
    `banned_at` and nothing else.
+
+`src/components/question-field.tsx` — the control a tag question is answered with — is
+shared by the panel's previews and the app's review form, which is why it lives outside
+`admin/` and must stay there. `review_answers` has no insert grant on purpose: the only
+writer is `submit_review`, and a policy would let a client skip its validation. Nothing in
+the panel edits an answer either — `admin_update_review` writes stars, the bathroom answer
+and the body, and nothing else.
+
+Two link-throughs land on Reviews: a place's review count in Places, and an account's
+posted count in Users. Both go through `showReviews()` in `panel.tsx`, which carries a
+`ReviewFocus` (`{ kind: 'author' | 'venue', id, label }`) **and a nonce**. The nonce is
+what makes clicking the same count twice re-apply, and arriving by a link resets the other
+filters — otherwise a rating filter set ten minutes ago silently empties the list you just
+asked for. Arriving from the nav clears the focus and keeps the filters, which is why
+`select()` deliberately does not bump the nonce. A count of zero is not a link.
+
+An admin editing someone else's review stamps `reviews.admin_edited_at` / `admin_edited_by`.
+`reviews_set_updated_at` fires on an admin edit exactly as it does on the author's own, so
+without that column the two are indistinguishable and the change reads as the author's.
+
+Shared rather than copied per section: `src/components/admin/filters.tsx` (`useDebounced`,
+`FilterSelect`) and, in `src/lib/answers.ts`, `formatStoredAnswer` with the config/money
+helpers — the venue sheet's aggregate cards and the panel's per-review expansion render the
+same fourteen kinds, and a currency that rounds differently in one of them is a bug nobody
+would notice until it mattered.
 
 ## Known gaps
 

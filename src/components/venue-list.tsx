@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MAP_CONTROLS_CLEARANCE } from '@/components/map-controls';
 import { StarRating } from '@/components/star-rating';
+import { TagPill } from '@/components/tag-pill';
 import { Icon } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
@@ -13,6 +14,7 @@ import { useIsWideViewport } from '@/components/tab-bar';
 import { supabase } from '@/lib/supabase';
 import type { Coords } from '@/lib/use-location';
 import type { NearbyVenue } from '@/lib/use-nearby-venues';
+import { venueTags } from '@/lib/venue-tags';
 
 /** Long enough that typing a word is one query, short enough to feel immediate. */
 const SEARCH_DEBOUNCE_MS = 300;
@@ -35,9 +37,11 @@ function VenueRow({ venue, index, onSelect, onLocate }: VenueRowProps) {
   // Listed by us, not yet reviewed by anyone. Drawing an empty star row here
   // would read as a rating of zero rather than as no rating at all.
   const unreviewed = venue.review_count === 0;
-  const tags = (Array.isArray(venue.tags) ? venue.tags : [])
-    .map((entry) => (entry as { label?: unknown } | null)?.label)
-    .filter((label): label is string => typeof label === 'string');
+  // Shown whether or not anyone has reviewed the place: being a shelter is not
+  // a fact that stops mattering once a venue has stars, and the map box and the
+  // sheet both say so. Same pills as the sheet, so a tag looks like one thing
+  // wherever it appears.
+  const tags = venueTags(venue);
 
   return (
     // The row and Locate are siblings, not nested pressables: react-native-web
@@ -57,23 +61,31 @@ function VenueRow({ venue, index, onSelect, onLocate }: VenueRowProps) {
         }
         className="flex-1 gap-1 p-4 active:bg-accent">
         <View className="flex-row items-center gap-2">
-          {/* Truncates rather than wrapping a long venue name across the row. */}
-          <Text numberOfLines={1} className="flex-1 font-medium text-foreground">
-            {venue.name}
-          </Text>
+          {/* The pills sit beside the name and wrap under it when the name is
+              long, rather than squeezing it. Not pressable here: the whole row
+              already is, and react-native-web renders both as <button>. */}
+          <View className="flex-1 flex-row flex-wrap items-center gap-x-2 gap-y-1">
+            {/* Truncates rather than wrapping a long venue name across the row. */}
+            <Text numberOfLines={1} className="shrink font-medium text-foreground">
+              {venue.name}
+            </Text>
+            {tags.map((tag) => (
+              <TagPill key={tag.slug} tag={tag} />
+            ))}
+          </View>
           <Text className="text-xs text-muted-foreground">
             {formatDistance(venue.distance_meters)}
           </Text>
         </View>
         <View className="flex-row items-center gap-2">
           {unreviewed ? (
-            <Text className="text-xs text-muted-foreground">
-              {tags.length > 0 ? `${tags.join(' · ')} · ` : ''}Listed by LavenderBook · no reviews yet
+            <Text numberOfLines={1} className="flex-1 text-xs text-muted-foreground">
+              Listed by LavenderBook · no reviews yet
             </Text>
           ) : (
             <>
               <StarRating value={average} size="sm" />
-              <Text className="text-xs text-muted-foreground">
+              <Text numberOfLines={1} className="flex-1 text-xs text-muted-foreground">
                 {venue.review_count === 1 ? '1 review' : `${venue.review_count} reviews`}
               </Text>
             </>

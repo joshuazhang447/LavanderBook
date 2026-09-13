@@ -12,6 +12,17 @@ import {
 import * as React from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, View } from 'react-native';
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { FilterSelect, useDebounced } from '@/components/admin/filters';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -23,21 +34,16 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Icon } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Text } from '@/components/ui/text';
 import {
   listAdminUsers,
+  setUserAdmin,
   setUserBanned,
   type AdminUser,
   type AdminUserSort,
   type AdminUserStatus,
 } from '@/lib/admin';
+import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/utils';
 
 const PAGE_SIZES = [50, 100, 200];
@@ -46,6 +52,10 @@ const STATUS_OPTIONS = [
   { value: 'all', label: 'Any status' },
   { value: 'active', label: 'Active' },
   { value: 'banned', label: 'Banned' },
+  // Not a third value of the same thing - an admin is also active or banned -
+  // but it is the one list you want to be able to call up on its own, because
+  // "who can get in here" is a question worth being able to answer in one look.
+  { value: 'admin', label: 'Administrators' },
 ] as const;
 
 /**
@@ -79,48 +89,6 @@ const JOINED_FORMAT = new Intl.DateTimeFormat(undefined, {
   month: 'short',
   day: 'numeric',
 });
-
-/** Waits for typing to stop, so a search is one request rather than one per key. */
-function useDebounced<T>(value: T, delay: number): T {
-  const [settled, setSettled] = React.useState(value);
-
-  React.useEffect(() => {
-    const timer = setTimeout(() => setSettled(value), delay);
-    return () => clearTimeout(timer);
-  }, [value, delay]);
-
-  return settled;
-}
-
-function optionFor(options: readonly { value: string; label: string }[], value: string) {
-  const found = options.find((option) => option.value === value);
-  return found ? { value: found.value, label: found.label } : undefined;
-}
-
-type FilterSelectProps = {
-  value: string;
-  options: readonly { value: string; label: string }[];
-  onChange: (value: string) => void;
-  width: string;
-  label: string;
-};
-
-function FilterSelect({ value, options, onChange, width, label }: FilterSelectProps) {
-  return (
-    <Select
-      value={optionFor(options, value)}
-      onValueChange={(option) => option && onChange(option.value)}>
-      <SelectTrigger className={width} aria-label={label}>
-        <SelectValue placeholder={label} />
-      </SelectTrigger>
-      <SelectContent className={width}>
-        {options.map((option) => (
-          <SelectItem key={option.value} value={option.value} label={option.label} />
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
 
 type HeaderCellProps = {
   label: string;
@@ -173,6 +141,9 @@ type UsersSectionProps = {
 };
 
 export function UsersSection({ onShowReviews, visible }: UsersSectionProps) {
+  const { session } = useAuth();
+  const selfId = session?.user.id ?? null;
+
   const [search, setSearch] = React.useState('');
   const [status, setStatus] = React.useState<AdminUserStatus>('all');
   const [posted, setPosted] = React.useState<string>('any');
@@ -187,6 +158,15 @@ export function UsersSection({ onShowReviews, visible }: UsersSectionProps) {
   const [error, setError] = React.useState<string | null>(null);
   const [selected, setSelected] = React.useState<ReadonlySet<string>>(() => new Set());
   const [copied, setCopied] = React.useState<string | null>(null);
+  /**
+   * The account whose admin access is being changed, and which way.
+   *
+   * Every other action here applies the moment you choose it. This one asks
+   * first: banning is reversible by the same person in the same screen, whereas
+   * handing someone admin hands them everything in it, including the ability to
+   * do this.
+   */
+  const [promoting, setPromoting] = React.useState<{ user: AdminUser; next: boolean } | null>(null);
   /** Bumped to force a refetch after an action leaves the page possibly stale. */
   const [reloads, setReloads] = React.useState(0);
 
@@ -305,6 +285,32 @@ export function UsersSection({ onShowReviews, visible }: UsersSectionProps) {
           }) ?? current
       );
       setSelected(new Set());
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : 'That change was refused.');
+      setReloads((count) => count + 1);
+    }
+  }
+
+  /**
+   * Grant or revoke admin access for one account.
+   *
+   * Unlike applyBan there is no optimistic row, because the dialog in front of
+   * this already covers the wait and a promotion that appears to have happened
+   * and then has not is a worse thing to show than a short pause. The row is set
+   * from what the server says the membership is, not from what was asked.
+   */
+  async function applyAdmin(user: AdminUser, next: boolean) {
+    setError(null);
+
+    try {
+      const settled = await setUserAdmin(user.id, next);
+      setRows(
+        (current) =>
+          current?.map((row) => (row.id === user.id ? { ...row, isAdmin: settled } : row)) ?? current
+      );
+      // Filtering by Administrators and then revoking one leaves a row that no
+      // longer matches the filter it arrived under.
+      if (status === 'admin' && !settled) setReloads((count) => count + 1);
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : 'That change was refused.');
       setReloads((count) => count + 1);
@@ -433,7 +439,7 @@ export function UsersSection({ onShowReviews, visible }: UsersSectionProps) {
         />
         <HeaderCell
           label="Status"
-          className="w-[110px]"
+          className="w-[160px]"
           sort={sort}
           descending={descending}
           onSort={toggleSort}
@@ -492,8 +498,16 @@ export function UsersSection({ onShowReviews, visible }: UsersSectionProps) {
                 />
               </Pressable>
 
+              {/* Blue and a little heavier, so admins are findable by running
+                  an eye down the names rather than by reading every Status
+                  cell. The badge stays: colour alone is not a label, and a
+                  display name is the one column somebody might be colourblind
+                  to and still need to act on. */}
               <Text
-                className="min-w-[140px] flex-1 text-sm text-foreground"
+                className={cn(
+                  'min-w-[140px] flex-1 text-sm',
+                  row.isAdmin ? 'font-medium text-admin' : 'text-foreground'
+                )}
                 numberOfLines={1}>
                 {row.displayName}
               </Text>
@@ -502,25 +516,28 @@ export function UsersSection({ onShowReviews, visible }: UsersSectionProps) {
                 {JOINED_FORMAT.format(new Date(row.createdAt))}
               </Text>
 
-              <Pressable
-                onPress={() => onShowReviews(row)}
-                role="link"
-                className={cn(
-                  'w-[70px]',
-                  Platform.select({ web: 'cursor-pointer' })
-                )}>
-                <Text
-                  className={cn(
-                    'text-sm',
-                    row.reviewCount > 0
-                      ? cn('text-primary', Platform.select({ web: 'hover:underline' }))
-                      : 'text-muted-foreground'
-                  )}>
-                  {row.reviewCount}
-                </Text>
-              </Pressable>
+              {/* Not a link at zero. It looked like one before, and landing on
+                  an empty Reviews tab is a worse answer than the count itself
+                  already gave you. */}
+              {row.reviewCount > 0 ? (
+                <Pressable
+                  onPress={() => onShowReviews(row)}
+                  role="link"
+                  aria-label={`Show the ${row.reviewCount} reviews by ${row.displayName}`}
+                  className={cn('w-[70px]', Platform.select({ web: 'cursor-pointer' }))}>
+                  <Text
+                    className={cn(
+                      'text-sm text-primary',
+                      Platform.select({ web: 'hover:underline' })
+                    )}>
+                    {row.reviewCount}
+                  </Text>
+                </Pressable>
+              ) : (
+                <Text className="w-[70px] text-sm text-muted-foreground">0</Text>
+              )}
 
-              <View className="w-[110px] flex-row">
+              <View className="w-[160px] flex-row flex-wrap items-center gap-1">
                 {row.bannedAt ? (
                   // A status column should read as a status, so the date it
                   // happened is on hover rather than crowding the badge.
@@ -536,6 +553,14 @@ export function UsersSection({ onShowReviews, visible }: UsersSectionProps) {
                     <Text>Active</Text>
                   </Badge>
                 )}
+                {/* Alongside rather than instead of: admin is orthogonal to
+                    active/banned, and an admin who has been banned is exactly
+                    the row you would least want to read as only one of the two. */}
+                {row.isAdmin ? (
+                  <Badge>
+                    <Text>Admin</Text>
+                  </Badge>
+                ) : null}
               </View>
 
               <View className="w-10 items-end">
@@ -551,7 +576,7 @@ export function UsersSection({ onShowReviews, visible }: UsersSectionProps) {
                   </DropdownMenuTrigger>
                   {/* A menu rather than a button because this is where the rest
                       of the moderation actions will land. */}
-                  <DropdownMenuContent align="end" className="w-40">
+                  <DropdownMenuContent align="end" className="w-52">
                     {row.bannedAt ? (
                       <DropdownMenuItem onPress={() => applyBan([row.id], false)}>
                         <Text>Unban</Text>
@@ -563,6 +588,21 @@ export function UsersSection({ onShowReviews, visible }: UsersSectionProps) {
                         <Text>Ban</Text>
                       </DropdownMenuItem>
                     )}
+
+                    {/* Your own row offers neither: the server refuses to strip
+                        your access, and granting what you already hold is a menu
+                        item that can only disappoint. */}
+                    {row.id === selfId ? null : row.isAdmin ? (
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onPress={() => setPromoting({ user: row, next: false })}>
+                        <Text>Revoke admin access</Text>
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem onPress={() => setPromoting({ user: row, next: true })}>
+                        <Text>Grant admin access</Text>
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </View>
@@ -570,6 +610,37 @@ export function UsersSection({ onShowReviews, visible }: UsersSectionProps) {
           ))}
         </ScrollView>
       )}
+
+      <AlertDialog open={promoting !== null} onOpenChange={(next) => !next && setPromoting(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {promoting?.next ? 'Grant admin access?' : 'Revoke admin access?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {promoting?.next
+                ? `${promoting.user.displayName} will be able to open this panel and do everything you can do here — including banning accounts, deleting places, and granting this same access to somebody else.`
+                : `${promoting?.user.displayName} will lose the admin panel the next time they ask for anything. Their account, their profile and their reviews are untouched.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>
+              <Text>Cancel</Text>
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className={cn(promoting?.next ? undefined : 'bg-destructive')}
+              onPress={() => {
+                const target = promoting;
+                setPromoting(null);
+                if (target) void applyAdmin(target.user, target.next);
+              }}>
+              <Text className={cn(promoting?.next ? undefined : 'text-white')}>
+                {promoting?.next ? 'Grant access' : 'Revoke'}
+              </Text>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <View className="flex-row items-center justify-end gap-6 border-t border-border px-6 py-3">
         <View className="flex-row items-center gap-2">

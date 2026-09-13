@@ -2,7 +2,7 @@ import { ChevronDown, ChevronUp, Plus, X } from 'lucide-react-native';
 import * as React from 'react';
 import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
 
-import { KIND_LABELS } from '@/components/admin/question-field';
+import { KIND_LABELS } from '@/components/question-field';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {

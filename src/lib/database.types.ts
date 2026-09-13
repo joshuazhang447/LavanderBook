@@ -257,6 +257,8 @@ export type Database = {
       }
       reviews: {
         Row: {
+          admin_edited_at: string | null
+          admin_edited_by: string | null
           author_id: string
           body: string | null
           created_at: string
@@ -267,6 +269,8 @@ export type Database = {
           venue_id: string
         }
         Insert: {
+          admin_edited_at?: string | null
+          admin_edited_by?: string | null
           author_id: string
           body?: string | null
           created_at?: string
@@ -277,6 +281,8 @@ export type Database = {
           venue_id: string
         }
         Update: {
+          admin_edited_at?: string | null
+          admin_edited_by?: string | null
           author_id?: string
           body?: string | null
           created_at?: string
@@ -287,6 +293,13 @@ export type Database = {
           venue_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "reviews_admin_edited_by_fkey"
+            columns: ["admin_edited_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "reviews_author_id_fkey"
             columns: ["author_id"]
@@ -549,6 +562,7 @@ export type Database = {
         Returns: string
       }
       admin_delete_question: { Args: { p_id: string }; Returns: undefined }
+      admin_delete_review: { Args: { p_id: string }; Returns: undefined }
       admin_delete_tag: { Args: { p_id: string }; Returns: undefined }
       admin_delete_venue: { Args: { p_id: string }; Returns: undefined }
       admin_delete_venue_note: { Args: { p_id: string }; Returns: undefined }
@@ -569,6 +583,7 @@ export type Database = {
           created_at: string
           display_name: string
           id: string
+          is_admin: boolean
           review_count: number
           total_count: number
         }[]
@@ -587,6 +602,43 @@ export type Database = {
           required: boolean
           supersedes_id: string
           tags: Json
+        }[]
+      }
+      admin_list_reviews: {
+        Args: {
+          p_author_id?: string
+          p_author_status?: string
+          p_bathroom?: Database["public"]["Enums"]["answer"]
+          p_body?: string
+          p_desc?: boolean
+          p_limit?: number
+          p_max_stars?: number
+          p_min_stars?: number
+          p_offset?: number
+          p_posted_after?: string
+          p_search?: string
+          p_sort?: string
+          p_tag_id?: string
+          p_venue_id?: string
+        }
+        Returns: {
+          admin_edited_at: string
+          answer_count: number
+          author_banned_at: string
+          author_id: string
+          author_is_admin: boolean
+          author_name: string
+          body: string
+          created_at: string
+          id: string
+          stars: number
+          total_count: number
+          trans_bathroom: Database["public"]["Enums"]["answer"]
+          updated_at: string
+          venue_address: string
+          venue_id: string
+          venue_name: string
+          venue_tags: Json
         }[]
       }
       admin_list_tag_questions: {
@@ -666,6 +718,23 @@ export type Database = {
         Args: { p_ids: string[]; p_venue_id: string }
         Returns: undefined
       }
+      admin_review_answers: {
+        Args: { p_review_id: string }
+        Returns: {
+          answered_at: string
+          archived: boolean
+          config: Json
+          help_text: string
+          kind: Database["public"]["Enums"]["question_kind"]
+          option_labels: string[]
+          prompt: string
+          question_id: string
+          value_answer: Database["public"]["Enums"]["answer"]
+          value_bool: boolean
+          value_number: number
+          value_text: string
+        }[]
+      }
       admin_revise_question: {
         Args: {
           p_config?: Json
@@ -677,6 +746,10 @@ export type Database = {
           p_required?: boolean
         }
         Returns: string
+      }
+      admin_set_admin: {
+        Args: { p_is_admin: boolean; p_user: string }
+        Returns: boolean
       }
       admin_set_banned: {
         Args: { p_banned: boolean; p_user: string }
@@ -700,6 +773,15 @@ export type Database = {
       }
       admin_unassign_question: {
         Args: { p_question_id: string; p_tag_id: string }
+        Returns: undefined
+      }
+      admin_update_review: {
+        Args: {
+          p_bathroom: Database["public"]["Enums"]["answer"]
+          p_body: string
+          p_id: string
+          p_stars: number
+        }
         Returns: undefined
       }
       admin_update_tag: {
@@ -734,6 +816,7 @@ export type Database = {
       generate_display_name: { Args: never; Returns: string }
       is_admin: { Args: never; Returns: boolean }
       is_banned: { Args: { p_user: string }; Returns: boolean }
+      my_new_question_count: { Args: { p_venue_id: string }; Returns: number }
       question_config_valid: {
         Args: {
           p_config: Json
@@ -748,6 +831,36 @@ export type Database = {
       set_question_options: {
         Args: { p_options: string[]; p_question_id: string }
         Returns: undefined
+      }
+      submit_review: {
+        Args: {
+          p_answers?: Json
+          p_body?: string
+          p_stars: number
+          p_trans_bathroom: Database["public"]["Enums"]["answer"]
+          p_venue_id: string
+        }
+        Returns: string
+      }
+      venue_answer_summary: {
+        Args: { p_venue_id: string }
+        Returns: {
+          answered_reviews: number
+          archived: boolean
+          config: Json
+          help_text: string
+          kind: Database["public"]["Enums"]["question_kind"]
+          options: Json
+          prompt: string
+          question_id: string
+          respondents: number
+          summary: Json
+          tag_color: string
+          tag_id: string
+          tag_label: string
+          tag_slug: string
+          tag_text_color: string
+        }[]
       }
       venue_is_on_map: { Args: { p_venue_id: string }; Returns: boolean }
       venue_questionnaire: {
