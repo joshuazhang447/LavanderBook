@@ -46,7 +46,17 @@
           "locationWhenInUsePermission": "LavenderBook uses your location to show venues near you."
         }
       ],
-      "react-native-maps"
+      "react-native-maps",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "buildArchs": ["arm64-v8a"],
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
