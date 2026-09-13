@@ -420,16 +420,39 @@ of raw values would.
 
 ## 6. The app side
 
-The venue sheet renders, for a tagged venue:
+**Built.** A tagged venue's sheet shows its tag pills beside the name. Tapping one slides to
+the **tag page**, which has two sections, in this order, with a rule between them:
 
-1. **Notes** — the admin bullets, in `sort_order`. Presented as LavenderBook's own
-   statements, visually distinct from anything crowd-sourced.
-2. **Reported** — aggregated questionnaire answers, presented as counts ("9 of 11 said
-   there is no curfew") so the reader can tell a consensus from one person's opinion.
-3. The existing stars, bathroom summary and review list, unchanged.
+1. **What we checked** — *"Written by LavenderBook, not by visitors."* The admin bullets, in
+   `sort_order`.
+2. **What visitors reported** — *"Answers from N of M reviews. Visitors' own accounts, not
+   checked by LavenderBook."* One card per answered question, grouped under the tag that
+   currently asks it, each kind summarised its own way (`src/components/answer-summary.tsx`):
+   yes/no as the majority word with a split bar and "7 of 9 said yes"; choices as counted
+   rows; scales as an average with a small distribution; stars as stars; amounts as a
+   median with the range; times and dates as the most common value; free text as the latest
+   few, quoted, with the handle they were posted under.
 
 Keeping 1 and 2 visually distinct is a correctness requirement, not decoration — they carry
-different authority and a reader must never have to guess which they are looking at.
+different authority and a reader must never have to guess which they are looking at. Hence
+two headings that each say who is speaking.
+
+**Every tally is out of the people who answered that question, never out of the review
+count.** Nothing records what a review was offered when it was written, so "this review
+answered 3 of 7" is a number nobody can honestly compute; a review from before a question
+existed is not a "no" and not a gap, it is simply absent from that question's denominator.
+The coverage line at the top of section 2 is what tells the reader how much of the venue
+those tallies speak for.
+
+A question that has been superseded is still shown, under the wording people were actually
+asked, marked *earlier wording*. A question nothing here asks any more (the tag was
+removed, or the question unassigned) keeps its answers under *No longer asked here*.
+
+The review form, for its part, asks the venue's questions between the bathroom question
+and the free text, under *"About this kind of place — because this place is listed as
+[Shelter], we ask a few extra questions. Answer what you know and skip the rest."* Required
+ones carry a `*` and block posting; free-typed kinds get their format checked inline before
+anything is sent.
 
 ## 7. RPCs
 
@@ -468,12 +491,23 @@ what refuses. Supabase's linter flags these; that is expected, not an oversight.
 | `admin_set_review_hidden(id, bool)` | Moderation, mirroring `admin_set_banned` |
 | `admin_question_distribution(question_id)` | Answer counts for the Tags section |
 
-Public read paths (`security invoker`, granted to `anon` + `authenticated`):
+Public read paths, granted to `anon` + `authenticated`:
 
-- `venue_questionnaire(venue_id)` — active questions for the venue's tags, grouped by tag.
-- `venue_answer_summary(venue_id)` — aggregated answers for the venue sheet.
+- `venue_questionnaire(venue_id)` — `security invoker`. Active questions for the venue's
+  tags, grouped by tag.
+- `venue_answer_summary(venue_id)` — **`security definer`**, narrowly: the `questions`
+  policy hides archived rows from non-admins, and a superseded question is archived, yet
+  its answers must be shown under the wording they were given. The function reads that
+  wording and exposes only questions with at least one answer at the venue asked about —
+  nothing a reader of the public `review_answers` rows could not already infer.
 - `venue_notes` — plain `select` policy `using (true)`, **no insert/update/delete policy or
   grant**, exactly as `public.admins` is handled. The RPCs above are the only writers.
+
+And one for signed-in authors, `security invoker`, granted to `authenticated`:
+
+- `my_new_question_count(venue_id)` — how many of the venue's questions were added after
+  the caller last saved their review here and are unanswered. Drives the "Answer N new
+  questions" button on the sheet; see §11, decision 4.
 
 ## 8. Review submission has to become an RPC
 
@@ -481,17 +515,34 @@ A review and its answers must land together or not at all, and today the client 
 into `reviews` directly under RLS. Two separate client writes can leave a review with half
 its answers.
 
-So: `submit_review(p_venue_id, p_stars, p_trans_bathroom, p_body, p_answers jsonb)`,
-**`security invoker`** so the existing policies — including the ban check added in
-`20260911061500` — still apply exactly as they do now.
+So: `submit_review(p_venue_id, p_stars, p_trans_bathroom, p_body, p_answers jsonb)`.
+**Built**, in `20260912040000`, and **`security definer`** — not invoker, as an earlier
+draft of this section said. Invoker could not have worked: `authenticated` has no insert
+grant on `review_answers`, and must not get one, because a direct PostgREST insert would
+skip every check below. The table stays RPC-only; the function restates the two things the
+`reviews` policies check (a caller exists, and is not banned) and does everything in one
+transaction, so a failed edit never half-applies.
 
 It also resolves the in-flight problem. The client submits the question ids it actually
 rendered. The RPC accepts any non-archived question belonging to the venue's current tags
 and ignores the rest, rather than rejecting a whole review because an admin added a
-question thirty seconds ago. A question archived mid-session simply drops.
+question thirty seconds ago. A question archived mid-session simply drops. A *required*
+question added mid-session raises `23514` naming it, and the form fetches again so it
+appears, marked.
 
-Validation lives here: kind↔column agreement, option ids belonging to the question,
-`required` satisfied, `config` bounds respected.
+Validation lives here: kind↔column agreement (the question's own kind decides the column;
+the client's opinion is never consulted), option ids belonging to the question, `required`
+satisfied against what is asked *now*, `config` bounds respected, times and dates in the
+formats the table comment fixes. The client mirrors the format rules for the free-typed
+kinds so a mistake is pointed out under the field rather than reported as a save failure —
+manners, not security.
+
+**What a save rewrites** is deliberately narrow: the answers to the venue's current
+questionnaire, plus whatever those questions superseded. Absence from the payload means
+"cleared" for those and nothing else — an answer to a question on a tag the venue has since
+lost is not the author's to lose by editing their star rating. The supersedes lineage is
+included so that answering the successor of a reworded question retires the author's
+answer to the old wording; one person, one count.
 
 ## 9. What this touches in existing code
 
@@ -541,17 +592,27 @@ Notes are unaffected — one flat list per venue regardless of how many tags it 
    both, consistently.
 3. **Are notes public when tags are not?** They are the useful content, so probably yes even
    if tags are hidden — but that needs confirming rather than assuming.
-4. **A `required` question added later** makes every existing review incomplete. Does the
-   panel surface that, and do we re-prompt the author?
+4. ~~**A `required` question added later** makes every existing review incomplete. Does the
+   panel surface that, and do we re-prompt the author?~~ **Settled**, and the premise
+   rejected: an old review is never "incomplete", because nothing records what it was
+   offered (§6). `required` binds only at write time, so an author editing an old review
+   is asked the new questions and nobody who never comes back is. The re-prompt is precise:
+   a question is *new to you* when `greatest(question_tags.assigned_at,
+   venue_tags.added_at) > reviews.updated_at`, and the sheet's button becomes "Answer N new
+   questions". Saving clears it whether or not they answer — skipping an optional question
+   is not something to nag about.
 5. **Who may tag and write notes** — every admin, or a narrower role? `public.admins` is
    currently flat, and a note is LavenderBook speaking in its own voice.
 6. **Note revision history.** `updated_by` alone, or a full audit trail? Safety-critical
    statements may warrant knowing what a bullet said last month.
-7. **Free-text answers are user-generated content** and reach every client the moment they
-   are written, exactly as `body` does today. Confirm that is acceptable per tag, or mark
-   some questions admin-only.
+7. ~~**Free-text answers are user-generated content** and reach every client the moment
+   they are written, exactly as `body` does today. Confirm that is acceptable per tag, or
+   mark some questions admin-only.~~ **Accepted** as-is: they are shown on the tag page as
+   the latest few, quoted, with the handle — the same terms as `body`. Admin-only questions
+   can be added later without touching the schema.
 
-Items 1, 3 and 7 need answering before work starts; the rest can be settled as we go.
+Items 1, 3 and 7 needed answering before work started; 1 and 7 are settled above, 3 in
+practice (notes are on the public sheet). The rest can be settled as we go.
 
 ## 12. Suggested order
 
@@ -563,7 +624,9 @@ Items 1, 3 and 7 need answering before work starts; the rest can be settled as w
    still to come; see §6 for why that needs its own pass rather than a line at the end.
 3. `questions` + `question_options` + the question editor, including `admin_revise_question`
    and its supersede rule.
-4. `review_answers` + `submit_review` + the review sheet rendering questionnaires.
+4. ~~`review_answers` + `submit_review` + the review sheet rendering questionnaires.~~
+   **Done** — plus `venue_answer_summary` and the tag page (§6), which had been step 6's
+   public half.
 5. The admin Reviews queue: table, drawer, filters, hide.
 6. Per-question distributions in the Tags section.
 

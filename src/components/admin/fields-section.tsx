@@ -3,7 +3,7 @@ import * as React from 'react';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
 
 import { FieldDialog } from '@/components/admin/field-dialog';
-import { KIND_LABELS, QuestionFieldPreview } from '@/components/admin/question-field';
+import { KIND_LABELS, QuestionFieldPreview } from '@/components/question-field';
 import { TagChip } from '@/components/admin/tag-chip';
 import {
   AlertDialog,

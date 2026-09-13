@@ -9,8 +9,9 @@ import {
   Search,
 } from 'lucide-react-native';
 import * as React from 'react';
-import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, View } from 'react-native';
 
+import { useDebounced } from '@/components/admin/filters';
 import { PlaceDialog } from '@/components/admin/place-dialog';
 import { TagChip } from '@/components/admin/tag-chip';
 import { VenueNotes } from '@/components/admin/venue-notes';
@@ -84,19 +85,14 @@ const VISIBILITY_OPTIONS = [
   { value: 'off', label: 'Not on the map' },
 ] as const;
 
-/** Waits for typing to stop, so a search is one request rather than one per key. */
-function useDebounced<T>(value: T, delay: number): T {
-  const [settled, setSettled] = React.useState(value);
-  React.useEffect(() => {
-    const timer = setTimeout(() => setSettled(value), delay);
-    return () => clearTimeout(timer);
-  }, [value, delay]);
-  return settled;
+/** The review count alone, because it is the one part that is a link. */
+function reviewLabel(venue: AdminVenue): string {
+  return venue.reviewCount === 1 ? '1 review' : `${venue.reviewCount} reviews`;
 }
 
+/** Everything after the review count, already joined. */
 function summarise(venue: AdminVenue): string {
   const parts = [
-    venue.reviewCount === 1 ? '1 review' : `${venue.reviewCount} reviews`,
     venue.avgStars === null ? null : `${venue.avgStars.toFixed(1)} stars`,
     venue.noteCount === 1 ? '1 note' : `${venue.noteCount} notes`,
   ];
@@ -194,9 +190,10 @@ type VenueRowProps = {
   onEditTags: () => void;
   onDelete: () => void;
   onChanged: () => void;
+  onShowReviews: () => void;
 };
 
-function VenueRow({ venue, onEditTags, onDelete, onChanged }: VenueRowProps) {
+function VenueRow({ venue, onEditTags, onDelete, onChanged, onShowReviews }: VenueRowProps) {
   const [expanded, setExpanded] = React.useState(false);
   const noCoords = venue.lat === null || venue.lng === null;
 
@@ -227,7 +224,28 @@ function VenueRow({ venue, onEditTags, onDelete, onChanged }: VenueRowProps) {
             <Text className="text-xs text-muted-foreground">{venue.address}</Text>
           ) : null}
           <View className="flex-row flex-wrap items-center gap-2">
-            <Text className="text-xs text-muted-foreground">{summarise(venue)}</Text>
+            {/* A sibling of the row's buttons, never nested inside one:
+                react-native-web renders each Pressable as a <button>, and a
+                button inside a button breaks hydration. Not a link at zero -
+                there would be nothing on the other side of it. */}
+            {venue.reviewCount > 0 ? (
+              <Pressable
+                onPress={onShowReviews}
+                role="link"
+                aria-label={`Show the ${reviewLabel(venue)} of ${venue.name}`}
+                className={Platform.select({ web: 'cursor-pointer' })}>
+                <Text
+                  className={cn(
+                    'text-xs text-primary',
+                    Platform.select({ web: 'hover:underline' })
+                  )}>
+                  {reviewLabel(venue)}
+                </Text>
+              </Pressable>
+            ) : (
+              <Text className="text-xs text-muted-foreground">{reviewLabel(venue)}</Text>
+            )}
+            <Text className="text-xs text-muted-foreground">· {summarise(venue)}</Text>
             {!venue.onMap ? (
               <View className="flex-row items-center gap-1">
                 <Icon as={EyeOff} className="size-3 text-destructive" />
@@ -290,9 +308,11 @@ type PlacesSectionProps = {
    * else would have told us about it.
    */
   visible: boolean;
+  /** Clicking a place's review count opens Reviews filtered to that place. */
+  onShowReviews: (venue: AdminVenue) => void;
 };
 
-export function PlacesSection({ visible }: PlacesSectionProps) {
+export function PlacesSection({ visible, onShowReviews }: PlacesSectionProps) {
   const [search, setSearch] = React.useState('');
   const settledSearch = useDebounced(search, 300);
   const [tagFilter, setTagFilter] = React.useState<string>('any');
@@ -517,6 +537,7 @@ export function PlacesSection({ visible }: PlacesSectionProps) {
               onEditTags={() => setEditingTags(venue)}
               onDelete={() => setConfirming(venue)}
               onChanged={refetch}
+              onShowReviews={() => onShowReviews(venue)}
             />
           ))}
         </ScrollView>

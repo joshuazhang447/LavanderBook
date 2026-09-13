@@ -81,11 +81,13 @@ function PartialStar({
 function StarButton({
   star,
   value,
+  max,
   className,
   onChange,
 }: {
   star: number;
   value: number | null;
+  max: number;
   className: string;
   onChange: (value: number) => void;
 }) {
@@ -107,7 +109,9 @@ function StarButton({
       }}
       accessibilityRole="radio"
       accessibilityState={{ selected: value === star }}
-      accessibilityLabel={`${star} of 5, ${STAR_HINT[star]}`}
+      // The hints describe friendliness out of five. A rating question with
+      // its own max is a different scale, and "6 of 8, undefined" helps nobody.
+      accessibilityLabel={max === 5 ? `${star} of 5, ${STAR_HINT[star]}` : `${star} of ${max}`}
       className="rounded-md p-1 active:bg-accent">
       <Animated.View style={style}>
         <StarIcon earned={value !== null && star <= value} className={className} />
@@ -142,7 +146,14 @@ export function StarRating({ value, onChange, size = 'lg', max = DEFAULT_MAX }: 
       {stars.map((star) =>
         onChange ? (
           // Picking a rating is always a whole star; only averages are fractional.
-          <StarButton key={star} star={star} value={value} className={starClass} onChange={onChange} />
+          <StarButton
+            key={star}
+            star={star}
+            value={value}
+            max={stars.length}
+            className={starClass}
+            onChange={onChange}
+          />
         ) : (
           <View key={star}>
             <PartialStar

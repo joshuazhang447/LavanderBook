@@ -7,7 +7,7 @@ import {
   kindNeedsOptions,
   QuestionFieldPreview,
   type QuestionKind,
-} from '@/components/admin/question-field';
+} from '@/components/question-field';
 import { TagChip } from '@/components/admin/tag-chip';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';

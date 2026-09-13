@@ -7,13 +7,25 @@ import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-nati
 import { Portal } from '@rn-primitives/portal';
 
 import { DirectionsButton } from '@/components/directions-button';
+import { QuestionField, type AnswerValue } from '@/components/question-field';
 import { StarRating, STAR_HINT } from '@/components/star-rating';
+import { TagPill } from '@/components/tag-pill';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/lib/auth';
 import type { Database } from '@/lib/database.types';
+import {
+  answerProblem,
+  fetchMyAnswers,
+  fetchQuestionnaire,
+  isAnswered,
+  submitReview,
+  toRpcAnswer,
+  type AnswerMap,
+  type Questionnaire,
+} from '@/lib/questionnaire';
 import { supabase } from '@/lib/supabase';
 import type { SelectedPoi } from '@/lib/venues';
 
@@ -45,6 +57,99 @@ function DeleteButtonEntrance({ children }: React.PropsWithChildren) {
   return <Animated.View entering={FadeIn.duration(200)}>{children}</Animated.View>;
 }
 
+/** PostgREST errors carry the SQLSTATE; the sheet reacts to one of them. */
+function hasCode(error: unknown, code: string): boolean {
+  return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === code;
+}
+
+type TagQuestionsProps = {
+  questionnaire: Questionnaire;
+  answers: AnswerMap;
+  problems: ReadonlyMap<string, string>;
+  disabled: boolean;
+  onChange: (questionId: string, value: AnswerValue) => void;
+};
+
+/**
+ * The venue's tag questions, between the bathroom question and the free text.
+ *
+ * One intro naming the tags, then the questions grouped by tag. The group gets
+ * its own pill only when there is more than one - with a single tag the intro
+ * has already said whose questions these are. Labels use the sheet's own
+ * typography, not the admin preview's smaller one: here they sit beside the
+ * bathroom question and must read as its equal.
+ */
+function TagQuestions({ questionnaire, answers, problems, disabled, onChange }: TagQuestionsProps) {
+  // A tag can have nothing to ask once shared questions are deduplicated under
+  // an earlier one; it still belongs in the sentence, just not as a section.
+  const asking = questionnaire.filter((tag) => tag.questions.length > 0);
+  if (asking.length === 0) return null;
+
+  return (
+    <View className="gap-5">
+      {/* A callout, not a question. Set in the muted box the panel uses for
+          previews, with a small-caps label rather than a prompt-weight one, so
+          it reads as the sheet explaining itself and not as the first thing
+          to answer. */}
+      <View className="gap-1.5 rounded-md border border-border bg-muted/30 p-3">
+        <Text className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          About this kind of place
+        </Text>
+        {/* No horizontal gap: the words carry their own spaces, so the comma
+            after a pill sits against it instead of floating a gap away. */}
+        <View className="flex-row flex-wrap items-center gap-y-1">
+          <Text className="text-sm text-muted-foreground">{'Because this place is listed as '}</Text>
+          {questionnaire.map((tag, index) => (
+            <React.Fragment key={tag.id}>
+              {index > 0 ? (
+                <Text className="text-sm text-muted-foreground">
+                  {index === questionnaire.length - 1 ? ' and ' : ', '}
+                </Text>
+              ) : null}
+              <TagPill tag={tag} />
+            </React.Fragment>
+          ))}
+          <Text className="text-sm text-muted-foreground">
+            {', we ask a few extra questions. Answer what you know and skip the rest.'}
+          </Text>
+        </View>
+      </View>
+
+      {asking.map((tag) => (
+        <View key={tag.id} className="gap-5">
+          {asking.length > 1 ? (
+            <View className="flex-row">
+              <TagPill tag={tag} />
+            </View>
+          ) : null}
+          {tag.questions.map((question) => (
+            <View key={question.id} className="gap-2">
+              <Text className="font-medium text-foreground">
+                {question.prompt}
+                {question.required ? <Text className="text-destructive"> *</Text> : null}
+              </Text>
+              {question.helpText ? (
+                <Text className="text-xs text-muted-foreground">{question.helpText}</Text>
+              ) : null}
+              <QuestionField
+                kind={question.kind}
+                config={question.config}
+                options={question.options}
+                value={answers[question.id] ?? null}
+                onChange={(value) => onChange(question.id, value)}
+                disabled={disabled}
+              />
+              {problems.get(question.id) ? (
+                <Text className="text-xs text-destructive">{problems.get(question.id)}</Text>
+              ) : null}
+            </View>
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+}
+
 type ReviewSheetProps = {
   poi: SelectedPoi;
   /** Known when opened from the reviews list; looked up by place id from the map. */
@@ -65,6 +170,8 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
   const [venueId, setVenueId] = React.useState<string | null>(knownVenueId ?? null);
   const [isExisting, setIsExisting] = React.useState(false);
   const [confirmingDelete, setConfirmingDelete] = React.useState(false);
+  const [questionnaire, setQuestionnaire] = React.useState<Questionnaire>([]);
+  const [answers, setAnswers] = React.useState<AnswerMap>({});
   const scrollRef = React.useRef<ScrollView>(null);
   const { height: windowHeight } = useWindowDimensions();
   // The card needs a definite height for the ScrollView inside it to flex into;
@@ -100,19 +207,35 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
       if (resolvedVenueId) {
         setVenueId(resolvedVenueId);
 
-        const { data: review } = await supabase
-          .from('reviews')
-          .select('stars, trans_bathroom, body')
-          .eq('venue_id', resolvedVenueId)
-          .eq('author_id', userId)
-          .maybeSingle();
-
+        // The review and the venue's questions arrive together, behind the one
+        // spinner: prefilled answers have to be there at first paint, and a
+        // section appearing under a thumb already heading for Post is worse
+        // than a slightly longer wait.
+        const [{ data: review }, tags] = await Promise.all([
+          supabase
+            .from('reviews')
+            .select('id, stars, trans_bathroom, body')
+            .eq('venue_id', resolvedVenueId)
+            .eq('author_id', userId)
+            .maybeSingle(),
+          // An untagged venue has no questions. A failed fetch looks the same,
+          // and the review still posts - stars and the bathroom answer are
+          // worth more than a blocked form.
+          fetchQuestionnaire(resolvedVenueId).catch((): Questionnaire => []),
+        ]);
         if (!active) return;
+        setQuestionnaire(tags);
+
         if (review) {
           setStars(review.stars);
           setBathroom(review.trans_bathroom);
           setBody(review.body ?? '');
           setIsExisting(true);
+
+          const byId = new Map(tags.flatMap((tag) => tag.questions).map((q) => [q.id, q] as const));
+          const mine = await fetchMyAnswers(review.id, byId).catch((): AnswerMap => ({}));
+          if (!active) return;
+          setAnswers(mine);
         }
       }
 
@@ -125,7 +248,37 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
   }, [userId, poi.placeId, knownVenueId]);
 
   const tooLong = body.length > MAX_BODY;
-  const canSubmit = stars !== null && bathroom !== null && !tooLong && !busy;
+
+  const questions = questionnaire.flatMap((tag) => tag.questions);
+  const missingRequired = questions.filter(
+    (question) => question.required && !isAnswered(question.kind, answers[question.id] ?? null)
+  );
+  const problems = new Map<string, string>();
+  for (const question of questions) {
+    const problem = answerProblem(question, answers[question.id] ?? null);
+    if (problem) problems.set(question.id, problem);
+  }
+
+  const canSubmit =
+    stars !== null &&
+    bathroom !== null &&
+    !tooLong &&
+    missingRequired.length === 0 &&
+    problems.size === 0 &&
+    !busy;
+
+  // One sentence about whatever is in the way, or nothing.
+  const basicsMissing = stars === null || bathroom === null;
+  const blockingHint =
+    basicsMissing && missingRequired.length > 0
+      ? 'Pick a rating, answer the bathroom question and the questions marked * to post.'
+      : basicsMissing
+        ? 'Pick a rating and answer the bathroom question to post.'
+        : missingRequired.length > 0
+          ? 'Answer the questions marked * to post.'
+          : problems.size > 0
+            ? 'Fix the highlighted answer to post.'
+            : null;
 
   async function remove() {
     if (!venueId || !userId) return;
@@ -151,12 +304,13 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
     // Guard again here, not just on the button: state could change between render
     // and press, and the checks below are what the database will enforce anyway.
     if (stars === null || bathroom === null || tooLong || !userId) return;
+    if (missingRequired.length > 0 || problems.size > 0) return;
 
     setError(null);
     setBusy(true);
+    // Reuse the venue if somebody already added it; only insert when new.
+    let targetVenueId: string | undefined = venueId ?? undefined;
     try {
-      // Reuse the venue if somebody already added it; only insert when new.
-      let targetVenueId: string | undefined = venueId ?? undefined;
 
       if (!targetVenueId && poi.placeId) {
         const { data: existing } = await supabase
@@ -183,21 +337,29 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
         targetVenueId = created.id;
       }
 
-      const { error: reviewError } = await supabase.from('reviews').upsert(
-        {
-          venue_id: targetVenueId,
-          author_id: userId,
-          stars,
-          trans_bathroom: bathroom,
-          body: body.trim() === '' ? null : body.trim(),
-        },
-        { onConflict: 'venue_id,author_id' }
-      );
-      if (reviewError) throw reviewError;
+      // Review and answers land together or not at all; the server validates
+      // every answer against the question's own kind and settings.
+      await submitReview({
+        venueId: targetVenueId,
+        stars,
+        bathroom,
+        body: body.trim() === '' ? null : body.trim(),
+        answers: questions.flatMap((question) => {
+          const value = toRpcAnswer(question, answers[question.id] ?? null);
+          return value === null ? [] : [{ question_id: question.id, value }];
+        }),
+      });
 
       onSaved();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save your review.');
+      // A required question added since the form opened. The error names it;
+      // fetching again puts it on the form, marked, under that error.
+      if (hasCode(e, '23514') && targetVenueId) {
+        fetchQuestionnaire(targetVenueId)
+          .then(setQuestionnaire)
+          .catch(() => {});
+      }
     } finally {
       setBusy(false);
     }
@@ -307,6 +469,18 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
                     </Text>
                   </View>
 
+                  {questionnaire.length > 0 ? (
+                    <TagQuestions
+                      questionnaire={questionnaire}
+                      answers={answers}
+                      problems={problems}
+                      disabled={busy}
+                      onChange={(questionId, value) =>
+                        setAnswers((current) => ({ ...current, [questionId]: value }))
+                      }
+                    />
+                  ) : null}
+
                   <View className="gap-2">
                     <Text className="font-medium text-foreground">What happened? (optional)</Text>
                     <Textarea
@@ -345,9 +519,9 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
                     </DeleteButtonEntrance>
                   ) : null}
 
-                  {stars === null || bathroom === null ? (
+                  {blockingHint ? (
                     <Text className="-mt-3 text-center text-xs text-muted-foreground">
-                      Pick a rating and answer the bathroom question to post.
+                      {blockingHint}
                     </Text>
                   ) : null}
                 </View>

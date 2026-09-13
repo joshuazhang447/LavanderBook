@@ -12,9 +12,11 @@ import { Text } from '@/components/ui/text';
 import type { PlaceResult } from '@/lib/place-search';
 import { lookupPlace } from '@/lib/place-search';
 import { supabase } from '@/lib/supabase';
+import { deriveTagColors } from '@/lib/tag-colors';
 import { VIEW_RADIUS_METERS } from '@/lib/use-location';
 import type { Coords } from '@/lib/use-location';
 import type { MapRegion, NearbyVenue } from '@/lib/use-nearby-venues';
+import { venueTags } from '@/lib/venue-tags';
 import type { SelectedPoi } from '@/lib/venues';
 
 const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY;
@@ -72,23 +74,14 @@ function starGlyphs(average: number): string {
   return '★'.repeat(full) + (rounded - full === 0.5 ? '½' : '');
 }
 
-/** Matches venue-marker.tsx: the tag labels on a venue, or null for none. */
-function tagLabels(venue: NearbyVenue): string | null {
-  const tags = Array.isArray(venue.tags) ? venue.tags : [];
-  const labels = tags
-    .map((entry) => (entry as { label?: unknown } | null)?.label)
-    .filter((label): label is string => typeof label === 'string');
-  return labels.length > 0 ? labels.join(' · ') : null;
-}
-
 function summarise(venue: NearbyVenue): string {
   const body = venue.latest_review_body?.trim();
   if (body) {
     return body.length > SNIPPET_CHARS ? `${body.slice(0, SNIPPET_CHARS).trimEnd()}...` : body;
   }
   // Tagged but unreviewed: it is on the map because we listed it, so say that
-  // rather than counting to zero.
-  if (venue.review_count === 0) return tagLabels(venue) ?? 'Listed by LavenderBook';
+  // rather than counting to zero. The tag itself is on the line above.
+  if (venue.review_count === 0) return 'Listed by LavenderBook';
   return venue.review_count === 1 ? '1 review' : `${venue.review_count} reviews`;
 }
 
@@ -135,6 +128,24 @@ const snippetStyle: React.CSSProperties = {
   color: '#525252',
 };
 
+// The box is always white, whatever the app's theme, so the chip always takes
+// its light-mode colours - same as the native marker.
+const chipStyle: React.CSSProperties = {
+  ...lineStyle,
+  // Shrinks below its own words and ellipsises; the rating does not. Five stars
+  // plus "5.0" is the widest the left side ever gets, and when that and a long
+  // tag cannot both fit, a clipped rating ("*****  ...") is the worse loss: the
+  // number is the thing someone is reading. The full label is in the sheet.
+  flexShrink: 1,
+  minWidth: 0,
+  maxWidth: 84,
+  borderRadius: 5,
+  padding: '0 4px',
+  fontSize: 10,
+  lineHeight: '14px',
+  fontWeight: 600,
+};
+
 const closeStyle: React.CSSProperties = {
   position: 'absolute',
   // Centred on the box's top-right corner, matching the native close marker.
@@ -177,6 +188,8 @@ function VenueBox({ venue, onSelect, onDismiss }: VenueBoxProps) {
   // of zero out of five, about a place we listed ourselves. An absent rating has
   // to look absent. Same branch as venue-marker.tsx.
   const unreviewed = venue.review_count === 0;
+  const tag = venueTags(venue)[0] ?? null;
+  const tagColors = deriveTagColors(tag?.color ?? '#e5e5e5', tag?.textColor).light;
 
   return (
     <AdvancedMarker
@@ -209,14 +222,28 @@ function VenueBox({ venue, onSelect, onDismiss }: VenueBoxProps) {
           if (event.key === 'Enter' || event.key === ' ') onSelect(venue);
         }}
         style={{ ...boxStyle, opacity: shown ? 1 : 0, transition: `opacity ${ENTER_MS}ms ease-out` }}>
-        <div style={starsStyle}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {/* Unreviewed: the name, where the rating would be. A rating never
+              shrinks; a name does, because the chip beside it is the reason the
+              place is on the map at all and must not be pushed out. */}
           {unreviewed ? (
-            <span style={{ color: '#0a0a0a' }}>Listed</span>
+            <div style={{ ...starsStyle, color: '#0a0a0a', flexGrow: 1, flexShrink: 1, minWidth: 0 }}>
+              {venue.name}
+            </div>
           ) : (
-            <>
+            <div style={{ ...starsStyle, flexGrow: 1, flexShrink: 0 }}>
               {starGlyphs(average)} <span style={{ color: '#0a0a0a' }}>{average.toFixed(1)}</span>
-            </>
+            </div>
           )}
+          {/* One chip, even when a place carries several: 168px of box cannot
+              hold a second without crowding out the rating it sits beside. The
+              sheet lists them all. */}
+          {tag ? (
+            <span
+              style={{ ...chipStyle, background: tagColors.background, color: tagColors.foreground }}>
+              {tag.label}
+            </span>
+          ) : null}
         </div>
         <div style={snippetStyle}>{summarise(venue)}</div>
 

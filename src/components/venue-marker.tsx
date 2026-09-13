@@ -1,9 +1,11 @@
 import * as React from 'react';
-import { Platform, StyleSheet, Text } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import { Marker } from 'react-native-maps';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
+import { deriveTagColors } from '@/lib/tag-colors';
 import type { NearbyVenue } from '@/lib/use-nearby-venues';
+import { venueTags } from '@/lib/venue-tags';
 
 const BOX_WIDTH = 168;
 const BOX_HEIGHT = 44;
@@ -49,17 +51,15 @@ function starGlyphs(average: number): string {
 }
 
 /**
- * The tag labels on a venue, or null when it carries none.
+ * Everything about the drawn tag, as one comparable string.
  *
- * venues_near returns these as jsonb, so the shape is whatever the database
- * sent - narrowed here rather than trusted.
+ * Only the first tag reaches the box, so that is all the memo below has to
+ * watch - but it has to watch the colours as well as the label, because
+ * recolouring a tag changes the bitmap just as surely as renaming it.
  */
-function tagLabels(venue: NearbyVenue): string | null {
-  const tags = Array.isArray(venue.tags) ? venue.tags : [];
-  const labels = tags
-    .map((entry) => (entry as { label?: unknown } | null)?.label)
-    .filter((label): label is string => typeof label === 'string');
-  return labels.length > 0 ? labels.join(' · ') : null;
+function tagFingerprint(venue: NearbyVenue): string {
+  const tag = venueTags(venue)[0];
+  return tag ? `${tag.slug}|${tag.label}|${tag.color}|${tag.textColor ?? ''}` : '';
 }
 
 function summarise(venue: NearbyVenue): string {
@@ -68,8 +68,8 @@ function summarise(venue: NearbyVenue): string {
     return body.length > SNIPPET_CHARS ? `${body.slice(0, SNIPPET_CHARS).trimEnd()}...` : body;
   }
   // A tagged venue nobody has reviewed is here because WE listed it, so say so
-  // rather than counting to zero.
-  if (venue.review_count === 0) return tagLabels(venue) ?? 'Listed by LavenderBook';
+  // rather than counting to zero. The tag itself sits on the line above.
+  if (venue.review_count === 0) return 'Listed by LavenderBook';
   return venue.review_count === 1 ? '1 review' : `${venue.review_count} reviews`;
 }
 
@@ -111,9 +111,12 @@ function VenueMarkerImpl({ venue, onPress }: VenueMarkerProps) {
   // switching tracking back on for a frame.
   React.useEffect(() => {
     markerRef.current?.redraw();
-  }, [venue.avg_stars, venue.review_count, venue.latest_review_body]);
+  }, [venue.avg_stars, venue.review_count, venue.latest_review_body, venue.tags, venue.name]);
 
   const zIndex = Math.round(-venue.lat * 1000);
+  // The box is white on every theme, so the chip always takes its light colours.
+  const tag = venueTags(venue)[0] ?? null;
+  const tagColors = deriveTagColors(tag?.color ?? '#e5e5e5', tag?.textColor).light;
 
   return (
     <Marker
@@ -143,16 +146,30 @@ function VenueMarkerImpl({ venue, onPress }: VenueMarkerProps) {
           app can say about a place - especially one we listed ourselves because
           it is a shelter. An absent rating has to look absent.
         */}
-        {venue.review_count > 0 ? (
-          <Text style={styles.stars} numberOfLines={1}>
-            {starGlyphs(Number(venue.avg_stars ?? 0))}{' '}
-            <Text style={styles.average}>{Number(venue.avg_stars ?? 0).toFixed(1)}</Text>
-          </Text>
-        ) : (
-          <Text style={styles.stars} numberOfLines={1}>
-            <Text style={styles.average}>Listed</Text>
-          </Text>
-        )}
+        <View style={styles.line}>
+          {venue.review_count > 0 ? (
+            <Text style={styles.stars} numberOfLines={1}>
+              {starGlyphs(Number(venue.avg_stars ?? 0))}{' '}
+              <Text style={styles.average}>{Number(venue.avg_stars ?? 0).toFixed(1)}</Text>
+            </Text>
+          ) : (
+            // Unreviewed: the name, where the rating would be. Unlike a rating
+            // it may shrink - the chip beside it is why the place is here.
+            <Text style={styles.name} numberOfLines={1}>
+              {venue.name}
+            </Text>
+          )}
+          {/* One chip, even when a place carries several: 168px of box cannot
+              hold a second without crowding out the rating beside it. The sheet
+              lists them all. */}
+          {tag ? (
+            <View style={[styles.chip, { backgroundColor: tagColors.background }]}>
+              <Text style={[styles.chipLabel, { color: tagColors.foreground }]} numberOfLines={1}>
+                {tag.label}
+              </Text>
+            </View>
+          ) : null}
+        </View>
         <Text style={styles.snippet} numberOfLines={1}>
           {summarise(venue)}
         </Text>
@@ -199,11 +216,12 @@ export const VenueMarker = React.memo(
   VenueMarkerImpl,
   (a, b) =>
     a.venue.id === b.venue.id &&
+    a.venue.name === b.venue.name &&
     a.venue.avg_stars === b.venue.avg_stars &&
     a.venue.review_count === b.venue.review_count &&
     // Tagging a venue changes what the box says, so a stale bitmap would keep
-    // showing the old label until something else forced a redraw.
-    tagLabels(a.venue) === tagLabels(b.venue) &&
+    // showing the old chip until something else forced a redraw.
+    tagFingerprint(a.venue) === tagFingerprint(b.venue) &&
     a.venue.latest_review_body === b.venue.latest_review_body
 );
 
@@ -232,14 +250,43 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 4,
   },
+  line: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   stars: {
+    // Never shrinks, so the rating cannot be ellipsised away; the chip below
+    // gives up its width instead. See the note in venue-map.web.tsx.
+    flexGrow: 1,
+    flexShrink: 0,
     fontSize: 13,
     lineHeight: 16,
     color: '#f59e0b',
     fontWeight: '600',
   },
+  chip: {
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: 84,
+    borderRadius: 5,
+    paddingHorizontal: 4,
+  },
+  chipLabel: {
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: '600',
+  },
   average: {
     color: '#0a0a0a',
+  },
+  name: {
+    flexGrow: 1,
+    flexShrink: 1,
+    fontSize: 13,
+    lineHeight: 16,
+    color: '#0a0a0a',
+    fontWeight: '600',
   },
   snippet: {
     fontSize: 11,
