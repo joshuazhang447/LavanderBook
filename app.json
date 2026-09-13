@@ -46,12 +46,7 @@
           "locationWhenInUsePermission": "LavenderBook uses your location to show venues near you."
         }
       ],
-      [
-        "react-native-maps",
-        {
-          "androidGoogleMapsApiKey": "AIzaSyBMy8L1Yw-p73BrW0s4krewWXXgOkBJpN4"
-        }
-      ]
+      "react-native-maps"
     ],
     "experiments": {
       "typedRoutes": true,

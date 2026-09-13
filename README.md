@@ -55,11 +55,10 @@ The same codebase runs on Android, iOS and the web.
 
 | | |
 | --- | --- |
-| <img width="250" height="541" alt="The map screen, showing nearby venues with their ratings" src="https://github.com/user-attachments/assets/c3698c09-5bc4-441b-b56d-d901e53f648b" /> | <img width="250" height="541" alt="A venue's page, showing its rating, notes and answers so far" src="https://github.com/user-attachments/assets/0faa350b-31aa-453c-9a4c-ca3c30bdd239" /> |
-| The map, with nearby venues and their ratings | A venue: rating, notes, and the answers so far |
-| <img width="250" height="541" alt="Writing a review, with the star rating and the venue's own questions" src="https://github.com/user-attachments/assets/fdd28a92-3e5f-4d83-a659-0363403c8037" /> | <img width="250" height="541" alt="The account tab, showing a generated display name and the reader's own reviews" src="https://github.com/user-attachments/assets/4471e838-e03f-47ae-ac4e-12bc86ced161" /> |
+| <img width="250" alt="The map screen, with nearby venues shown as rating boxes over a street map" src="docs/screenshots/map.png" /> | <img width="250" alt="A venue's page, showing its average rating, the trans bathroom tally and a review" src="docs/screenshots/venue.png" /> |
+| The map, with nearby venues and their ratings | A venue: its rating, the bathroom tally, and what people wrote |
+| <img width="250" alt="Writing a review: the star rating, the bathroom question and the venue's own questions" src="docs/screenshots/review.png" /> | <img width="250" alt="The account tab, showing a generated display name and the reader's own reviews" src="docs/screenshots/account.png" /> |
 | Writing a review, including the venue's own questions | The account tab and your own reviews |
-
 
 ## The admin panel
 
@@ -67,9 +66,9 @@ The panel is a web page at `/admin`. It is deliberately not part of the mobile a
 at all: on a phone the route redirects to the map, and none of the panel's code is included
 in the mobile build.
 
-<img width="1916" height="937" alt="admin1" src="https://github.com/user-attachments/assets/4024574f-f756-4de5-b683-da496fc95aa0" />
+<img alt="The panel's Users section: a table of accounts with their display name, join date, review count and status" src="docs/screenshots/admin-users.png" />
 
-<img width="1919" height="939" alt="admin2" src="https://github.com/user-attachments/assets/3820a74d-d832-4770-8fd0-5b3be9fd419b" />
+<img alt="The panel's Custom fields section, with the New field dialog open showing the fourteen answer types and the tags a question can be attached to" src="docs/screenshots/admin-fields.png" />
 
 There is no administrator password anywhere in this project, and no shared secret to
 circulate. An administrator is an ordinary account that has been added to a list held in
@@ -131,9 +130,21 @@ Only publishable values belong in this file. Everything prefixed `EXPO_PUBLIC_` 
 into the application and is readable by anybody who has it; the service-role key must never
 be placed here.
 
-The Google Maps key used to draw the Android map is set in `app.json`, under the
-`react-native-maps` plugin. Restrict it in the Google Cloud console to this application's
-package name and signing certificate.
+The two Google Maps keys go in the same file. Neither is a secret — the web one is
+compiled into the JavaScript bundle, and the Android one is written into the app's manifest
+where the Maps SDK reads it — so both must be restricted in the Google Cloud console
+instead: the web key by HTTP referrer, and the Android key by package name and signing
+certificate.
+
+```
+EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY=<maps-js-api-key>
+GOOGLE_MAPS_ANDROID_KEY=<maps-sdk-for-android-key>
+```
+
+`GOOGLE_MAPS_ANDROID_KEY` has no `EXPO_PUBLIC_` prefix on purpose. It is read once by
+`app.config.js` at build time and written into the manifest, so it never needs to reach the
+JavaScript bundle. Because `.env` is not uploaded to EAS, cloud builds need the same
+variable set as an EAS environment variable.
 
 ### 3. Set up the database
 
@@ -224,7 +235,14 @@ npx expo export --platform web
 
 The output is written to `dist/`.
 
-Android packages are built through Expo Application Services. An installable test build:
+Android packages are built through Expo Application Services. Cloud builds do not receive
+your `.env`, so set the Android Maps key on EAS once before the first build:
+
+```bash
+eas env:set --name GOOGLE_MAPS_ANDROID_KEY --environment production --environment preview
+```
+
+An installable test build:
 
 ```bash
 eas build --profile preview --platform android
@@ -261,8 +279,11 @@ supabase/
   migrations/             Database schema, in order
   functions/              Server functions for Google Places lookups
 docs/                     Design notes
+  screenshots/            The images used in this file
 assets/                   Icons and images
 .github/workflows/        Scheduled maintenance
+app.json                  Static app configuration
+app.config.js             Injects the Android Maps key from the environment
 ```
 
 ## Stack
