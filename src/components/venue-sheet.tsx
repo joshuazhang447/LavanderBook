@@ -223,13 +223,23 @@ export function VenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
         if (active) setRatings(data as Ratings | null);
       });
 
+    // The embed names its foreign key. `profiles(...)` on its own was
+    // unambiguous until admin_edited_by was added, which gave reviews a second
+    // route to profiles; PostgREST then refuses the embed rather than guessing,
+    // and every review silently disappeared behind "No written reviews yet".
     supabase
       .from('reviews')
-      .select('id, author_id, stars, body, created_at, author:profiles(display_name)')
+      .select(
+        'id, author_id, stars, body, created_at, author:profiles!reviews_author_id_fkey(display_name)'
+      )
       .eq('venue_id', venue.id)
       .order('created_at', { ascending: false })
-      .then(({ data }) => {
-        if (active) setReviews((data as VenueReview[] | null) ?? []);
+      .then(({ data, error }) => {
+        if (!active) return;
+        // An empty list and a failed request are not the same thing, and
+        // rendering them the same way is what hid this for a day.
+        if (error) console.error('Failed to load reviews', error);
+        setReviews((data as VenueReview[] | null) ?? []);
       });
 
     // Public read: venue_notes is selectable by anyone, which is the point of
