@@ -2,6 +2,8 @@ import {
   Calendar,
   CalendarOff,
   CircleUser,
+  EyeOff,
+  Info,
   Trash2,
   VenetianMask,
   X,
@@ -15,6 +17,7 @@ import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-nati
 import { Portal } from '@rn-primitives/portal';
 
 import { DirectionsButton } from '@/components/directions-button';
+import { InfoBullets, InfoDialog, InfoPoint } from '@/components/info-dialog';
 import { QuestionField, type AnswerValue } from '@/components/question-field';
 import { StarRating, STAR_HINT } from '@/components/star-rating';
 import { TagPill } from '@/components/tag-pill';
@@ -36,6 +39,7 @@ import {
 } from '@/lib/questionnaire';
 import { postedLabel } from '@/lib/review-dates';
 import { supabase } from '@/lib/supabase';
+import { cn } from '@/lib/utils';
 import type { SelectedPoi } from '@/lib/venues';
 
 type Answer = Database['public']['Enums']['answer'];
@@ -228,6 +232,8 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
   /** What the existing review shows readers; null when there is no review yet. */
   const [shown, setShown] = React.useState<Shown | null>(null);
   const [confirmingDelete, setConfirmingDelete] = React.useState(false);
+  /** The "what not to write" explanation behind the free-text field's (i). */
+  const [explainingBody, setExplainingBody] = React.useState(false);
   const [questionnaire, setQuestionnaire] = React.useState<Questionnaire>([]);
   const [answers, setAnswers] = React.useState<AnswerMap>({});
   const scrollRef = React.useRef<ScrollView>(null);
@@ -541,15 +547,61 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
                   ) : null}
 
                   <View className="gap-2">
-                    <Text className="font-medium text-foreground">What happened? (optional)</Text>
+                    {/* The label and its (i) together open the explanation, so
+                        the target is the whole label rather than a 16-pixel
+                        icon. */}
+                    <Pressable
+                      onPress={() => setExplainingBody(true)}
+                      accessibilityRole="button"
+                      accessibilityLabel="What not to write, and why"
+                      hitSlop={6}
+                      className={cn(
+                        'flex-row items-center gap-1.5 self-start',
+                        Platform.select({ web: 'cursor-pointer hover:opacity-80' })
+                      )}>
+                      <Text className="font-medium text-foreground">What happened? (optional)</Text>
+                      <Icon as={Info} className="size-4 text-muted-foreground" />
+                    </Pressable>
+                    {/* The free text is the one part of a review that no switch
+                        can protect: a per-place name and a rough date hide who
+                        and when, and a sentence can give both back. So the
+                        warning sits where the writing starts. */}
                     <Textarea
                       value={body}
                       onChangeText={setBody}
                       onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })}
                       maxLength={MAX_BODY}
-                      placeholder="Anything worth knowing before someone else walks in."
+                      placeholder="Anything worth knowing before someone else walks in. Leave out names, dates, times and anything else that could identify you."
                       numberOfLines={4}
                     />
+                    <InfoDialog
+                      open={explainingBody}
+                      onOpenChange={setExplainingBody}
+                      icon={EyeOff}
+                      title="Keep yourself out of it"
+                      lead="Reviews are public. Write about the place, not about you.">
+                      <InfoPoint title="Why it matters">
+                        Anyone can read reviews, including people you would rather not be found by.
+                        Small details add up: a name, a time and a place together can be enough to
+                        work out who wrote it. Your random name and rough date can&apos;t hide what
+                        you write yourself.
+                      </InfoPoint>
+                      <InfoPoint title="Leave out">
+                        <InfoBullets
+                          items={[
+                            "Names: yours, your friends', or staff you spoke to",
+                            'When you went: the day, the time, or "last Friday night"',
+                            'What you looked like or wore, and who you were with',
+                            'Where you live, work or study, and how old you are',
+                            'Anything only you, or a few people, would know',
+                          ]}
+                        />
+                      </InfoPoint>
+                      <InfoPoint title="Write about the place">
+                        How you were treated, whether you felt safe, whether there were any LGBTQ+
+                        employees, and anything someone like you should know before going.
+                      </InfoPoint>
+                    </InfoDialog>
                     <Text
                       className={
                         tooLong ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'
