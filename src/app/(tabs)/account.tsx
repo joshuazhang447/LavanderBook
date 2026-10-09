@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Text } from '@/components/ui/text';
 import { MyReviewsList } from '@/components/my-reviews-list';
+import { PerPlaceNamesSetting } from '@/components/per-place-names';
 import { useIsWideViewport } from '@/components/tab-bar';
 import { useAuth } from '@/lib/auth';
 
@@ -17,6 +18,8 @@ export default function AccountScreen() {
   const topInset = isWide ? 0 : insets.top;
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  /** Bumped when turning per-place names on has renamed reviews in the list below. */
+  const [renames, setRenames] = React.useState(0);
 
   async function run(action: () => Promise<void>) {
     setError(null);
@@ -51,10 +54,17 @@ export default function AccountScreen() {
               <CardHeader>
                 <CardTitle>{profile?.display_name ?? 'Loading name...'}</CardTitle>
                 <CardDescription>
-                  This is the only name shown on your reviews. Your email is never public.
+                  {/* Unknown until the profile arrives, so say only what is
+                      true either way rather than guess at the switch. */}
+                  {profile === null
+                    ? 'Your account name. Your email is never public.'
+                    : profile.per_place_names
+                      ? 'Your account name. Your reviews never show it: each one has its own. Your email is never public.'
+                      : 'Your account name, shown on reviews you post from now on. Your email is never public.'}
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="gap-4">
+                <PerPlaceNamesSetting onRenamed={() => setRenames((count) => count + 1)} />
                 <Button variant="outline" disabled={busy} onPress={() => run(signOut)}>
                   <Text>Sign out</Text>
                 </Button>
@@ -65,14 +75,15 @@ export default function AccountScreen() {
           {session ? (
             // Keyed by account, so a different one starts from an empty list
             // rather than briefly showing the last one's reviews.
-            <MyReviewsList key={session.user.id} />
+            <MyReviewsList key={session.user.id} renames={renames} />
           ) : (
             <Card>
               <CardHeader>
                 <CardTitle>Sign in</CardTitle>
                 <CardDescription>
-                  An account lets you post reviews. You are given an anonymous name, so nothing
-                  you write is tied to your real identity in public.
+                  An account lets you post reviews. You are given an anonymous name, and each
+                  review gets a name of its own, so nothing you write is tied to your real
+                  identity, or to your other reviews, in public.
                 </CardDescription>
               </CardHeader>
               <CardContent>

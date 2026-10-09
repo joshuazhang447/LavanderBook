@@ -17,6 +17,7 @@ import { AnswerSummaryCard } from '@/components/answer-summary';
 import { DirectionsButton } from '@/components/directions-button';
 import { StarRating } from '@/components/star-rating';
 import { TagPill } from '@/components/tag-pill';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Separator } from '@/components/ui/separator';
@@ -71,9 +72,20 @@ function ReviewRow({ review }: { review: VenueReview }) {
         <View className="size-8 items-center justify-center rounded-full bg-muted">
           <Icon as={CircleUser} className="size-5 text-muted-foreground" />
         </View>
-        <Text numberOfLines={1} className="flex-1 font-medium text-foreground">
+        {/* The alias when the review has one - venue_reviews decides, and says
+            nothing about which it is. */}
+        <Text numberOfLines={1} className="shrink font-medium text-foreground">
           {review.author_name ?? 'Someone'}
         </Text>
+        {/* With a different name on every review, the author cannot spot their
+            own by name any more. is_mine is answered for the caller alone, so
+            this marks it for them and for nobody else. */}
+        {review.is_mine ? (
+          <Badge variant="secondary">
+            <Text>You</Text>
+          </Badge>
+        ) : null}
+        <View className="flex-1" />
         <StarRating value={review.stars} size="sm" />
       </View>
       {review.body ? (

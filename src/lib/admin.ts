@@ -185,7 +185,13 @@ export type AdminReview = {
   venueName: string;
   venueAddress: string | null;
   authorId: string;
+  /** The account's display name. Readers see it only when `alias` is null. */
   authorName: string;
+  /**
+   * The per-place name readers see on this review instead of the account's.
+   * Hides the account from the public, never from the panel.
+   */
+  alias: string | null;
   /** Null means the author is active. */
   authorBannedAt: string | null;
   authorIsAdmin: boolean;
@@ -201,6 +207,15 @@ export type AdminReview = {
   answerCount: number;
   venueTags: TagRef[];
 };
+
+/**
+ * How the panel's own sentences name a review's author: by the name readers
+ * saw, which is what a report will quote, with the account beside it when the
+ * two differ.
+ */
+export function reviewerLabel(review: AdminReview): string {
+  return review.alias ? `${review.alias} (account ${review.authorName})` : review.authorName;
+}
 
 /** 'with' is a review that has prose; 'without' is a rating on its own. */
 export type ReviewBodyFilter = 'any' | 'with' | 'without';
@@ -294,6 +309,7 @@ export async function listAdminReviews(query: AdminReviewQuery): Promise<AdminRe
     venueAddress: (row.venue_address as string | null) ?? null,
     authorId: row.author_id,
     authorName: row.author_name,
+    alias: (row.alias as string | null) ?? null,
     authorBannedAt: (row.author_banned_at as string | null) ?? null,
     authorIsAdmin: row.author_is_admin,
     stars: Number(row.stars),

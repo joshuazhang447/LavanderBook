@@ -1,10 +1,13 @@
 import {
+  Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Copy,
   MessageSquareText,
   MoreHorizontal,
   Search,
+  VenetianMask,
   X,
 } from 'lucide-react-native';
 import * as React from 'react';
@@ -41,6 +44,7 @@ import {
   listAdminReviews,
   listAdminTags,
   listReviewAnswers,
+  reviewerLabel,
   type AdminReview,
   type AdminTag,
   type ReviewAnswer,
@@ -234,6 +238,50 @@ function ReviewAnswers({ reviewId }: { reviewId: string }) {
 
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Who actually wrote it, in full.
+ *
+ * A per-place name hides the account from readers and from nobody here. The
+ * uuid is spelled out and copyable because it is the one identifier that
+ * survives everything - the Users search, a ban, a support thread.
+ */
+function AuthorAccount({ review }: { review: AdminReview }) {
+  const [copied, setCopied] = React.useState(false);
+
+  function copy() {
+    navigator.clipboard?.writeText(review.authorId);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1200);
+  }
+
+  return (
+    <View className="gap-1">
+      <Text className="text-xs text-muted-foreground">
+        Posted by account <Text className="text-xs font-medium text-foreground">{review.authorName}</Text>
+        {review.alias
+          ? `. Readers see ${review.alias} instead, a name used on this review only.`
+          : '. Readers see that name too: per-place names have been off since this was posted.'}
+      </Text>
+      <Pressable
+        onPress={copy}
+        role="button"
+        aria-label={`Copy the UUID of ${review.authorName}`}
+        className={cn(
+          'flex-row items-center gap-1 self-start',
+          Platform.select({ web: 'cursor-pointer hover:opacity-80' })
+        )}>
+        <Text className="font-mono text-xs text-muted-foreground">{review.authorId}</Text>
+        <Icon
+          as={copied ? Check : Copy}
+          className={cn('size-3', copied ? 'text-primary' : 'text-muted-foreground/50')}
+        />
+      </Pressable>
+    </View>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+
 type ReviewRowProps = {
   review: AdminReview;
   onEdit: () => void;
@@ -272,7 +320,20 @@ function ReviewRow({ review, onEdit, onDelete, onFocus }: ReviewRowProps) {
           </View>
 
           <View className="flex-row flex-wrap items-center gap-2">
-            <Text className="text-xs text-muted-foreground">{review.authorName}</Text>
+            {/* The name readers see first, because that is the one a report
+                quotes; the account it hides second, because that is the one
+                every action here acts on. */}
+            {review.alias ? (
+              <>
+                <View className="flex-row items-center gap-1">
+                  <Icon as={VenetianMask} className="size-3.5 text-muted-foreground" />
+                  <Text className="text-xs font-medium text-foreground">{review.alias}</Text>
+                </View>
+                <Text className="text-xs text-muted-foreground">· account {review.authorName}</Text>
+              </>
+            ) : (
+              <Text className="text-xs text-muted-foreground">{review.authorName}</Text>
+            )}
             {review.authorBannedAt ? (
               <Badge variant="destructive">
                 <Text>Banned</Text>
@@ -342,7 +403,7 @@ function ReviewRow({ review, onEdit, onDelete, onFocus }: ReviewRowProps) {
               variant="ghost"
               size="icon"
               className="size-8"
-              aria-label={`Actions for ${review.authorName}'s review of ${review.venueName}`}>
+              aria-label={`Actions for ${reviewerLabel(review)}'s review of ${review.venueName}`}>
               <Icon as={MoreHorizontal} className="size-4 text-muted-foreground" />
             </Button>
           </DropdownMenuTrigger>
@@ -375,6 +436,7 @@ function ReviewRow({ review, onEdit, onDelete, onFocus }: ReviewRowProps) {
           {review.venueAddress ? (
             <Text className="text-xs text-muted-foreground">{review.venueAddress}</Text>
           ) : null}
+          <AuthorAccount review={review} />
           <ReviewAnswers reviewId={review.id} />
         </View>
       ) : null}
@@ -588,7 +650,8 @@ export function ReviewsSection({
         <View className="gap-1">
           <Text className="text-2xl font-bold text-foreground">Reviews</Text>
           <Text className="text-sm text-muted-foreground">
-            Every review posted to LavenderBook. Editing one is recorded on it.
+            Every review posted to LavenderBook. Editing one is recorded on it. A mask marks a
+            per-place name: what readers see instead of the account name.
           </Text>
         </View>
 
@@ -617,7 +680,7 @@ export function ReviewsSection({
             <Input
               value={search}
               onChangeText={setSearch}
-              placeholder="Search the words, a place, an author, or paste a UUID"
+              placeholder="Search the words, a place, an author or per-place name, or paste a UUID"
               autoCapitalize="none"
               autoCorrect={false}
               className="flex-1 border-0 bg-transparent px-0 shadow-none dark:bg-transparent"
@@ -727,7 +790,7 @@ export function ReviewsSection({
             <AlertDialogTitle>Delete this review?</AlertDialogTitle>
             <AlertDialogDescription>
               {confirming
-                ? `${confirming.authorName}'s review of ${confirming.venueName} will be removed for good${
+                ? `${reviewerLabel(confirming)}'s review of ${confirming.venueName} will be removed for good${
                     confirming.answerCount === 0
                       ? ''
                       : confirming.answerCount === 1

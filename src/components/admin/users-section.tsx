@@ -343,7 +343,7 @@ export function UsersSection({ onShowReviews, visible }: UsersSectionProps) {
             <Input
               value={search}
               onChangeText={setSearch}
-              placeholder="Search a display name, or paste a UUID"
+              placeholder="Search a display name or per-place name, or paste a UUID"
               autoCapitalize="none"
               autoCorrect={false}
               className="flex-1 border-0 bg-transparent px-0 shadow-none dark:bg-transparent"
