@@ -1,15 +1,8 @@
 import { CalendarOff, Info, VenetianMask, type LucideIcon } from 'lucide-react-native';
 import * as React from 'react';
-import {
-  Platform,
-  Pressable,
-  ScrollView,
-  useWindowDimensions,
-  View,
-  type ViewStyle,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Platform, Pressable, View, type ViewStyle } from 'react-native';
 
+import { BUTTON_LABEL, InfoDialog, InfoPoint } from '@/components/info-dialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,33 +13,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { Icon } from '@/components/ui/icon';
 import { Switch } from '@/components/ui/switch';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/utils';
-
-/**
- * For a dialog button's label: stretch across the button and centre the text.
- *
- * A label sized exactly to its text can lose its last word on Android: the
- * width measured for it can come out a fraction short of what drawing it
- * needs, so the last word wraps onto a second line that is clipped away -
- * "Turn off" rendered as "Turn" on a Pixel 10. Fractional pixel ratios and
- * manufacturer fonts make it likelier, and which strings it hits varies by
- * phone. Given the button's whole width there is nothing to wrap. On the web,
- * where the buttons size to their labels, grow has no room to take.
- */
-const BUTTON_LABEL = 'grow text-center';
 
 /**
  * For a container drawn over a pressable: touches pass through it to whatever
@@ -64,16 +35,6 @@ const SWITCH_TARGET: ViewStyle = { pointerEvents: 'auto' };
 
 /** Content drawn over a pressable that must never take a touch from it. */
 const IGNORE_TOUCHES: ViewStyle = { pointerEvents: 'none' };
-
-/** One paragraph of an explanation, under a heading that says what it answers. */
-function Point({ title, children }: React.PropsWithChildren<{ title: string }>) {
-  return (
-    <View className="gap-1">
-      <Text className="text-sm font-medium text-foreground">{title}</Text>
-      <Text className="text-sm leading-5 text-muted-foreground">{children}</Text>
-    </View>
-  );
-}
 
 /**
  * Every explanation answers the same four questions, in the same order, so
@@ -104,48 +65,18 @@ type ExplanationProps = {
  * privacy control is how people get hurt by one.
  */
 function Explanation({ open, onOpenChange, icon, title, explained }: ExplanationProps) {
-  const { height } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
-  // The whole dialog fits between the status bar and the navigation bar, with
-  // a margin, on any screen: a short phone, split screen, a foldable's cover
-  // screen, or text turned up in the system settings. The title and "Got it"
-  // keep their size; the explanation between them is what gives way and
-  // scrolls. A cap on the middle alone would not hold, because the title and
-  // the button grow with the text size too.
-  const maxHeight = height - insets.top - insets.bottom - 32;
-
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* sm: only. An unprefixed max-w replaces the base max-w-[calc(100%-2rem)]
-          that keeps the dialog inside a phone screen, and 28rem is wider than
-          most phones - the dialog was clipped on both sides on Android. */}
-      <DialogContent className="sm:max-w-md" style={{ maxHeight }}>
-        <DialogHeader>
-          <View className="flex-row items-center gap-2">
-            <Icon as={icon} className="size-5 text-foreground" />
-            <DialogTitle>{title}</DialogTitle>
-          </View>
-          <DialogDescription>{explained.lead}</DialogDescription>
-        </DialogHeader>
-
-        {/* shrink, so this is the part that gives up height when the dialog
-            meets its cap; grow-0, so it never takes more than its text. */}
-        <ScrollView className="shrink grow-0">
-          <View className="gap-4">
-            <Point title="Why it matters">{explained.whyItMatters}</Point>
-            <Point title="What it does">{explained.whatItDoes}</Point>
-            <Point title="What it can't hide">{explained.whatItCantHide}</Point>
-            <Point title="If turned off">{explained.ifTurnedOff}</Point>
-          </View>
-        </ScrollView>
-
-        <DialogFooter>
-          <Button onPress={() => onOpenChange(false)}>
-            <Text className={BUTTON_LABEL}>Got it</Text>
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <InfoDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      icon={icon}
+      title={title}
+      lead={explained.lead}>
+      <InfoPoint title="Why it matters">{explained.whyItMatters}</InfoPoint>
+      <InfoPoint title="What it does">{explained.whatItDoes}</InfoPoint>
+      <InfoPoint title="What it can't hide">{explained.whatItCantHide}</InfoPoint>
+      <InfoPoint title="If turned off">{explained.ifTurnedOff}</InfoPoint>
+    </InfoDialog>
   );
 }
 
