@@ -1,4 +1,4 @@
-import { Info, VenetianMask } from 'lucide-react-native';
+import { CalendarOff, Info, VenetianMask, type LucideIcon } from 'lucide-react-native';
 import * as React from 'react';
 import {
   Platform,
@@ -65,7 +65,7 @@ const SWITCH_TARGET: ViewStyle = { pointerEvents: 'auto' };
 /** Content drawn over a pressable that must never take a touch from it. */
 const IGNORE_TOUCHES: ViewStyle = { pointerEvents: 'none' };
 
-/** One paragraph of the explanation, under a heading that says what it answers. */
+/** One paragraph of an explanation, under a heading that says what it answers. */
 function Point({ title, children }: React.PropsWithChildren<{ title: string }>) {
   return (
     <View className="gap-1">
@@ -75,21 +75,35 @@ function Point({ title, children }: React.PropsWithChildren<{ title: string }>) 
   );
 }
 
+/**
+ * Every explanation answers the same four questions, in the same order, so
+ * that reading one teaches you how to read the other.
+ */
+type Explained = {
+  lead: string;
+  whyItMatters: string;
+  whatItDoes: string;
+  whatItCantHide: string;
+  ifTurnedOff: string;
+};
+
 type ExplanationProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  displayName: string;
+  icon: LucideIcon;
+  title: string;
+  explained: Explained;
 };
 
 /**
- * What the switch is for, in the reader's terms rather than the schema's.
+ * What a switch is for, in the reader's terms rather than the schema's.
  *
  * It says plainly what the feature cannot do as well as what it does: someone
- * relying on it for their safety needs to know that their own words can still
- * identify them, and that moderators can still see the account. Overselling a
+ * relying on it for their safety needs to know what can still identify them,
+ * and that moderators can still see more than the public does. Overselling a
  * privacy control is how people get hurt by one.
  */
-function Explanation({ open, onOpenChange, displayName }: ExplanationProps) {
+function Explanation({ open, onOpenChange, icon, title, explained }: ExplanationProps) {
   const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   // The whole dialog fits between the status bar and the navigation bar, with
@@ -108,34 +122,20 @@ function Explanation({ open, onOpenChange, displayName }: ExplanationProps) {
       <DialogContent className="sm:max-w-md" style={{ maxHeight }}>
         <DialogHeader>
           <View className="flex-row items-center gap-2">
-            <Icon as={VenetianMask} className="size-5 text-foreground" />
-            <DialogTitle>Per-place names</DialogTitle>
+            <Icon as={icon} className="size-5 text-foreground" />
+            <DialogTitle>{title}</DialogTitle>
           </View>
-          <DialogDescription>
-            Each review you post gets its own name, so your reviews can&apos;t be linked together.
-          </DialogDescription>
+          <DialogDescription>{explained.lead}</DialogDescription>
         </DialogHeader>
 
         {/* shrink, so this is the part that gives up height when the dialog
             meets its cap; grow-0, so it never takes more than its text. */}
         <ScrollView className="shrink grow-0">
           <View className="gap-4">
-            <Point title="Why it matters">
-              If all your reviews share one name, anyone can see every place you&apos;ve been. A
-              few places can be enough to work out who you are.
-            </Point>
-            <Point title="What it does">
-              Each review shows a new random name instead of {displayName}. Editing a review keeps
-              its name.
-            </Point>
-            <Point title="What it can't hide">
-              What you write, and when, can still give you away, so leave out personal details.
-              Moderators can still see which account posted a review.
-            </Point>
-            <Point title="If turned off">
-              New reviews will show {displayName}. Reviews you&apos;ve already posted keep their
-              own names.
-            </Point>
+            <Point title="Why it matters">{explained.whyItMatters}</Point>
+            <Point title="What it does">{explained.whatItDoes}</Point>
+            <Point title="What it can't hide">{explained.whatItCantHide}</Point>
+            <Point title="If turned off">{explained.ifTurnedOff}</Point>
           </View>
         </ScrollView>
 
@@ -149,39 +149,49 @@ function Explanation({ open, onOpenChange, displayName }: ExplanationProps) {
   );
 }
 
-type PerPlaceNamesSettingProps = {
-  /** Called after turning the setting on, which renames existing reviews. */
-  onRenamed?: () => void;
+type PrivacyToggleProps = {
+  icon: LucideIcon;
+  title: string;
+  enabled: boolean;
+  /** One line under the title, for the state it is in now. */
+  summary: string;
+  /** Shown in red under the row while the switch is off. */
+  offWarning: string;
+  explained: Explained;
+  confirmOff: { title: string; body: string; keep: string; confirm: string };
+  /** Saves the new value; rejects with a message worth showing if it cannot. */
+  onChange: (next: boolean) => Promise<void>;
 };
 
 /**
- * The account tab's switch for per-place names, with the way in to what it means.
+ * One privacy switch: the row, its explanation, and the question asked before
+ * turning it off.
  *
- * Turning it on applies at once - it only ever removes a link. Turning it off
- * asks first, because from then on every new review carries the account name
- * and can be lined up with the others, and that is not something to do by a
- * stray tap. See supabase/migrations/20261009120000_per_place_names.sql.
+ * Turning one on applies at once - it only ever takes something out of public
+ * view. Turning one off asks first, because what it exposes from then on
+ * cannot be taken back by turning it on again, and that is not something to do
+ * by a stray tap.
  */
-export function PerPlaceNamesSetting({ onRenamed }: PerPlaceNamesSettingProps) {
-  const { profile, setPerPlaceNames } = useAuth();
+function PrivacyToggle({
+  icon,
+  title,
+  enabled,
+  summary,
+  offWarning,
+  explained,
+  confirmOff,
+  onChange,
+}: PrivacyToggleProps) {
   const [explaining, setExplaining] = React.useState(false);
   const [confirmingOff, setConfirmingOff] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  // Nothing to show until the profile arrives: a switch drawn "off" while the
-  // real value is in flight would claim the reviews are exposed when they are not.
-  if (!profile) return null;
-
-  const enabled = profile.per_place_names;
-  const displayName = profile.display_name;
-
   async function apply(next: boolean) {
     setError(null);
     setBusy(true);
     try {
-      await setPerPlaceNames(next);
-      if (next) onRenamed?.();
+      await onChange(next);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not change this setting.');
     } finally {
@@ -202,7 +212,7 @@ export function PerPlaceNamesSetting({ onRenamed }: PerPlaceNamesSettingProps) {
         <Pressable
           onPress={() => setExplaining(true)}
           accessibilityRole="button"
-          accessibilityLabel="What are per-place names?"
+          accessibilityLabel={`What is "${title}"?`}
           className={cn(
             'absolute inset-0 rounded-lg active:bg-accent',
             Platform.select({ web: 'cursor-pointer hover:bg-accent/50' })
@@ -217,7 +227,7 @@ export function PerPlaceNamesSetting({ onRenamed }: PerPlaceNamesSettingProps) {
                   enabled ? 'bg-primary' : 'bg-muted'
                 )}>
                 <Icon
-                  as={VenetianMask}
+                  as={icon}
                   className={cn(
                     'size-5',
                     enabled ? 'text-primary-foreground' : 'text-muted-foreground'
@@ -227,14 +237,10 @@ export function PerPlaceNamesSetting({ onRenamed }: PerPlaceNamesSettingProps) {
 
               <View className="flex-1 gap-0.5">
                 <View className="flex-row items-center gap-1.5">
-                  <Text className="font-medium text-foreground">Per-place names</Text>
+                  <Text className="font-medium text-foreground">{title}</Text>
                   <Icon as={Info} className="size-4 text-muted-foreground" />
                 </View>
-                <Text className="text-xs text-muted-foreground">
-                  {enabled
-                    ? 'Each review gets its own random name.'
-                    : `New reviews show ${displayName}.`}
-                </Text>
+                <Text className="text-xs text-muted-foreground">{summary}</Text>
               </View>
             </View>
 
@@ -242,7 +248,7 @@ export function PerPlaceNamesSetting({ onRenamed }: PerPlaceNamesSettingProps) {
               <Switch
                 checked={enabled}
                 disabled={busy}
-                accessibilityLabel="Per-place names"
+                accessibilityLabel={title}
                 onCheckedChange={(next) => (next ? void apply(true) : setConfirmingOff(true))}
               />
             </View>
@@ -250,12 +256,7 @@ export function PerPlaceNamesSetting({ onRenamed }: PerPlaceNamesSettingProps) {
 
           {!enabled || error ? (
             <View className="gap-3" style={IGNORE_TOUCHES}>
-              {!enabled ? (
-                <Text className="text-xs text-destructive">
-                  Off: reviews you post now all share one name, so they can be linked to each
-                  other.
-                </Text>
-              ) : null}
+              {!enabled ? <Text className="text-xs text-destructive">{offWarning}</Text> : null}
               {error ? (
                 <Text className="text-xs text-destructive" accessibilityRole="alert">
                   {error}
@@ -266,20 +267,23 @@ export function PerPlaceNamesSetting({ onRenamed }: PerPlaceNamesSettingProps) {
         </View>
       </View>
 
-      <Explanation open={explaining} onOpenChange={setExplaining} displayName={displayName} />
+      <Explanation
+        open={explaining}
+        onOpenChange={setExplaining}
+        icon={icon}
+        title={title}
+        explained={explained}
+      />
 
       <AlertDialog open={confirmingOff} onOpenChange={setConfirmingOff}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Turn off per-place names?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Reviews you post from now on will all show {displayName}, so anyone can tell they
-              came from the same person. Reviews you have already posted keep their own names.
-            </AlertDialogDescription>
+            <AlertDialogTitle>{confirmOff.title}</AlertDialogTitle>
+            <AlertDialogDescription>{confirmOff.body}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>
-              <Text className={BUTTON_LABEL}>Keep them on</Text>
+              <Text className={BUTTON_LABEL}>{confirmOff.keep}</Text>
             </AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive"
@@ -287,11 +291,103 @@ export function PerPlaceNamesSetting({ onRenamed }: PerPlaceNamesSettingProps) {
                 setConfirmingOff(false);
                 void apply(false);
               }}>
-              <Text className={cn(BUTTON_LABEL, 'text-white')}>Turn off</Text>
+              <Text className={cn(BUTTON_LABEL, 'text-white')}>{confirmOff.confirm}</Text>
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </View>
+  );
+}
+
+type PrivacySettingsProps = {
+  /**
+   * Called after turning per-place names on, which renames the account's
+   * existing reviews - so a list of them on screen is now stale.
+   */
+  onReviewsChanged?: () => void;
+};
+
+/**
+ * The account's two privacy switches: a separate name on every review, and
+ * no exact dates. Both on by default, both enforced by the database rather
+ * than by this screen - see the per_place_names and hide_review_dates
+ * migrations.
+ */
+export function PrivacySettings({ onReviewsChanged }: PrivacySettingsProps) {
+  const { profile, setPerPlaceNames, setHideDates } = useAuth();
+
+  // Nothing to show until the profile arrives: a switch drawn "off" while the
+  // real value is in flight would claim the reviews are exposed when they are not.
+  if (!profile) return null;
+
+  const name = profile.display_name;
+
+  return (
+    <View className="gap-3">
+      <PrivacyToggle
+        icon={VenetianMask}
+        title="Per-place names"
+        enabled={profile.per_place_names}
+        summary={
+          profile.per_place_names
+            ? 'Each review gets its own random name.'
+            : `New reviews show ${name}.`
+        }
+        offWarning="Off: reviews you post now all share one name, so they can be linked to each other."
+        explained={{
+          lead: "Each review you post gets its own name, so your reviews can't be linked together.",
+          whyItMatters:
+            "If all your reviews share one name, anyone can see every place you've been. A few places can be enough to work out who you are.",
+          whatItDoes: `Each review shows a new random name instead of ${name}. Editing a review keeps its name.`,
+          whatItCantHide:
+            'What you write, and when, can still give you away, so leave out personal details. Moderators can still see which account posted a review.',
+          ifTurnedOff: `New reviews will show ${name}. Reviews you've already posted keep their own names.`,
+        }}
+        confirmOff={{
+          title: 'Turn off per-place names?',
+          body: `Reviews you post from now on will all show ${name}, so anyone can tell they came from the same person. Reviews you have already posted keep their own names.`,
+          keep: 'Keep them on',
+          confirm: 'Turn off',
+        }}
+        onChange={async (next) => {
+          await setPerPlaceNames(next);
+          if (next) onReviewsChanged?.();
+        }}
+      />
+
+      <PrivacyToggle
+        icon={CalendarOff}
+        title="Hide exact dates"
+        enabled={profile.hide_dates}
+        summary={
+          profile.hide_dates
+            ? 'Reviews show a rough time, like "a few weeks ago".'
+            : 'New reviews show the day you post them.'
+        }
+        offWarning="Off: the day you post can be matched against other records of who was there."
+        explained={{
+          lead: 'Your reviews show roughly when you posted them, never the exact day.',
+          whyItMatters:
+            'Apps, advertisers and phone companies keep records of where phones were and when. The exact day of a review can be matched against them to work out who was there.',
+          whatItDoes:
+            'Readers see a rough time, like "a few weeks ago", instead of the date, and never the time of day. Each review keeps the setting it was posted with.',
+          whatItCantHide:
+            "Anyone watching closely can still notice when a new review appears, so it's safer to post after you've left. Moderators can still see exact times.",
+          ifTurnedOff:
+            "New reviews will show the day you post them. Reviews you've already posted keep showing a rough time.",
+        }}
+        confirmOff={{
+          title: 'Show dates on new reviews?',
+          body: "Reviews you post from now on will show the day you posted them, and that day can be matched against other records of who was there. Reviews you've already posted keep showing a rough time.",
+          keep: 'Keep them hidden',
+          confirm: 'Show dates',
+        }}
+        // No onReviewsChanged: unlike names, this never changes a review already
+        // posted, so the list below is still right. Hiding older dates all at
+        // once would show, live, that those reviews came from one person.
+        onChange={setHideDates}
+      />
     </View>
   );
 }

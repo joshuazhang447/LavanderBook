@@ -62,6 +62,7 @@ export type Database = {
           banned_at: string | null
           created_at: string
           display_name: string
+          hide_dates: boolean
           id: string
           per_place_names: boolean
         }
@@ -69,6 +70,7 @@ export type Database = {
           banned_at?: string | null
           created_at?: string
           display_name: string
+          hide_dates?: boolean
           id: string
           per_place_names?: boolean
         }
@@ -76,6 +78,7 @@ export type Database = {
           banned_at?: string | null
           created_at?: string
           display_name?: string
+          hide_dates?: boolean
           id?: string
           per_place_names?: boolean
         }
@@ -266,6 +269,7 @@ export type Database = {
           author_id: string
           body: string | null
           created_at: string
+          hide_date: boolean
           id: string
           stars: number
           trans_bathroom: Database["public"]["Enums"]["answer"]
@@ -279,6 +283,7 @@ export type Database = {
           author_id: string
           body?: string | null
           created_at?: string
+          hide_date?: boolean
           id?: string
           stars: number
           trans_bathroom: Database["public"]["Enums"]["answer"]
@@ -292,6 +297,7 @@ export type Database = {
           author_id?: string
           body?: string | null
           created_at?: string
+          hide_date?: boolean
           id?: string
           stars?: number
           trans_bathroom?: Database["public"]["Enums"]["answer"]
@@ -637,7 +643,9 @@ export type Database = {
           author_name: string
           body: string
           created_at: string
+          hide_date: boolean
           id: string
+          posted_period: string
           stars: number
           total_count: number
           trans_bathroom: Database["public"]["Enums"]["answer"]
@@ -830,7 +838,10 @@ export type Database = {
         Returns: {
           alias: string
           body: string
+          hide_date: boolean
           id: string
+          posted_on: string
+          posted_period: string
           stars: number
           trans_bathroom: Database["public"]["Enums"]["answer"]
           updated_at: string
@@ -841,6 +852,8 @@ export type Database = {
           venue_name: string
         }[]
       }
+      posting_period: { Args: { p_at: string }; Returns: string }
+      posting_week: { Args: { p_at: string }; Returns: string }
       question_config_valid: {
         Args: {
           p_config: Json
@@ -853,6 +866,7 @@ export type Database = {
         Returns: boolean
       }
       secure_random_below: { Args: { p_n: number }; Returns: number }
+      set_hide_dates: { Args: { p_enabled: boolean }; Returns: boolean }
       set_per_place_names: { Args: { p_enabled: boolean }; Returns: boolean }
       set_question_options: {
         Args: { p_options: string[]; p_question_id: string }
@@ -889,6 +903,7 @@ export type Database = {
         }[]
       }
       venue_is_on_map: { Args: { p_venue_id: string }; Returns: boolean }
+      venue_latest_review_body: { Args: { p_venue_id: string }; Returns: string }
       venue_questionnaire: {
         Args: { p_venue_id: string }
         Returns: {
@@ -913,6 +928,8 @@ export type Database = {
           body: string
           id: string
           is_mine: boolean
+          posted_on: string
+          posted_period: string
           stars: number
         }[]
       }
@@ -929,7 +946,6 @@ export type Database = {
           google_place_id: string
           id: string
           lat: number
-          latest_review_at: string
           latest_review_body: string
           lng: number
           name: string
@@ -950,7 +966,6 @@ export type Database = {
           google_place_id: string
           id: string
           lat: number
-          latest_review_at: string
           latest_review_body: string
           lng: number
           name: string

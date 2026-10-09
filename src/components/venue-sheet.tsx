@@ -29,6 +29,7 @@ import {
   fetchNewQuestionCount,
   type AnswerSummaryRow,
 } from '@/lib/questionnaire';
+import { postedLabel } from '@/lib/review-dates';
 import { supabase } from '@/lib/supabase';
 import type { NearbyVenue } from '@/lib/use-nearby-venues';
 import { venueTags } from '@/lib/venue-tags';
@@ -39,6 +40,10 @@ type VenueReview = {
   body: string | null;
   author_name: string | null;
   is_mine: boolean;
+  /** A period counted in whole weeks; see @/lib/review-dates. */
+  posted_period: string | null;
+  /** The UTC day, only when the author shows dates. Never a time. */
+  posted_on: string | null;
 };
 
 /** An admin-written bullet about this venue. */
@@ -66,26 +71,34 @@ function bathroomConsensus(ratings: Ratings): { label: string; tally: string } |
 }
 
 function ReviewRow({ review }: { review: VenueReview }) {
+  // A period ("A few weeks ago"), or the day when the author shows dates. The
+  // server sends nothing finer, so nothing here can be finer either.
+  const posted = postedLabel(review.posted_period, review.posted_on);
+
   return (
     <View className="gap-2 border-t border-border py-4">
       <View className="flex-row items-center gap-2">
         <View className="size-8 items-center justify-center rounded-full bg-muted">
           <Icon as={CircleUser} className="size-5 text-muted-foreground" />
         </View>
-        {/* The alias when the review has one - venue_reviews decides, and says
-            nothing about which it is. */}
-        <Text numberOfLines={1} className="shrink font-medium text-foreground">
-          {review.author_name ?? 'Someone'}
-        </Text>
-        {/* With a different name on every review, the author cannot spot their
-            own by name any more. is_mine is answered for the caller alone, so
-            this marks it for them and for nobody else. */}
-        {review.is_mine ? (
-          <Badge variant="secondary">
-            <Text>You</Text>
-          </Badge>
-        ) : null}
-        <View className="flex-1" />
+        <View className="flex-1 gap-0.5">
+          <View className="flex-row items-center gap-2">
+            {/* The alias when the review has one - venue_reviews decides, and
+                says nothing about which it is. */}
+            <Text numberOfLines={1} className="shrink font-medium text-foreground">
+              {review.author_name ?? 'Someone'}
+            </Text>
+            {/* With a different name on every review, the author cannot spot
+                their own by name any more. is_mine is answered for the caller
+                alone, so this marks it for them and for nobody else. */}
+            {review.is_mine ? (
+              <Badge variant="secondary">
+                <Text>You</Text>
+              </Badge>
+            ) : null}
+          </View>
+          {posted ? <Text className="text-xs text-muted-foreground">{posted}</Text> : null}
+        </View>
         <StarRating value={review.stars} size="sm" />
       </View>
       {review.body ? (
@@ -234,9 +247,10 @@ export function VenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
         if (active) setRatings(data as Ratings | null);
       });
 
-    // A function rather than the table: author_id is not public, so the
-    // author's name is joined in server-side and "is this mine" is answered
-    // there too. Newest first, in the order the server sends them.
+    // A function rather than the table: author_id and the exact times are not
+    // public, so the name, "is this mine" and a rough date are all decided
+    // server-side. Newest week first, in the order the server sends them -
+    // within a week the order is deliberately meaningless.
     supabase.rpc('venue_reviews', { p_venue_id: venue.id }).then(({ data, error }) => {
       if (!active) return;
       // An empty list and a failed request are not the same thing, and
