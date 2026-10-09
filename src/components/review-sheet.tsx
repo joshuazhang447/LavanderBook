@@ -1,4 +1,12 @@
-import { CircleUser, Trash2, VenetianMask, X } from 'lucide-react-native';
+import {
+  Calendar,
+  CalendarOff,
+  CircleUser,
+  Trash2,
+  VenetianMask,
+  X,
+  type LucideIcon,
+} from 'lucide-react-native';
 import * as React from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
@@ -26,6 +34,7 @@ import {
   type AnswerMap,
   type Questionnaire,
 } from '@/lib/questionnaire';
+import { postedLabel } from '@/lib/review-dates';
 import { supabase } from '@/lib/supabase';
 import type { SelectedPoi } from '@/lib/venues';
 
@@ -158,26 +167,51 @@ type ReviewSheetProps = {
   onSaved: () => void;
 };
 
+/** What an existing review shows readers. Null fields: there is no review yet. */
+type Shown = { alias: string | null; hideDate: boolean; posted: string | null };
+
 /**
- * Which name this review is, or will be, shown under - said at the point of
- * posting, because that is when it matters and the only time it is decided.
+ * The name and the date this review is, or will be, shown with - said at the
+ * point of posting, because that is when it matters and, for a new review, the
+ * only time either is decided.
  */
 function postingAs(
-  profile: { display_name: string; per_place_names: boolean },
-  isExisting: boolean,
-  alias: string | null
-): { ownName: boolean; text: string } {
-  if (isExisting) {
-    return alias
-      ? { ownName: true, text: `Shown as ${alias}, a name only this review uses.` }
-      : { ownName: false, text: `Shown as ${profile.display_name}, your account name.` };
-  }
-  return profile.per_place_names
-    ? { ownName: true, text: 'Posts under a new random name, used for this place only.' }
-    : {
-        ownName: false,
-        text: `Posts as ${profile.display_name}. Per-place names are off in My Account.`,
-      };
+  profile: { display_name: string; per_place_names: boolean; hide_dates: boolean },
+  existing: Shown | null
+): { icon: LucideIcon; text: string }[] {
+  const name = existing
+    ? existing.alias
+      ? { icon: VenetianMask, text: `Shown as ${existing.alias}, a name only this review uses.` }
+      : { icon: CircleUser, text: `Shown as ${profile.display_name}, your account name.` }
+    : profile.per_place_names
+      ? { icon: VenetianMask, text: 'Posts under a new random name, used for this place only.' }
+      : {
+          icon: CircleUser,
+          text: `Posts as ${profile.display_name}. Per-place names are off in My Account.`,
+        };
+
+  const date = existing
+    ? existing.hideDate
+      ? {
+          icon: CalendarOff,
+          text: existing.posted
+            ? `Dated "${existing.posted}" - readers never see the day.`
+            : 'Readers never see the day it was posted.',
+        }
+      : {
+          icon: Calendar,
+          text: existing.posted
+            ? `Readers see the day it was posted, ${existing.posted}.`
+            : 'Readers see the day it was posted.',
+        }
+    : profile.hide_dates
+      ? { icon: CalendarOff, text: 'Readers see only a rough time, like "recently" - never the day.' }
+      : {
+          icon: Calendar,
+          text: 'Readers see the day you post it. Hidden dates are off in My Account.',
+        };
+
+  return [name, date];
 }
 
 export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: ReviewSheetProps) {
@@ -191,8 +225,8 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
   const [error, setError] = React.useState<string | null>(null);
   const [venueId, setVenueId] = React.useState<string | null>(knownVenueId ?? null);
   const [isExisting, setIsExisting] = React.useState(false);
-  /** The existing review's own name; null when it has none or there is no review yet. */
-  const [alias, setAlias] = React.useState<string | null>(null);
+  /** What the existing review shows readers; null when there is no review yet. */
+  const [shown, setShown] = React.useState<Shown | null>(null);
   const [confirmingDelete, setConfirmingDelete] = React.useState(false);
   const [questionnaire, setQuestionnaire] = React.useState<Questionnaire>([]);
   const [answers, setAnswers] = React.useState<AnswerMap>({});
@@ -250,8 +284,12 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
           setBathroom(review.trans_bathroom);
           setBody(review.body ?? '');
           setIsExisting(true);
-          // The generator cannot see that a RETURNS TABLE column is nullable.
-          setAlias((review.alias as string | null) ?? null);
+          setShown({
+            // The generator cannot see that a RETURNS TABLE column is nullable.
+            alias: (review.alias as string | null) ?? null,
+            hideDate: review.hide_date,
+            posted: postedLabel(review.posted_period, review.posted_on as string | null),
+          });
 
           const byId = new Map(tags.flatMap((tag) => tag.questions).map((q) => [q.id, q] as const));
           const mine = await fetchMyAnswers(review.id, byId).catch((): AnswerMap => ({}));
@@ -288,7 +326,7 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
     problems.size === 0 &&
     !busy;
 
-  const identity = profile ? postingAs(profile, isExisting, alias) : null;
+  const identity = profile ? postingAs(profile, isExisting ? shown : null) : [];
 
   // One sentence about whatever is in the way, or nothing.
   const basicsMissing = stars === null || bathroom === null;
@@ -520,13 +558,14 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
                     </Text>
                   </View>
 
-                  {identity ? (
-                    <View className="flex-row items-center gap-2">
-                      <Icon
-                        as={identity.ownName ? VenetianMask : CircleUser}
-                        className="size-4 text-muted-foreground"
-                      />
-                      <Text className="flex-1 text-xs text-muted-foreground">{identity.text}</Text>
+                  {identity.length > 0 ? (
+                    <View className="gap-1.5">
+                      {identity.map((line) => (
+                        <View key={line.text} className="flex-row items-center gap-2">
+                          <Icon as={line.icon} className="size-4 text-muted-foreground" />
+                          <Text className="flex-1 text-xs text-muted-foreground">{line.text}</Text>
+                        </View>
+                      ))}
                     </View>
                   ) : null}
 

@@ -85,6 +85,13 @@ loaded by someone who is not an administrator is simply empty.
   one person's reviews and narrow down where they live, work or go. Administrators can
   still see which account posted a review. Turning the setting off affects only later
   reviews; it never reattaches an account name to a review that already has its own.
+- **No exact times are published.** The time a review was posted is never served to the
+  public, so it cannot be matched against location data from apps, advertisers or phone
+  companies. With *hidden dates*, also on by default, a review shows only a rough period
+  such as "a few weeks ago", counted in whole weeks so that even someone checking
+  repeatedly learns no more than the week. With it off, readers see the day but never the
+  time. Each review keeps the setting it was posted with. New reviews still appear on the
+  map straight away; only administrators can see exactly when one was posted.
 - **Email addresses are never public.** They are held by the authentication service and are
   not shown to other members.
 - **Account identifiers stay private.** An account's internal id, sign-up date and

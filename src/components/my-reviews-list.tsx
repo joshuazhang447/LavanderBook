@@ -1,6 +1,6 @@
 import { useFocusEffect } from 'expo-router';
 import { useTabTrigger } from 'expo-router/ui';
-import { CircleUser, MapPin, VenetianMask } from 'lucide-react-native';
+import { Calendar, CalendarOff, CircleUser, MapPin, VenetianMask } from 'lucide-react-native';
 import * as React from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
@@ -10,6 +10,7 @@ import { StarRating } from '@/components/star-rating';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { focusMapOn } from '@/lib/map-focus';
+import { postedLabel } from '@/lib/review-dates';
 import { supabase } from '@/lib/supabase';
 import type { SelectedPoi } from '@/lib/venues';
 
@@ -18,6 +19,10 @@ type MyReview = {
   updated_at: string;
   /** The name readers see on this review. Null: the account's display name. */
   alias: string | null;
+  /** True when readers see only a rough period, not the day. */
+  hideDate: boolean;
+  /** What readers see for when it was posted: a period, or the day. */
+  posted: string | null;
   venue: {
     id: string;
     name: string;
@@ -29,15 +34,15 @@ type MyReview = {
 
 type MyReviewsListProps = {
   /**
-   * Bumped when the account's reviews were renamed while this list was on
-   * screen - turning per-place names on does that without leaving the tab, so
-   * refetching on focus alone would never notice.
+   * Bumped when how the account's reviews are shown changed while this list
+   * was on screen - turning a privacy switch on does that without leaving the
+   * tab, so refetching on focus alone would never notice.
    */
-  renames?: number;
+  changes?: number;
 };
 
 /** The signed-in account's reviews. my_reviews() knows who is asking, so no id is passed in. */
-export function MyReviewsList({ renames = 0 }: MyReviewsListProps) {
+export function MyReviewsList({ changes = 0 }: MyReviewsListProps) {
   // switchTab rather than router.navigate: this is the mechanism the tab bar
   // itself uses, so it lands on the tab rather than pushing over it.
   const { switchTab } = useTabTrigger({ name: 'map' });
@@ -56,6 +61,8 @@ export function MyReviewsList({ renames = 0 }: MyReviewsListProps) {
           updated_at: row.updated_at,
           // The generator cannot see that a RETURNS TABLE column is nullable.
           alias: (row.alias as string | null) ?? null,
+          hideDate: row.hide_date,
+          posted: postedLabel(row.posted_period, row.posted_on as string | null),
           venue: {
             id: row.venue_id,
             name: row.venue_name,
@@ -77,9 +84,9 @@ export function MyReviewsList({ renames = 0 }: MyReviewsListProps) {
   useFocusEffect(refetch);
 
   React.useEffect(() => {
-    if (renames === 0) return;
+    if (changes === 0) return;
     return refetch();
-  }, [renames, refetch]);
+  }, [changes, refetch]);
 
   if (reviews === null) {
     return (
@@ -125,7 +132,7 @@ export function MyReviewsList({ renames = 0 }: MyReviewsListProps) {
                 accessibilityRole="button"
                 accessibilityLabel={`${review.venue.name}, ${review.stars} of 5, shown as ${
                   review.alias ?? 'your account name'
-                }`}
+                }${review.posted ? `, ${review.posted}` : ''}`}
                 className="flex-1 gap-1 p-4 active:bg-accent">
                 {/* numberOfLines truncates with an ellipsis rather than wrapping
                     a long venue name across the row. */}
@@ -144,6 +151,19 @@ export function MyReviewsList({ renames = 0 }: MyReviewsListProps) {
                     {review.alias ? `Shown as ${review.alias}` : 'Shown under your account name'}
                   </Text>
                 </View>
+                {/* What readers see for the date, so "hidden" is something the
+                    author can check rather than take on trust. */}
+                {review.posted ? (
+                  <View className="flex-row items-center gap-1">
+                    <Icon
+                      as={review.hideDate ? CalendarOff : Calendar}
+                      className="size-3.5 text-muted-foreground"
+                    />
+                    <Text numberOfLines={1} className="flex-1 text-xs text-muted-foreground">
+                      {review.hideDate ? `Dated "${review.posted}"` : `Dated ${review.posted}`}
+                    </Text>
+                  </View>
+                ) : null}
               </Pressable>
 
               {review.venue.lat !== null && review.venue.lng !== null ? (

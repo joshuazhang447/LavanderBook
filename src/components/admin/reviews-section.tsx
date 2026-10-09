@@ -1,4 +1,5 @@
 import {
+  CalendarOff,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -53,6 +54,7 @@ import {
   type ReviewSort,
 } from '@/lib/admin';
 import { ANSWER_LABEL, formatStoredAnswer, type Answer } from '@/lib/answers';
+import { periodLabel } from '@/lib/review-dates';
 import { cn } from '@/lib/utils';
 
 /**
@@ -262,6 +264,13 @@ function AuthorAccount({ review }: { review: AdminReview }) {
           ? `. Readers see ${review.alias} instead, a name used on this review only.`
           : '. Readers see that name too: per-place names have been off since this was posted.'}
       </Text>
+      {/* The panel shows the exact time; readers never get it. Said here so a
+          moderator quoting a review back knows which date that person saw. */}
+      <Text className="text-xs text-muted-foreground">
+        {review.hideDate
+          ? `Readers see "${periodLabel(review.postedPeriod) ?? 'a rough time'}" instead of the date. Exact times are shown only here.`
+          : `Readers see the day it was posted (in UTC), never the time.`}
+      </Text>
       <Pressable
         onPress={copy}
         role="button"
@@ -344,13 +353,20 @@ function ReviewRow({ review, onEdit, onDelete, onFocus }: ReviewRowProps) {
                 <Text>Admin</Text>
               </Badge>
             ) : null}
-            <Text
-              className="text-xs text-muted-foreground"
-              {...Platform.select({
-                web: { title: EXACT_FORMAT.format(new Date(review.createdAt)) },
-              })}>
-              {DATE_FORMAT.format(new Date(review.createdAt))}
-            </Text>
+            {/* The crossed-out calendar: readers see only a period for this
+                one. The date beside it is the panel's view, not theirs. */}
+            <View className="flex-row items-center gap-1">
+              {review.hideDate ? (
+                <Icon as={CalendarOff} className="size-3.5 text-muted-foreground" />
+              ) : null}
+              <Text
+                className="text-xs text-muted-foreground"
+                {...Platform.select({
+                  web: { title: EXACT_FORMAT.format(new Date(review.createdAt)) },
+                })}>
+                {DATE_FORMAT.format(new Date(review.createdAt))}
+              </Text>
+            </View>
             {edited ? (
               <Text
                 className="text-xs text-muted-foreground"
@@ -651,7 +667,8 @@ export function ReviewsSection({
           <Text className="text-2xl font-bold text-foreground">Reviews</Text>
           <Text className="text-sm text-muted-foreground">
             Every review posted to LavenderBook. Editing one is recorded on it. A mask marks a
-            per-place name: what readers see instead of the account name.
+            per-place name, shown to readers instead of the account name. A crossed-out calendar
+            marks a date readers can&apos;t see; they get a rough period instead.
           </Text>
         </View>
 

@@ -203,6 +203,10 @@ export type AdminReview = {
   updatedAt: string;
   /** Set when an administrator has edited this review. See admin_update_review. */
   adminEditedAt: string | null;
+  /** True when readers see only `postedPeriod`, not the day. The panel always sees the exact time. */
+  hideDate: boolean;
+  /** recent | weeks | months | half_year | year - what readers see for a hidden date. */
+  postedPeriod: string;
   /** How many tag questions this review answered. */
   answerCount: number;
   venueTags: TagRef[];
@@ -318,6 +322,8 @@ export async function listAdminReviews(query: AdminReviewQuery): Promise<AdminRe
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     adminEditedAt: (row.admin_edited_at as string | null) ?? null,
+    hideDate: row.hide_date,
+    postedPeriod: row.posted_period,
     answerCount: Number(row.answer_count),
     venueTags: toTagRefs(row.venue_tags),
   }));

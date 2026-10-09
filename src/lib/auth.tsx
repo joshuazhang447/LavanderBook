@@ -22,6 +22,11 @@ type AuthState = {
    * renames every review still shown under the account name, server-side.
    */
   setPerPlaceNames: (enabled: boolean) => Promise<void>;
+  /**
+   * Turns hidden dates on or off for this account. Turning them on also hides
+   * the date of every review that still shows one, server-side.
+   */
+  setHideDates: (enabled: boolean) => Promise<void>;
 };
 
 const AuthContext = React.createContext<AuthState | null>(null);
@@ -154,6 +159,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfile((current) => (current ? { ...current, per_place_names: data } : current));
   }, []);
 
+  const setHideDates = React.useCallback(async (enabled: boolean) => {
+    const { data, error } = await supabase.rpc('set_hide_dates', { p_enabled: enabled });
+    if (error) throw error;
+    setProfile((current) => (current ? { ...current, hide_dates: data } : current));
+  }, []);
+
   const value = React.useMemo(
     () => ({
       session,
@@ -162,8 +173,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signInWithGoogle,
       signOut,
       setPerPlaceNames,
+      setHideDates,
     }),
-    [session, currentProfile, loading, signInWithGoogle, signOut, setPerPlaceNames]
+    [session, currentProfile, loading, signInWithGoogle, signOut, setPerPlaceNames, setHideDates]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
