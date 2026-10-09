@@ -212,12 +212,7 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
         // section appearing under a thumb already heading for Post is worse
         // than a slightly longer wait.
         const [{ data: review }, tags] = await Promise.all([
-          supabase
-            .from('reviews')
-            .select('id, stars, trans_bathroom, body')
-            .eq('venue_id', resolvedVenueId)
-            .eq('author_id', userId)
-            .maybeSingle(),
+          supabase.rpc('my_reviews').eq('venue_id', resolvedVenueId).maybeSingle(),
           // An untagged venue has no questions. A failed fetch looks the same,
           // and the review still posts - stars and the bathroom answer are
           // worth more than a blocked form.
@@ -286,11 +281,9 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
     setError(null);
     setBusy(true);
     try {
-      const { error: deleteError } = await supabase
-        .from('reviews')
-        .delete()
-        .eq('venue_id', venueId)
-        .eq('author_id', userId);
+      const { error: deleteError } = await supabase.rpc('delete_my_review', {
+        p_venue_id: venueId,
+      });
       if (deleteError) throw deleteError;
       onSaved();
     } catch (e) {

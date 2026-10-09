@@ -82,8 +82,12 @@ loaded by someone who is not an administrator is simply empty.
   `QuietHeron284`. That name is the only thing shown on a review.
 - **Email addresses are never public.** They are held by the authentication service and are
   not shown to other members.
-- **The public cannot sign themselves up as staff.** Public sign-in is Google only;
-  administrator accounts are created by hand.
+- **Account identifiers stay private.** An account's internal id, sign-up date and
+  suspension date are never served to the public API — only the account itself and
+  administrators can read them. Nor is which administrator made a given change.
+- **The public cannot sign themselves up as staff.** Everyone signs in with Google,
+  administrators included; an account becomes an administrator only when it is added to
+  the administrator list, by hand or by an existing administrator.
 - **Access is enforced in the database, not in the interface.** Row-level security governs
   what any given account can read and write, and each administrative action has its own
   permission check on the server.
@@ -177,9 +181,8 @@ npx supabase functions deploy place-details
 
 In the Supabase dashboard, under **Authentication → Providers**:
 
-- **Google** — enabled. This is how the public signs in.
-- **Email** — enabled, with *Allow new users to sign up* turned **off**. Email sign-in
-  exists only for administrator accounts, which are created by hand.
+- **Google** — enabled. This is how everyone signs in, administrators included.
+- **Email** — disabled. Nothing in the application signs in with a password.
 
 ### 6. Run it
 
@@ -206,16 +209,17 @@ development but is not yet configured for distribution.
 
 There is deliberately no way to do this from inside the application.
 
-1. In the Supabase dashboard, go to **Authentication → Users → Add user**. Enter an email
-   address and a long password, and mark the address as auto-confirmed.
-2. In the **SQL Editor**, add that user to the administrator list:
+1. Sign in to the application with Google, using the account that should become the
+   administrator. This creates the account.
+2. In the Supabase dashboard's **SQL Editor**, add that account to the administrator list,
+   using its Google address:
 
    ```sql
    insert into public.admins (user_id, note)
    select id, 'founder' from auth.users where email = 'you@example.com';
    ```
 
-3. Open `/admin` in a browser and sign in with that email address and password.
+3. Open `/admin` in a browser and choose **Continue with Google**.
 
 From then on, administrators are granted and revoked from **Users** inside the panel. The
 panel refuses to let an administrator revoke their own access, so it cannot be left with

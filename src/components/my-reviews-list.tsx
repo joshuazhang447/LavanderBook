@@ -25,11 +25,8 @@ type MyReview = {
   };
 };
 
-type MyReviewsListProps = {
-  userId: string;
-};
-
-export function MyReviewsList({ userId }: MyReviewsListProps) {
+/** The signed-in account's reviews. my_reviews() knows who is asking, so no id is passed in. */
+export function MyReviewsList() {
   // switchTab rather than router.navigate: this is the mechanism the tab bar
   // itself uses, so it lands on the tab rather than pushing over it.
   const { switchTab } = useTabTrigger({ name: 'map' });
@@ -38,19 +35,29 @@ export function MyReviewsList({ userId }: MyReviewsListProps) {
   const refetch = React.useCallback(() => {
     let active = true;
 
-    supabase
-      .from('reviews')
-      .select('stars, updated_at, venue:venues(id, name, lat, lng, google_place_id)')
-      .eq('author_id', userId)
-      .order('updated_at', { ascending: false })
-      .then(({ data }) => {
-        if (active) setReviews((data as MyReview[] | null) ?? []);
-      });
+    // Through my_reviews() rather than the table, which can no longer be
+    // filtered by author_id. Most recently saved first, as the server sends it.
+    supabase.rpc('my_reviews').then(({ data }) => {
+      if (!active) return;
+      setReviews(
+        (data ?? []).map((row) => ({
+          stars: row.stars,
+          updated_at: row.updated_at,
+          venue: {
+            id: row.venue_id,
+            name: row.venue_name,
+            lat: row.venue_lat,
+            lng: row.venue_lng,
+            google_place_id: row.venue_google_place_id,
+          },
+        }))
+      );
+    });
 
     return () => {
       active = false;
     };
-  }, [userId]);
+  }, []);
 
   // On focus rather than only on mount: the tab navigator keeps screens mounted,
   // so a review posted over on the Map tab would otherwise leave this stale.
