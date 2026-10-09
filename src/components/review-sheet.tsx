@@ -1,4 +1,4 @@
-import { Trash2, X } from 'lucide-react-native';
+import { CircleUser, Trash2, VenetianMask, X } from 'lucide-react-native';
 import * as React from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
@@ -158,8 +158,30 @@ type ReviewSheetProps = {
   onSaved: () => void;
 };
 
+/**
+ * Which name this review is, or will be, shown under - said at the point of
+ * posting, because that is when it matters and the only time it is decided.
+ */
+function postingAs(
+  profile: { display_name: string; per_place_names: boolean },
+  isExisting: boolean,
+  alias: string | null
+): { ownName: boolean; text: string } {
+  if (isExisting) {
+    return alias
+      ? { ownName: true, text: `Shown as ${alias}, a name only this review uses.` }
+      : { ownName: false, text: `Shown as ${profile.display_name}, your account name.` };
+  }
+  return profile.per_place_names
+    ? { ownName: true, text: 'Posts under a new random name, used for this place only.' }
+    : {
+        ownName: false,
+        text: `Posts as ${profile.display_name}. Per-place names are off in My Account.`,
+      };
+}
+
 export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: ReviewSheetProps) {
-  const { session, signInWithGoogle } = useAuth();
+  const { session, profile, signInWithGoogle } = useAuth();
 
   const [stars, setStars] = React.useState<number | null>(null);
   const [bathroom, setBathroom] = React.useState<Answer | null>(null);
@@ -169,6 +191,8 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
   const [error, setError] = React.useState<string | null>(null);
   const [venueId, setVenueId] = React.useState<string | null>(knownVenueId ?? null);
   const [isExisting, setIsExisting] = React.useState(false);
+  /** The existing review's own name; null when it has none or there is no review yet. */
+  const [alias, setAlias] = React.useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = React.useState(false);
   const [questionnaire, setQuestionnaire] = React.useState<Questionnaire>([]);
   const [answers, setAnswers] = React.useState<AnswerMap>({});
@@ -226,6 +250,8 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
           setBathroom(review.trans_bathroom);
           setBody(review.body ?? '');
           setIsExisting(true);
+          // The generator cannot see that a RETURNS TABLE column is nullable.
+          setAlias((review.alias as string | null) ?? null);
 
           const byId = new Map(tags.flatMap((tag) => tag.questions).map((q) => [q.id, q] as const));
           const mine = await fetchMyAnswers(review.id, byId).catch((): AnswerMap => ({}));
@@ -261,6 +287,8 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
     missingRequired.length === 0 &&
     problems.size === 0 &&
     !busy;
+
+  const identity = profile ? postingAs(profile, isExisting, alias) : null;
 
   // One sentence about whatever is in the way, or nothing.
   const basicsMissing = stars === null || bathroom === null;
@@ -491,6 +519,16 @@ export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Re
                       {body.length} / {MAX_BODY}
                     </Text>
                   </View>
+
+                  {identity ? (
+                    <View className="flex-row items-center gap-2">
+                      <Icon
+                        as={identity.ownName ? VenetianMask : CircleUser}
+                        className="size-4 text-muted-foreground"
+                      />
+                      <Text className="flex-1 text-xs text-muted-foreground">{identity.text}</Text>
+                    </View>
+                  ) : null}
 
                   {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
 

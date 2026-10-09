@@ -79,7 +79,12 @@ loaded by someone who is not an administrator is simply empty.
 ## Privacy and safety
 
 - **Reviews are pseudonymous.** Every account is issued a generated display name such as
-  `QuietHeron284`. That name is the only thing shown on a review.
+  `SamAltman123`, and no account details are shown on a review.
+- **Reviews cannot be linked to each other by name.** With *per-place names*, on by
+  default, each review is shown under a name generated for it alone, so nobody can collect
+  one person's reviews and narrow down where they live, work or go. Administrators can
+  still see which account posted a review. Turning the setting off affects only later
+  reviews; it never reattaches an account name to a review that already has its own.
 - **Email addresses are never public.** They are held by the authentication service and are
   not shown to other members.
 - **Account identifiers stay private.** An account's internal id, sign-up date and

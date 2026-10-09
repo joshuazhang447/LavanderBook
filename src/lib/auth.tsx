@@ -17,6 +17,11 @@ type AuthState = {
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  /**
+   * Turns per-place names on or off for this account. Turning them on also
+   * renames every review still shown under the account name, server-side.
+   */
+  setPerPlaceNames: (enabled: boolean) => Promise<void>;
 };
 
 const AuthContext = React.createContext<AuthState | null>(null);
@@ -140,9 +145,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   }, []);
 
+  // Through a function, not an update: profiles has no UPDATE grant, and
+  // turning this on has to rename reviews as well as write the flag.
+  const setPerPlaceNames = React.useCallback(async (enabled: boolean) => {
+    const { data, error } = await supabase.rpc('set_per_place_names', { p_enabled: enabled });
+    if (error) throw error;
+    // What the server stored, not what was asked for.
+    setProfile((current) => (current ? { ...current, per_place_names: data } : current));
+  }, []);
+
   const value = React.useMemo(
-    () => ({ session, profile: currentProfile, loading, signInWithGoogle, signOut }),
-    [session, currentProfile, loading, signInWithGoogle, signOut]
+    () => ({
+      session,
+      profile: currentProfile,
+      loading,
+      signInWithGoogle,
+      signOut,
+      setPerPlaceNames,
+    }),
+    [session, currentProfile, loading, signInWithGoogle, signOut, setPerPlaceNames]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

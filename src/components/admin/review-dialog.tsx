@@ -14,7 +14,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Text } from '@/components/ui/text';
 import { Textarea } from '@/components/ui/textarea';
-import { updateReview, type AdminReview } from '@/lib/admin';
+import { reviewerLabel, updateReview, type AdminReview } from '@/lib/admin';
 import { ANSWER_LABEL, type Answer } from '@/lib/answers';
 
 /** Mirrors the reviews_body_length check constraint, and review-sheet.tsx. */
@@ -75,8 +75,9 @@ export function ReviewDialog({ review, onClose, onSaved }: ReviewDialogProps) {
         <DialogHeader>
           <DialogTitle>Edit this review</DialogTitle>
           <DialogDescription>
-            {review.authorName}&rsquo;s review of {review.venueName}. It stays published under their
-            name, so the panel records that an administrator changed it.
+            {reviewerLabel(review)}&rsquo;s review of {review.venueName}. It stays published under
+            {review.alias ? ' that per-place name' : ' their name'}, so the panel records that an
+            administrator changed it.
           </DialogDescription>
         </DialogHeader>
 

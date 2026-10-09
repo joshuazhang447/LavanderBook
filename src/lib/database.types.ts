@@ -63,18 +63,21 @@ export type Database = {
           created_at: string
           display_name: string
           id: string
+          per_place_names: boolean
         }
         Insert: {
           banned_at?: string | null
           created_at?: string
           display_name: string
           id: string
+          per_place_names?: boolean
         }
         Update: {
           banned_at?: string | null
           created_at?: string
           display_name?: string
           id?: string
+          per_place_names?: boolean
         }
         Relationships: []
       }
@@ -259,6 +262,7 @@ export type Database = {
         Row: {
           admin_edited_at: string | null
           admin_edited_by: string | null
+          alias: string | null
           author_id: string
           body: string | null
           created_at: string
@@ -271,6 +275,7 @@ export type Database = {
         Insert: {
           admin_edited_at?: string | null
           admin_edited_by?: string | null
+          alias?: string | null
           author_id: string
           body?: string | null
           created_at?: string
@@ -283,6 +288,7 @@ export type Database = {
         Update: {
           admin_edited_at?: string | null
           admin_edited_by?: string | null
+          alias?: string | null
           author_id?: string
           body?: string | null
           created_at?: string
@@ -623,6 +629,7 @@ export type Database = {
         }
         Returns: {
           admin_edited_at: string
+          alias: string
           answer_count: number
           author_banned_at: string
           author_id: string
@@ -821,6 +828,7 @@ export type Database = {
       my_reviews: {
         Args: never
         Returns: {
+          alias: string
           body: string
           id: string
           stars: number
@@ -844,6 +852,8 @@ export type Database = {
         Args: { p_kind: Database["public"]["Enums"]["question_kind"] }
         Returns: boolean
       }
+      secure_random_below: { Args: { p_n: number }; Returns: number }
+      set_per_place_names: { Args: { p_enabled: boolean }; Returns: boolean }
       set_question_options: {
         Args: { p_options: string[]; p_question_id: string }
         Returns: undefined
