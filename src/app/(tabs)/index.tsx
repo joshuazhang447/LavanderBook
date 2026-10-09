@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
+import { LocationChoiceDialog, LocationChoiceScreen } from '@/components/location-choice';
 import { VenueList } from '@/components/venue-list';
 import { clearMapFocus, focusMapOn, useMapFocus } from '@/lib/map-focus';
 import type { MapViewMode } from '@/components/map-controls';
@@ -10,11 +11,14 @@ import { ReviewSheet } from '@/components/review-sheet';
 import { Text } from '@/components/ui/text';
 import { VenueMap } from '@/components/venue-map';
 import { VenueSheet } from '@/components/venue-sheet';
+import { useMapLocation } from '@/lib/map-location';
 import {
-  INITIAL_LATITUDE_DELTA,
+  AREA_RADIUS_METERS,
+  METERS_PER_DEGREE_LAT,
   useCurrentLocation,
   useFollowPosition,
   VIEW_RADIUS_METERS,
+  type Coords,
 } from '@/lib/use-location';
 import type { MapRegion, NearbyVenue } from '@/lib/use-nearby-venues';
 import { useNearbyVenues } from '@/lib/use-nearby-venues';
@@ -69,6 +73,9 @@ export default function MapScreen() {
   // Lifted out of MapSearch: on a phone the rest of the controls row stands
   // down while the field is open, so the row has to know about it too.
   const [searchOpen, setSearchOpen] = React.useState(false);
+  // The near me / area / city choice, opened from the locate button while the
+  // map is not following anyone.
+  const [choosingLocation, setChoosingLocation] = React.useState(false);
 
   // Set by Locate on a review over in the account tab.
   const focus = useMapFocus();
@@ -77,12 +84,21 @@ export default function MapScreen() {
     [focus]
   );
 
+  // Where the map starts, and whether it may follow anyone - chosen on this
+  // device, never asked of the OS until someone picks "Near me". See
+  // @/lib/map-location.
+  const mapLocation = useMapLocation();
+  const location = useCurrentLocation(mapLocation.usingDevice);
+  // On the phone's position: chose it, the OS allows it, and it has not failed.
+  // A GPS failure falls back to the place below rather than to an error screen.
+  const onDevice =
+    mapLocation.usingDevice && location.status !== 'denied' && location.status !== 'error';
+
   // Derived rather than switched off in an effect: arriving at a venue and
   // following the user are mutually exclusive, and following would otherwise
   // drag the map off the venue on the very next fix.
-  const following = followPref && !goTo;
+  const following = onDevice && followPref && !goTo;
 
-  const location = useCurrentLocation();
   // No GPS at all in List view, or once the user has panned away.
   const { position: followPosition, anchor: followAnchor } = useFollowPosition(
     mode === 'map' && following,
@@ -113,20 +129,47 @@ export default function MapScreen() {
     refreshTimer.current = setTimeout(() => setRefreshing(false), REFRESH_SPIN_MS);
   }, []);
 
+  // Where the map opens: the user, or the city or general area they chose. A
+  // place opens wider than the user does - a city centre, not a doorstep.
+  const start = React.useMemo<(Coords & { radius: number }) | null>(() => {
+    if (onDevice) {
+      return location.status === 'granted'
+        ? { latitude: location.latitude, longitude: location.longitude, radius: VIEW_RADIUS_METERS }
+        : null;
+    }
+    const place = mapLocation.place;
+    return place
+      ? { latitude: place.latitude, longitude: place.longitude, radius: AREA_RADIUS_METERS }
+      : null;
+  }, [onDevice, location, mapLocation.place]);
+
+  // Changes when the map should open somewhere else - switching location on or
+  // off, or picking another city - and not on every GPS fix.
+  const startKey = onDevice ? 'device' : start ? `${start.latitude},${start.longitude}` : 'none';
+
+  // A new start is a new map: forget where the old one was panned to, or the
+  // next fetch would be for a city the user just left. Done during render,
+  // like the reviews section's focus reset, so no fetch goes out for the old
+  // region first.
+  const [appliedStartKey, setAppliedStartKey] = React.useState(startKey);
+  if (appliedStartKey !== startKey) {
+    setAppliedStartKey(startKey);
+    setRegion(null);
+    setFollowPref(true);
+  }
+
   // onRegionChangeComplete does not fire until the map is first moved, so seed
   // the region from the opening view or nothing loads until the user pans.
-  const initialRegion = React.useMemo<MapRegion | null>(
-    () =>
-      location.status === 'granted'
-        ? {
-            latitude: location.latitude,
-            longitude: location.longitude,
-            latitudeDelta: INITIAL_LATITUDE_DELTA,
-            longitudeDelta: INITIAL_LATITUDE_DELTA,
-          }
-        : null,
-    [location]
-  );
+  const initialRegion = React.useMemo<MapRegion | null>(() => {
+    if (!start) return null;
+    const delta = (start.radius * 2) / METERS_PER_DEGREE_LAT;
+    return {
+      latitude: start.latitude,
+      longitude: start.longitude,
+      latitudeDelta: delta,
+      longitudeDelta: delta,
+    };
+  }, [start]);
 
   const pannedRegion = region ?? initialRegion;
 
@@ -164,9 +207,22 @@ export default function MapScreen() {
     return alreadyDrawn ? null : searchResult;
   }, [searchResult, venues]);
 
+  // Where the map starts is unknown until the saved choice has been read.
+  if (!mapLocation.ready) {
+    return (
+      <View className="flex-1 items-center justify-center bg-background">
+        <ActivityIndicator />
+      </View>
+    );
+  }
+
+  // First visit, before any choice: near me, an area, or a city. No OS prompt
+  // has been shown yet, and none will be unless they pick "Near me".
+  if (mapLocation.mode === null) return <LocationChoiceScreen />;
+
   // The map reads its centre once, on mount, so wait for the position rather
   // than mounting somewhere arbitrary and jumping afterwards.
-  if (location.status === 'loading') {
+  if (onDevice && location.status === 'loading') {
     return (
       <View className="flex-1 items-center justify-center gap-3 bg-background">
         <ActivityIndicator />
@@ -175,27 +231,22 @@ export default function MapScreen() {
     );
   }
 
-  if (location.status !== 'granted') {
-    return (
-      <View className="flex-1 items-center justify-center gap-2 bg-background px-8">
-        <Text className="text-lg font-semibold text-foreground">Location needed</Text>
-        <Text className="text-center text-sm text-muted-foreground">
-          {location.status === 'denied'
-            ? 'LavenderBook shows venues around you, so it needs location access. Enable it in your settings and reopen this tab.'
-            : location.message}
-        </Text>
-      </View>
-    );
-  }
+  // Not following, no saved city, and the phone's time zone points nowhere the
+  // data knows (UTC, say): there is nowhere sensible to open, so ask.
+  if (!start) return <LocationChoiceScreen />;
 
   return (
     <View className="flex-1 bg-background">
       {mode === 'map' ? (
         <VenueMap
+          // Remounted when the map should open somewhere else; see startKey.
+          key={startKey}
           // If we arrived here from Locate, open at the venue rather than
           // opening on the user and animating across: an animate issued the
           // instant the map mounts can be dropped before it is ready.
-          center={goTo ?? location}
+          center={goTo ?? start}
+          initialRadiusMeters={goTo ? VIEW_RADIUS_METERS : start.radius}
+          showsUser={onDevice}
           venues={venues}
           followCenter={goTo ?? (following ? followPosition : null)}
           // Either a new Locate request or a recentre press re-issues the move.
@@ -229,9 +280,13 @@ export default function MapScreen() {
         <VenueList
           // Already fetched for the visible region: opening the list is free.
           venues={venues}
-          // Search results are ordered from the same point the distances are
-          // measured from, so the two agree.
-          origin={fetchRegion}
+          // Distances from the user themselves while following, otherwise from
+          // the middle of the map. Exact, and used only on the device.
+          origin={
+            following
+              ? (followPosition ?? (location.status === 'granted' ? location : fetchRegion))
+              : fetchRegion
+          }
           onSelectVenue={setViewingVenue}
           onLocateVenue={(venue) => {
             focusMapOn({ latitude: venue.lat, longitude: venue.lng });
@@ -269,7 +324,13 @@ export default function MapScreen() {
       {mode === 'map' ? (
         <RecenterButton
           following={following}
+          usingLocation={onDevice}
           onPress={() => {
+            // Not following anyone: offer the choice rather than doing nothing.
+            if (!onDevice) {
+              setChoosingLocation(true);
+              return;
+            }
             setFollowPref(true);
             // Always re-issue the camera move. Pressing while already following
             // used to be a no-op, because the target value had not changed.
@@ -280,6 +341,8 @@ export default function MapScreen() {
           }}
         />
       ) : null}
+
+      <LocationChoiceDialog open={choosingLocation} onOpenChange={setChoosingLocation} />
 
       {viewingVenue ? (
         <VenueSheet

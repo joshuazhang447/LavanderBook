@@ -6,7 +6,7 @@ import { SearchMarker } from '@/components/search-marker';
 import { VenueCloseMarker, VenueMarker } from '@/components/venue-marker';
 import type { PlaceResult } from '@/lib/place-search';
 import type { Coords } from '@/lib/use-location';
-import { distanceMeters, INITIAL_LATITUDE_DELTA } from '@/lib/use-location';
+import { distanceMeters, VIEW_RADIUS_METERS } from '@/lib/use-location';
 import type { MapRegion, NearbyVenue } from '@/lib/use-nearby-venues';
 import type { SelectedPoi } from '@/lib/venues';
 
@@ -21,6 +21,13 @@ const PROGRAMMATIC_SETTLE_MS = FOLLOW_ANIMATION_MS + 250;
 
 type VenueMapProps = {
   center: Coords;
+  /** How much ground to show around `center` when the map opens. */
+  initialRadiusMeters?: number;
+  /**
+   * The blue dot. Only while following: someone who chose an area or a city
+   * did not ask for their position to be on screen, even when the OS allows it.
+   */
+  showsUser: boolean;
   onSelectPoi: (poi: SelectedPoi) => void;
   /** Tapping bare map, away from any place label. */
   onDismiss: () => void;
@@ -51,6 +58,8 @@ type VenueMapProps = {
  */
 export function VenueMap({
   center,
+  initialRadiusMeters = VIEW_RADIUS_METERS,
+  showsUser,
   onSelectPoi,
   onDismiss,
   venues,
@@ -70,9 +79,10 @@ export function VenueMap({
   const followedRef = React.useRef<Coords | null>(null);
   // Kept current even for programmatic moves, so a follow-driven refetch can
   // reuse whatever zoom the user chose.
+  const initialDelta = (initialRadiusMeters * 2) / 111320;
   const deltasRef = React.useRef({
-    latitudeDelta: INITIAL_LATITUDE_DELTA,
-    longitudeDelta: INITIAL_LATITUDE_DELTA,
+    latitudeDelta: initialDelta,
+    longitudeDelta: initialDelta,
   });
 
   React.useEffect(() => {
@@ -107,8 +117,8 @@ export function VenueMap({
       initialRegion={{
         latitude: center.latitude,
         longitude: center.longitude,
-        latitudeDelta: INITIAL_LATITUDE_DELTA,
-        longitudeDelta: INITIAL_LATITUDE_DELTA,
+        latitudeDelta: initialDelta,
+        longitudeDelta: initialDelta,
       }}
       // Complete, not onRegionChange: the latter fires continuously through the
       // whole gesture and would fire a query per frame.
@@ -139,7 +149,7 @@ export function VenueMap({
         onUserPannedTo(region);
       }}
       onMapReady={() => setReady(true)}
-      showsUserLocation
+      showsUserLocation={showsUser}
       // Google's own chrome, hidden to match the web map. The my-location button
       // is deliberately off: react-native-maps registers no click listener for
       // it, so its taps cannot be hooked to resume following.

@@ -1,4 +1,4 @@
-import { List, LocateFixed, Map as MapIcon, RotateCw } from 'lucide-react-native';
+import { List, LocateFixed, LocateOff, Map as MapIcon, RotateCw } from 'lucide-react-native';
 import * as React from 'react';
 import { Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -202,6 +202,12 @@ export function MapControls({
 
 type RecenterButtonProps = {
   following: boolean;
+  /**
+   * Whether the map is on the phone's location at all. When it is not - an
+   * area or a city was chosen - the button offers that choice instead of
+   * recentring, and says so.
+   */
+  usingLocation: boolean;
   onPress: () => void;
 };
 
@@ -209,7 +215,7 @@ type RecenterButtonProps = {
  * Bottom-right, where both Google and Apple put it. Filled while following, so
  * the button doubles as the indicator for whether the map is tracking you.
  */
-export function RecenterButton({ following, onPress }: RecenterButtonProps) {
+export function RecenterButton({ following, usingLocation, onPress }: RecenterButtonProps) {
   return (
     <View pointerEvents="box-none" className="absolute bottom-5 right-4">
       <TextClassContext.Provider
@@ -217,13 +223,19 @@ export function RecenterButton({ following, onPress }: RecenterButtonProps) {
         <Pressable
           onPress={onPress}
           accessibilityRole="button"
-          accessibilityLabel={following ? 'Following your location' : 'Recentre on your location'}
+          accessibilityLabel={
+            !usingLocation
+              ? 'Use your location, or choose where the map is'
+              : following
+                ? 'Following your location'
+                : 'Recentre on your location'
+          }
           accessibilityState={{ selected: following }}
           className={cn(
             'size-12 items-center justify-center rounded-full shadow-md active:opacity-70',
             following ? 'bg-primary' : 'bg-background'
           )}>
-          <Icon as={LocateFixed} className="size-5" />
+          <Icon as={usingLocation ? LocateFixed : LocateOff} className="size-5" />
         </Pressable>
       </TextClassContext.Provider>
     </View>

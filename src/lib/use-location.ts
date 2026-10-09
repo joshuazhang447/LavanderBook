@@ -11,8 +11,12 @@ export const VIEW_RADIUS_METERS = 200;
 /** One degree of latitude is ~111,320m everywhere. */
 export const METERS_PER_DEGREE_LAT = 111320;
 
-/** The span the map opens at, shared so the first fetch matches the first view. */
-export const INITIAL_LATITUDE_DELTA = (VIEW_RADIUS_METERS * 2) / METERS_PER_DEGREE_LAT;
+/**
+ * How much ground the map shows when it opens on a city or a general area
+ * rather than on the user: a few kilometres of the centre, still close enough
+ * that venues are drawn (use-nearby-venues stops past ~5.5km of map).
+ */
+export const AREA_RADIUS_METERS = 1500;
 
 
 export type Coords = { latitude: number; longitude: number };
@@ -36,20 +40,31 @@ export type LocationState =
   | { status: 'error'; message: string };
 
 /**
- * Asks once for foreground location and resolves the user's position.
+ * The user's position, while `enabled`.
+ *
+ * Never asks for permission: that happens only when someone chooses "Near me"
+ * (see @/lib/map-location), so declining here is impossible by construction and
+ * the OS prompt is not used up by merely opening the map. Without permission
+ * this reports 'denied' and the map starts somewhere else.
+ *
+ * The position stays on the device. It moves the camera and draws the dot;
+ * anything sent to a server is rounded first - see @/lib/location-privacy.
  *
  * expo-location covers web as well, where it delegates to the browser's
- * geolocation API - so this is one code path for every platform.
+ * geolocation API - so this is one code path for every platform. Approximate
+ * location (Android 12+, iOS) is accepted as it comes: the fixes are coarser,
+ * and nothing here needs them precise.
  */
-export function useCurrentLocation(): LocationState {
+export function useCurrentLocation(enabled: boolean): LocationState {
   const [state, setState] = React.useState<LocationState>({ status: 'loading' });
 
   React.useEffect(() => {
+    if (!enabled) return;
     let active = true;
 
     (async () => {
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
+        const { status } = await Location.getForegroundPermissionsAsync();
         if (!active) return;
 
         if (status !== 'granted') {
@@ -92,9 +107,9 @@ export function useCurrentLocation(): LocationState {
     return () => {
       active = false;
     };
-  }, []);
+  }, [enabled]);
 
-  return state;
+  return enabled ? state : { status: 'denied' };
 }
 
 /**
@@ -130,7 +145,8 @@ export function useFollowPosition(
     async function start() {
       if (subscription) return;
 
-      const { status } = await Location.requestForegroundPermissionsAsync();
+      // Checked, never requested: see useCurrentLocation.
+      const { status } = await Location.getForegroundPermissionsAsync();
       if (cancelled || status !== 'granted') return;
 
       const next = await Location.watchPositionAsync(

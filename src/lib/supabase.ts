@@ -40,3 +40,27 @@ if (Platform.OS !== 'web') {
     }
   });
 }
+
+/**
+ * A second client that never carries a signed-in session, for every request
+ * that says where somebody is.
+ *
+ * The map follows a signed-in user as they walk, and each refetch sends the
+ * place it is centred on. Sent through `supabase`, every one of those carries
+ * the user's access token: a trail of positions tied to an account, in transit
+ * and in the API's request logs. The map does not need to know who is asking -
+ * venues_near, venues_search and the places proxy all answer anon - so
+ * location-bearing calls go through here, with the public key and no one's
+ * name on them. Everything account-related stays on `supabase`.
+ *
+ * persistSession off and its own storage key, so it neither reads the signed-in
+ * session nor competes with the main client for it.
+ */
+export const publicSupabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
+    storageKey: 'lavenderbook-public',
+  },
+});

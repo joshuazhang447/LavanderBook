@@ -1,4 +1,5 @@
-import { supabase } from '@/lib/supabase';
+import { roundForSearch } from '@/lib/location-privacy';
+import { publicSupabase } from '@/lib/supabase';
 import type { Coords } from '@/lib/use-location';
 import type { SelectedPoi } from '@/lib/venues';
 
@@ -58,7 +59,8 @@ export type PlaceSearchOutcome =
  * can be restricted properly, is a change to this function and nothing else.
  *
  * `origin` only biases the ordering. Search is for finding somewhere you are
- * not, so results are never bounded to the visible map.
+ * not, so results are never bounded to the visible map - and so it is rounded
+ * to about 11km before it leaves the device, and sent without the account.
  */
 export async function searchPlaces(
   query: string,
@@ -67,10 +69,11 @@ export async function searchPlaces(
   const trimmed = query.trim();
   if (trimmed.length === 0) return { ok: true, results: [] };
 
-  const { data, error } = await supabase.functions.invoke('places-search', {
+  const near = origin ? roundForSearch(origin) : null;
+  const { data, error } = await publicSupabase.functions.invoke('places-search', {
     body: {
       query: trimmed,
-      ...(origin ? { lat: origin.latitude, lng: origin.longitude } : {}),
+      ...(near ? { lat: near.latitude, lng: near.longitude } : {}),
     },
   });
 
@@ -112,7 +115,9 @@ export type PlaceLookupOutcome =
  * nobody had reviewed until there was a server to ask.
  */
 export async function lookupPlace(placeId: string): Promise<PlaceLookupOutcome> {
-  const { data, error } = await supabase.functions.invoke('place-details', {
+  // Without the account, like search: which places someone taps is their
+  // business, and the proxy does not need to know who is asking.
+  const { data, error } = await publicSupabase.functions.invoke('place-details', {
     body: { placeId },
   });
 

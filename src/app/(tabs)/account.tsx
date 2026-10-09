@@ -2,16 +2,17 @@ import * as React from 'react';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AccountSettingsCard } from '@/components/account-settings-card';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Text } from '@/components/ui/text';
 import { MyReviewsList } from '@/components/my-reviews-list';
-import { PrivacySettings } from '@/components/privacy-settings';
+import { LocationSetting } from '@/components/privacy-settings';
 import { useIsWideViewport } from '@/components/tab-bar';
 import { useAuth } from '@/lib/auth';
 
 export default function AccountScreen() {
-  const { session, profile, loading, signInWithGoogle, signOut } = useAuth();
+  const { session, loading, signInWithGoogle, signOut } = useAuth();
   const insets = useSafeAreaInsets();
   const { isWide } = useIsWideViewport();
   // On wide the header row already clears the status bar; on narrow nothing does.
@@ -50,27 +51,16 @@ export default function AccountScreen() {
           <Text className="text-3xl font-bold text-foreground">My Account</Text>
 
           {session ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>{profile?.display_name ?? 'Loading name...'}</CardTitle>
-                <CardDescription>
-                  {/* Unknown until the profile arrives, so say only what is
-                      true either way rather than guess at the switch. */}
-                  {profile === null
-                    ? 'Your account name. Your email is never public.'
-                    : profile.per_place_names
-                      ? 'Your account name. Your reviews never show it: each one has its own. Your email is never public.'
-                      : 'Your account name, shown on reviews you post from now on. Your email is never public.'}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="gap-4">
-                <PrivacySettings onReviewsChanged={() => setReviewChanges((count) => count + 1)} />
-                <Button variant="outline" disabled={busy} onPress={() => run(signOut)}>
-                  <Text>Sign out</Text>
-                </Button>
-              </CardContent>
-            </Card>
-          ) : null}
+            <AccountSettingsCard
+              busy={busy}
+              onSignOut={() => run(signOut)}
+              onReviewsChanged={() => setReviewChanges((count) => count + 1)}
+            />
+          ) : (
+            // A guest's only setting, so nothing to fold. Where the map is has
+            // nothing to do with having an account.
+            <LocationSetting />
+          )}
 
           {session ? (
             // Keyed by account, so a different one starts from an empty list

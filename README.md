@@ -92,6 +92,12 @@ loaded by someone who is not an administrator is simply empty.
   repeatedly learns no more than the week. With it off, readers see the day but never the
   time. Each review keeps the setting it was posted with. New reviews still appear on the
   map straight away; only administrators can see exactly when one was posted.
+- **Location is optional, and stays on the phone.** The map can follow you as you walk, but
+  it doesn't have to: you can start it at a general area worked out from your phone's time
+  zone, or at a city you pick, and nothing else changes - including posting reviews. When
+  it does follow you, your exact position never leaves the phone. To load nearby places it
+  sends only the rough block you're in (a 250 m square), and never with your account
+  attached. The choice is saved on the device, not on your account.
 - **Email addresses are never public.** They are held by the authentication service and are
   not shown to other members.
 - **Account identifiers stay private.** An account's internal id, sign-up date and

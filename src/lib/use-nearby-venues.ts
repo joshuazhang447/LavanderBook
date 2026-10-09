@@ -1,7 +1,8 @@
 import * as React from 'react';
 
 import type { Database } from '@/lib/database.types';
-import { supabase } from '@/lib/supabase';
+import { GRID_METERS, GRID_PADDING_METERS, snapToGrid } from '@/lib/location-privacy';
+import { publicSupabase, supabase } from '@/lib/supabase';
 
 export type NearbyVenue = Database['public']['Functions']['venues_near']['Returns'][number];
 
@@ -41,11 +42,32 @@ function radiusForRegion(region: MapRegion): number {
 }
 
 /**
+ * What is actually sent for a region: the centre of its grid square, and a
+ * radius padded to cover what the real centre would have, rounded up to whole
+ * squares. Rounding the radius too means zooming within a step sends nothing
+ * new, and the request says no more about the zoom than about the place.
+ */
+function queryForRegion(region: MapRegion): { lat: number; lng: number; radius: number } {
+  const centre = snapToGrid(region);
+  const needed = Math.min(radiusForRegion(region) + GRID_PADDING_METERS, MAX_RADIUS_METERS);
+  return {
+    lat: centre.latitude,
+    lng: centre.longitude,
+    radius: Math.min(Math.ceil(needed / GRID_METERS) * GRID_METERS, MAX_RADIUS_METERS),
+  };
+}
+
+/**
  * Reviewed venues inside the visible map region.
  *
- * Refetches when the region settles (pan or zoom), when `refreshKey` changes -
- * it folds together posting a review and walking far enough for a new anchor -
- * and whenever any review changes anywhere, pushed over Realtime.
+ * Refetches when the region settles into a different grid square or zoom step,
+ * when `refreshKey` changes - it folds together posting a review and walking
+ * far enough for a new anchor - and whenever any review changes anywhere,
+ * pushed over Realtime.
+ *
+ * The server is sent the square, never the point; see @/lib/location-privacy.
+ * `distance_meters` in the result is therefore measured from the square's
+ * centre, and anything shown to the user measures from the real point itself.
  */
 export function useNearbyVenues(region: MapRegion | null, refreshKey: string) {
   const [venues, setVenues] = React.useState<NearbyVenue[]>([]);
@@ -54,17 +76,21 @@ export function useNearbyVenues(region: MapRegion | null, refreshKey: string) {
   // region or every pan would tear the channel down and rebuild it.
   const [liveKey, setLiveKey] = React.useState(0);
 
+  const query = region && !zoomedOut ? queryForRegion(region) : null;
+  // A string, so a pan that stays inside the same square and zoom step is the
+  // same dependency and fires nothing.
+  const queryKey = query ? `${query.lat},${query.lng},${query.radius}` : null;
+
   React.useEffect(() => {
-    if (!region || zoomedOut) return;
+    if (!queryKey) return;
+    const [lat, lng, radius] = queryKey.split(',').map(Number);
 
     let active = true;
 
-    supabase
-      .rpc('venues_near', {
-        p_lat: region.latitude,
-        p_lng: region.longitude,
-        p_radius_meters: radiusForRegion(region),
-      })
+    // publicSupabase, not supabase: this carries a place, and must not carry
+    // the account with it.
+    publicSupabase
+      .rpc('venues_near', { p_lat: lat, p_lng: lng, p_radius_meters: radius })
       .then(({ data }) => {
         if (active) setVenues(data ?? []);
       });
@@ -72,7 +98,7 @@ export function useNearbyVenues(region: MapRegion | null, refreshKey: string) {
     return () => {
       active = false;
     };
-  }, [region, zoomedOut, refreshKey, liveKey]);
+  }, [queryKey, refreshKey, liveKey]);
 
   React.useEffect(() => {
     const channel = supabase

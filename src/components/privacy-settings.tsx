@@ -1,8 +1,10 @@
-import { CalendarOff, Info, VenetianMask, type LucideIcon } from 'lucide-react-native';
+import { CalendarOff, Info, LocateFixed, VenetianMask, type LucideIcon } from 'lucide-react-native';
 import * as React from 'react';
 import { Platform, Pressable, View, type ViewStyle } from 'react-native';
 
+import { CityPicker } from '@/components/city-picker';
 import { BUTTON_LABEL, InfoDialog, InfoPoint } from '@/components/info-dialog';
+import { LocationBlockedNotice } from '@/components/location-choice';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,6 +19,11 @@ import { Icon } from '@/components/ui/icon';
 import { Switch } from '@/components/ui/switch';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/lib/auth';
+import {
+  chooseDeviceLocation,
+  stopUsingDeviceLocation,
+  useMapLocation,
+} from '@/lib/map-location';
 import { cn } from '@/lib/utils';
 
 /**
@@ -86,22 +93,36 @@ type PrivacyToggleProps = {
   enabled: boolean;
   /** One line under the title, for the state it is in now. */
   summary: string;
-  /** Shown in red under the row while the switch is off. */
-  offWarning: string;
+  /**
+   * Shown in red under the row while the switch is off. Only for a switch
+   * whose off side is the less private one.
+   */
+  offWarning?: string;
   explained: Explained;
-  confirmOff: { title: string; body: string; keep: string; confirm: string };
+  /**
+   * Asked before switching off. Only for a switch whose off side is the less
+   * private one; without it, off applies at once.
+   */
+  confirmOff?: { title: string; body: string; keep: string; confirm: string };
+  /**
+   * More of the box, under the row. Drawn over the box's own pressable like the
+   * rest, so it has to say which parts take touches: IGNORE_TOUCHES on text,
+   * SWITCH_TARGET on anything pressable.
+   */
+  extra?: React.ReactNode;
   /** Saves the new value; rejects with a message worth showing if it cannot. */
   onChange: (next: boolean) => Promise<void>;
 };
 
 /**
- * One privacy switch: the row, its explanation, and the question asked before
- * turning it off.
+ * One privacy switch: the row, its explanation, and - for a switch whose off
+ * side exposes something - the question asked before turning it off.
  *
- * Turning one on applies at once - it only ever takes something out of public
- * view. Turning one off asks first, because what it exposes from then on
- * cannot be taken back by turning it on again, and that is not something to do
- * by a stray tap.
+ * For per-place names and hidden dates, on is the private side: turning them
+ * on applies at once, and turning them off asks first, because what that
+ * exposes cannot be taken back by turning them on again. Location is the other
+ * way round - on shares something - so it passes no confirmOff and no
+ * offWarning, and the OS's own prompt is the question asked on the way in.
  */
 function PrivacyToggle({
   icon,
@@ -111,6 +132,7 @@ function PrivacyToggle({
   offWarning,
   explained,
   confirmOff,
+  extra,
   onChange,
 }: PrivacyToggleProps) {
   const [explaining, setExplaining] = React.useState(false);
@@ -180,14 +202,20 @@ function PrivacyToggle({
                 checked={enabled}
                 disabled={busy}
                 accessibilityLabel={title}
-                onCheckedChange={(next) => (next ? void apply(true) : setConfirmingOff(true))}
+                onCheckedChange={(next) =>
+                  next || !confirmOff ? void apply(next) : setConfirmingOff(true)
+                }
               />
             </View>
           </View>
 
-          {!enabled || error ? (
+          {extra}
+
+          {(!enabled && offWarning) || error ? (
             <View className="gap-3" style={IGNORE_TOUCHES}>
-              {!enabled ? <Text className="text-xs text-destructive">{offWarning}</Text> : null}
+              {!enabled && offWarning ? (
+                <Text className="text-xs text-destructive">{offWarning}</Text>
+              ) : null}
               {error ? (
                 <Text className="text-xs text-destructive" accessibilityRole="alert">
                   {error}
@@ -206,27 +234,110 @@ function PrivacyToggle({
         explained={explained}
       />
 
-      <AlertDialog open={confirmingOff} onOpenChange={setConfirmingOff}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{confirmOff.title}</AlertDialogTitle>
-            <AlertDialogDescription>{confirmOff.body}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>
-              <Text className={BUTTON_LABEL}>{confirmOff.keep}</Text>
-            </AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive"
-              onPress={() => {
-                setConfirmingOff(false);
-                void apply(false);
-              }}>
-              <Text className={cn(BUTTON_LABEL, 'text-white')}>{confirmOff.confirm}</Text>
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {confirmOff ? (
+        <AlertDialog open={confirmingOff} onOpenChange={setConfirmingOff}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{confirmOff.title}</AlertDialogTitle>
+              <AlertDialogDescription>{confirmOff.body}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>
+                <Text className={BUTTON_LABEL}>{confirmOff.keep}</Text>
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive"
+                onPress={() => {
+                  setConfirmingOff(false);
+                  void apply(false);
+                }}>
+                <Text className={cn(BUTTON_LABEL, 'text-white')}>{confirmOff.confirm}</Text>
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      ) : null}
+    </View>
+  );
+}
+
+/**
+ * Whether the map follows the phone, and where it opens when it does not.
+ *
+ * For everyone, signed in or not: where the map is has nothing to do with
+ * having an account, and the choice is stored on the device, never on one.
+ * First in the list, because it is the one a guest has too.
+ */
+export function LocationSetting() {
+  const { usingDevice, place } = useMapLocation();
+  const [blocked, setBlocked] = React.useState(false);
+  const [picking, setPicking] = React.useState(false);
+
+  return (
+    // A plain View, not a fragment: the picker's root renders an empty element
+    // on the web, and loose in the settings' gap-3 column it would add a gap.
+    <View>
+      <PrivacyToggle
+        icon={LocateFixed}
+        title="Use my location"
+        enabled={usingDevice}
+        summary={
+          usingDevice
+            ? 'The map follows you as you move.'
+            : `Map opens at ${place?.label ?? 'a city you choose'}.`
+        }
+        explained={{
+          lead: 'The map can follow you without LavenderBook learning exactly where you are.',
+          whyItMatters:
+            'Where you go says a lot about who you are. Your exact position stays on your phone and is only used to move the map.',
+          whatItDoes:
+            "The map follows you as you walk. To load nearby places, your phone sends only the rough block you're in, and never with your account attached.",
+          whatItCantHide:
+            'Google, which draws the map, sees the area the map is showing, like any map app. Your internet connection is still visible to us.',
+          ifTurnedOff:
+            "The map opens in a general area based on your phone's time zone, or a city you choose. Everything else works the same, including posting reviews.",
+        }}
+        extra={
+          usingDevice && !blocked ? null : (
+            <View className="gap-3" style={PASS_THROUGH}>
+              {blocked && !usingDevice ? (
+                <View style={SWITCH_TARGET}>
+                  <LocationBlockedNotice />
+                </View>
+              ) : null}
+              {!usingDevice ? (
+                // The same small outlined pill the venue sheet uses for its
+                // secondary action. Sits over the box's pressable, so it takes
+                // its own touches and the rest of the box still explains.
+                <Pressable
+                  onPress={() => setPicking(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Change where the map opens"
+                  style={SWITCH_TARGET}
+                  className={cn(
+                    'self-start rounded-full border border-border bg-background px-3 py-1.5 active:bg-accent',
+                    Platform.select({ web: 'cursor-pointer hover:bg-accent' })
+                  )}>
+                  <Text className="text-xs font-medium text-foreground">Change place</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          )
+        }
+        onChange={async (next) => {
+          if (!next) {
+            setBlocked(false);
+            await stopUsingDeviceLocation();
+            return;
+          }
+          const result = await chooseDeviceLocation();
+          setBlocked(result === 'blocked');
+          if (result === 'denied') {
+            throw new Error("Location wasn't allowed. Try again, or keep using a place.");
+          }
+        }}
+      />
+      <CityPicker open={picking} onOpenChange={setPicking} />
     </View>
   );
 }
@@ -240,10 +351,11 @@ type PrivacySettingsProps = {
 };
 
 /**
- * The account's two privacy switches: a separate name on every review, and
- * no exact dates. Both on by default, both enforced by the database rather
- * than by this screen - see the per_place_names and hide_review_dates
- * migrations.
+ * The account's privacy switches: where the map is, a separate name on every
+ * review, and no exact dates. The last two are on by default and enforced by
+ * the database rather than by this screen - see the per_place_names and
+ * hide_review_dates migrations. Location is first, and is the one a guest
+ * gets too (on its own, as LocationSetting).
  */
 export function PrivacySettings({ onReviewsChanged }: PrivacySettingsProps) {
   const { profile, setPerPlaceNames, setHideDates } = useAuth();
@@ -256,6 +368,8 @@ export function PrivacySettings({ onReviewsChanged }: PrivacySettingsProps) {
 
   return (
     <View className="gap-3">
+      <LocationSetting />
+
       <PrivacyToggle
         icon={VenetianMask}
         title="Per-place names"

@@ -43,9 +43,10 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "LavenderBook uses your location to show venues near you."
+          "locationWhenInUsePermission": "LavenderBook uses your location to move the map with you. Your exact location stays on your phone."
         }
       ],
+      "expo-localization",
       "react-native-maps",
       [
         "expo-build-properties",
