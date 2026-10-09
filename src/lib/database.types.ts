@@ -813,10 +813,26 @@ export type Database = {
           venue_id: string
         }[]
       }
+      delete_my_review: { Args: { p_venue_id: string }; Returns: undefined }
       generate_display_name: { Args: never; Returns: string }
       is_admin: { Args: never; Returns: boolean }
       is_banned: { Args: { p_user: string }; Returns: boolean }
       my_new_question_count: { Args: { p_venue_id: string }; Returns: number }
+      my_reviews: {
+        Args: never
+        Returns: {
+          body: string
+          id: string
+          stars: number
+          trans_bathroom: Database["public"]["Enums"]["answer"]
+          updated_at: string
+          venue_google_place_id: string
+          venue_id: string
+          venue_lat: number
+          venue_lng: number
+          venue_name: string
+        }[]
+      }
       question_config_valid: {
         Args: {
           p_config: Json
@@ -878,6 +894,16 @@ export type Database = {
           tag_label: string
           tag_slug: string
           tag_text_color: string
+        }[]
+      }
+      venue_reviews: {
+        Args: { p_venue_id: string }
+        Returns: {
+          author_name: string
+          body: string
+          id: string
+          is_mine: boolean
+          stars: number
         }[]
       }
       venues_near: {

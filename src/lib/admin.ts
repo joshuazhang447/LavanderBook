@@ -112,23 +112,6 @@ export function useIsAdmin(): { isAdmin: boolean | undefined } {
   return { isAdmin };
 }
 
-/** Sign in an admin. Ordinary Supabase Auth; the session is the app's own. */
-export async function adminSignIn(
-  email: string,
-  password: string
-): Promise<{ ok: true } | { ok: false; message: string }> {
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-
-  if (error) {
-    // GoTrue already says "Invalid login credentials" without revealing which
-    // half was wrong, and already rate limits. Pass it through rather than
-    // inventing a second vocabulary for the same failures.
-    return { ok: false, message: error.message };
-  }
-
-  return { ok: true };
-}
-
 /** One page of profiles, with its review count and the filtered total. */
 export async function listAdminUsers(query: AdminUserQuery): Promise<AdminUserPage> {
   const { data, error } = await supabase.rpc('admin_list_profiles', {

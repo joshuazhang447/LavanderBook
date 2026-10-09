@@ -63,7 +63,9 @@ export default function AccountScreen() {
           ) : null}
 
           {session ? (
-            <MyReviewsList userId={session.user.id} />
+            // Keyed by account, so a different one starts from an empty list
+            // rather than briefly showing the last one's reviews.
+            <MyReviewsList key={session.user.id} />
           ) : (
             <Card>
               <CardHeader>

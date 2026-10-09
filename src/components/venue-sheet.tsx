@@ -34,11 +34,10 @@ import { venueTags } from '@/lib/venue-tags';
 
 type VenueReview = {
   id: string;
-  author_id: string;
   stars: number;
   body: string | null;
-  created_at: string;
-  author: { display_name: string } | null;
+  author_name: string | null;
+  is_mine: boolean;
 };
 
 /** An admin-written bullet about this venue. */
@@ -73,7 +72,7 @@ function ReviewRow({ review }: { review: VenueReview }) {
           <Icon as={CircleUser} className="size-5 text-muted-foreground" />
         </View>
         <Text numberOfLines={1} className="flex-1 font-medium text-foreground">
-          {review.author?.display_name ?? 'Someone'}
+          {review.author_name ?? 'Someone'}
         </Text>
         <StarRating value={review.stars} size="sm" />
       </View>
@@ -223,24 +222,16 @@ export function VenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
         if (active) setRatings(data as Ratings | null);
       });
 
-    // The embed names its foreign key. `profiles(...)` on its own was
-    // unambiguous until admin_edited_by was added, which gave reviews a second
-    // route to profiles; PostgREST then refuses the embed rather than guessing,
-    // and every review silently disappeared behind "No written reviews yet".
-    supabase
-      .from('reviews')
-      .select(
-        'id, author_id, stars, body, created_at, author:profiles!reviews_author_id_fkey(display_name)'
-      )
-      .eq('venue_id', venue.id)
-      .order('created_at', { ascending: false })
-      .then(({ data, error }) => {
-        if (!active) return;
-        // An empty list and a failed request are not the same thing, and
-        // rendering them the same way is what hid this for a day.
-        if (error) console.error('Failed to load reviews', error);
-        setReviews((data as VenueReview[] | null) ?? []);
-      });
+    // A function rather than the table: author_id is not public, so the
+    // author's name is joined in server-side and "is this mine" is answered
+    // there too. Newest first, in the order the server sends them.
+    supabase.rpc('venue_reviews', { p_venue_id: venue.id }).then(({ data, error }) => {
+      if (!active) return;
+      // An empty list and a failed request are not the same thing, and
+      // rendering them the same way is what hid a broken embed for a day.
+      if (error) console.error('Failed to load reviews', error);
+      setReviews(data ?? []);
+    });
 
     // Public read: venue_notes is selectable by anyone, which is the point of
     // writing them. Fetched up front rather than when a tag is tapped, because
@@ -291,7 +282,7 @@ export function VenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
   const count = ratings?.review_count ?? venue.review_count;
   const bathroom = ratings ? bathroomConsensus(ratings) : null;
   // Signed out, we cannot know - the review sheet will ask them to sign in.
-  const hasOwnReview = !!session && !!reviews?.some((r) => r.author_id === session.user.id);
+  const hasOwnReview = !!session && !!reviews?.some((r) => r.is_mine);
   const tags = venueTags(venue);
   const nudge = userId ? newQuestions : 0;
   const hasTagPage = notes.length > 0 || summary.length > 0;

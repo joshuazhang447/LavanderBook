@@ -1,17 +1,15 @@
 import { Stack, useRouter } from 'expo-router';
 import { ShieldAlert } from 'lucide-react-native';
 import * as React from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AdminPanel } from '@/components/admin/panel';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Icon } from '@/components/ui/icon';
-import { Input } from '@/components/ui/input';
-import { Separator } from '@/components/ui/separator';
 import { Text } from '@/components/ui/text';
-import { adminSignIn, useIsAdmin } from '@/lib/admin';
+import { useIsAdmin } from '@/lib/admin';
 import { useAuth } from '@/lib/auth';
 
 /**
@@ -74,24 +72,17 @@ export default function AdminScreen() {
 }
 
 /**
- * Ordinary Supabase Auth, which is the point of this commit.
+ * The same Google sign-in as the app, and nothing else.
  *
- * Nothing here validates anything: the credentials go to GoTrue, which hashes
- * and compares them, rate limits the attempts, and hands back a session the app
- * already knows how to persist and refresh. There is no second credential store,
- * no token of our own invention, and no reason for a reload to sign anyone out.
- *
- * Both ways in are offered because admins arrive by both routes and neither
- * covers the other. An admin created in the dashboard has a password and no
- * Google identity; an existing user promoted by adding a row to public.admins
- * usually signed up with Google and therefore has no password at all, so the
- * form above could never let them in. Which one you are is not this screen's
- * business - being in public.admins is.
+ * An admin is an ordinary account that has been added to public.admins, and
+ * every account signs in with Google, so there is no admin password to type
+ * here. There used to be an email and password form for admins created by hand
+ * in the dashboard; none was ever used, and the first admin is bootstrapped in
+ * SQL instead (see the README). Which account you are is GoTrue's business;
+ * whether it may use the panel is is_admin()'s.
  */
 function SignInCard() {
   const { signInWithGoogle } = useAuth();
-  const [email, setEmail] = React.useState('');
-  const [password, setPassword] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
 
@@ -108,80 +99,25 @@ function SignInCard() {
     setBusy(false);
   }
 
-  async function submit() {
-    if (busy || email.trim().length === 0 || password.length === 0) return;
-
-    setBusy(true);
-    setError(null);
-
-    const outcome = await adminSignIn(email.trim(), password);
-
-    if (outcome.ok) {
-      // The session arrives through AuthProvider's subscription, which swaps
-      // this card for the panel. Drop the password either way.
-      setPassword('');
-    } else {
-      setError(outcome.message);
-    }
-    setBusy(false);
-  }
-
   return (
-    <KeyboardAvoidingView className="flex-1 items-center justify-center px-6">
+    <View className="flex-1 items-center justify-center px-6">
       <Card className="w-full max-w-sm">
         <CardHeader className="gap-1">
           <CardTitle>Admin sign-in</CardTitle>
           <CardDescription>This area is restricted.</CardDescription>
         </CardHeader>
         <CardContent className="gap-3">
-          <View className="gap-1.5">
-            <Text className="text-sm font-medium text-foreground">Email</Text>
-            <Input
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              autoCorrect={false}
-              inputMode="email"
-              textContentType="username"
-              returnKeyType="next"
-            />
-          </View>
-
-          <View className="gap-1.5">
-            <Text className="text-sm font-medium text-foreground">Password</Text>
-            <Input
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-              textContentType="password"
-              returnKeyType="go"
-              onSubmitEditing={submit}
-            />
-          </View>
-
           {error ? (
             <Text className="text-sm text-destructive" accessibilityRole="alert">
               {error}
             </Text>
           ) : null}
 
-          <Button onPress={submit} disabled={busy}>
-            {busy ? <ActivityIndicator size="small" /> : <Text>Sign in</Text>}
-          </Button>
-
-          <View className="flex-row items-center gap-3 py-1">
-            <Separator className="flex-1" />
-            <Text className="text-xs text-muted-foreground">or</Text>
-            <Separator className="flex-1" />
-          </View>
-
-          <Button variant="outline" onPress={withGoogle} disabled={busy}>
-            <Text>Continue with Google</Text>
+          <Button onPress={withGoogle} disabled={busy}>
+            {busy ? <ActivityIndicator size="small" /> : <Text>Continue with Google</Text>}
           </Button>
         </CardContent>
       </Card>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
