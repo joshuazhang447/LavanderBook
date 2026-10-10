@@ -1,22 +1,29 @@
+import { ShieldAlert } from 'lucide-react-native';
 import * as React from 'react';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AccountSettingsCard } from '@/components/account-settings-card';
+import { useLeaveNowReserve } from '@/components/leave-now';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { MyReviewsList } from '@/components/my-reviews-list';
-import { LocationSetting } from '@/components/privacy-settings';
+import { LeaveNowSetting, LocationSetting } from '@/components/privacy-settings';
 import { useIsWideViewport } from '@/components/tab-bar';
 import { useAuth } from '@/lib/auth';
+import { reopenSafetyNotice } from '@/lib/safety';
 
 export default function AccountScreen() {
   const { session, loading, signInWithGoogle, signOut } = useAuth();
   const insets = useSafeAreaInsets();
   const { isWide } = useIsWideViewport();
-  // On wide the header row already clears the status bar; on narrow nothing does.
-  const topInset = isWide ? 0 : insets.top;
+  // On wide the header row already clears the status bar; on narrow nothing
+  // does - and a phone browser's "Leave now" button holds the corner above the
+  // title, which "Partir maintenant" would otherwise all but touch.
+  const { top: leaveNow } = useLeaveNowReserve();
+  const topInset = (isWide ? 0 : insets.top) + leaveNow;
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   /** Bumped when a privacy switch turned on has changed how the reviews below are shown. */
@@ -57,9 +64,12 @@ export default function AccountScreen() {
               onReviewsChanged={() => setReviewChanges((count) => count + 1)}
             />
           ) : (
-            // A guest's only setting, so nothing to fold. Where the map is has
-            // nothing to do with having an account.
-            <LocationSetting />
+            // A guest's only settings, so nothing to fold. Where the map is,
+            // and a way out, have nothing to do with having an account.
+            <View className="gap-3">
+              <LocationSetting />
+              <LeaveNowSetting />
+            </View>
           )}
 
           {session ? (
@@ -85,6 +95,11 @@ export default function AccountScreen() {
           )}
 
           {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
+
+          <Button variant="ghost" className="self-center" onPress={reopenSafetyNotice}>
+            <Icon as={ShieldAlert} className="size-4 text-muted-foreground" />
+            <Text className="text-muted-foreground">Read the safety notice again</Text>
+          </Button>
         </View>
       </ScrollView>
     </View>

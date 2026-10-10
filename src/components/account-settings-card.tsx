@@ -5,6 +5,8 @@ import {
   ChevronDown,
   ChevronUp,
   CircleUser,
+  DoorClosed,
+  DoorOpen,
   LocateFixed,
   MapPin,
   VenetianMask,
@@ -21,6 +23,7 @@ import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/lib/auth';
 import { useMapLocation } from '@/lib/map-location';
+import { useSafety } from '@/lib/safety';
 import { cn } from '@/lib/utils';
 
 type ChipProps = {
@@ -55,6 +58,7 @@ function Chip({ icon, label, warn }: ChipProps) {
 function SettingsSummary() {
   const { profile } = useAuth();
   const { usingDevice, place } = useMapLocation();
+  const { leaveButton } = useSafety();
   if (!profile) return null;
 
   return (
@@ -63,6 +67,14 @@ function SettingsSummary() {
         icon={usingDevice ? LocateFixed : MapPin}
         label={usingDevice ? 'Near me' : (place?.label ?? 'No place set')}
       />
+      {/* The phone app has no button to show or hide. */}
+      {Platform.OS === 'web' ? (
+        <Chip
+          icon={leaveButton ? DoorOpen : DoorClosed}
+          label={leaveButton ? 'Leave now button' : 'Leave now hidden'}
+          warn={!leaveButton}
+        />
+      ) : null}
       <Chip
         icon={profile.per_place_names ? VenetianMask : CircleUser}
         label={profile.per_place_names ? 'Random names' : 'Account name shown'}

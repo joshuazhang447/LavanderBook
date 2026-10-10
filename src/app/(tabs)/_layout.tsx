@@ -1,6 +1,7 @@
 import { TabList, TabSlot, TabTrigger, Tabs } from 'expo-router/ui';
 import { Platform } from 'react-native';
 
+import { LeaveNowHeaderSpace } from '@/components/leave-now';
 import { BottomTabBar, TopTabBar, useIsWideViewport } from '@/components/tab-bar';
 
 export default function TabsLayout() {
@@ -24,7 +25,7 @@ export default function TabsLayout() {
         spacer on narrow - the map is meant to run edge to edge under the notch, so screens
         that need to clear it pad themselves.
       */}
-      {isWide ? <TopTabBar /> : null}
+      {isWide ? <TopTabBar trailing={<LeaveNowHeaderSpace />} /> : null}
       {/*
         detachInactiveScreens defaults to true, which tears the map's native view
         down while you are on another tab. A camera move issued during the

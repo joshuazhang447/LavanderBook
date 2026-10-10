@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useLeaveNowReserve } from '@/components/leave-now';
 import { MAP_CONTROLS_CLEARANCE } from '@/components/map-controls';
 import { StarRating } from '@/components/star-rating';
 import { TagPill } from '@/components/tag-pill';
@@ -130,6 +131,8 @@ type VenueListProps = {
  */
 export function VenueList({ venues, origin, onSelectVenue, onLocateVenue }: VenueListProps) {
   const insets = useSafeAreaInsets();
+  // The map's controls sit a row lower under a phone browser's "Leave now".
+  const leaveNow = useLeaveNowReserve();
   // Wide viewports get a header row that already clears the status bar; narrow
   // ones run under the notch, so the screen pays its own inset.
   const { isWide } = useIsWideViewport();
@@ -187,7 +190,7 @@ export function VenueList({ venues, origin, onSelectVenue, onLocateVenue }: Venu
     <View className="flex-1 bg-background">
       <View
         className="gap-3 px-4 pb-3"
-        style={{ paddingTop: (isWide ? 0 : insets.top) + MAP_CONTROLS_CLEARANCE }}>
+        style={{ paddingTop: (isWide ? 0 : insets.top) + MAP_CONTROLS_CLEARANCE + leaveNow.top }}>
         <View className="flex-row items-center gap-2 rounded-lg border border-border bg-card px-3">
           <Icon as={Search} className="size-4 text-muted-foreground" />
           <Input

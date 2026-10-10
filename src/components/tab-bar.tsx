@@ -1,5 +1,6 @@
 import { TabTrigger, type TabTriggerSlotProps } from 'expo-router/ui';
 import { CircleUser, Map as MapIcon, type LucideIcon } from 'lucide-react-native';
+import type { ReactNode } from 'react';
 import { Platform, Pressable, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -77,8 +78,14 @@ function TabButton({
   );
 }
 
-/** Wide viewports: a header row — app name left, icon + label tabs right. */
-export function TopTabBar() {
+/**
+ * Wide viewports: a header row — app name left, icon + label tabs right.
+ *
+ * `trailing` goes after the tabs: the layout passes the space the website's
+ * "Leave now" button is drawn over (it lives outside the tabs so nothing can
+ * cover it, and is passed in so this file need not import it).
+ */
+export function TopTabBar({ trailing }: { trailing?: ReactNode }) {
   const insets = useSafeAreaInsets();
 
   return (
@@ -93,6 +100,7 @@ export function TopTabBar() {
               <TabButton icon={tab.icon} label={tab.label} showLabel />
             </TabTrigger>
           ))}
+          {trailing}
         </View>
       </View>
     </View>

@@ -11,6 +11,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { useLeaveNowReserve } from '@/components/leave-now';
 import { useIsWideViewport } from '@/components/tab-bar';
 import { Icon } from '@/components/ui/icon';
 import { Text, TextClassContext } from '@/components/ui/text';
@@ -121,6 +122,7 @@ export function MapControls({
 }: MapControlsProps) {
   const insets = useSafeAreaInsets();
   const { isWide } = useIsWideViewport();
+  const leaveNow = useLeaveNowReserve();
 
   /**
    * On a phone the row cannot hold these and an open search field: the field
@@ -154,7 +156,8 @@ export function MapControls({
   return (
     <View
       pointerEvents="box-none"
-      style={{ top: insets.top + 12, left: 12 }}
+      // Down a row on a phone browser, under the "Leave now" button.
+      style={{ top: insets.top + 12 + leaveNow.top, left: 12 }}
       // No gap: the spacing lives inside the collapsing group as pr-2, so it
       // animates away too rather than leaving the search pill off the margin.
       className="absolute flex-row">

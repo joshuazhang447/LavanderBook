@@ -1,4 +1,11 @@
-import { CalendarOff, Info, LocateFixed, VenetianMask, type LucideIcon } from 'lucide-react-native';
+import {
+  CalendarOff,
+  DoorOpen,
+  Info,
+  LocateFixed,
+  VenetianMask,
+  type LucideIcon,
+} from 'lucide-react-native';
 import * as React from 'react';
 import { Platform, Pressable, View, type ViewStyle } from 'react-native';
 
@@ -24,6 +31,7 @@ import {
   stopUsingDeviceLocation,
   useMapLocation,
 } from '@/lib/map-location';
+import { setLeaveNowButton, useSafety } from '@/lib/safety';
 import { cn } from '@/lib/utils';
 
 /**
@@ -342,6 +350,46 @@ export function LocationSetting() {
   );
 }
 
+/**
+ * The website's "Leave now" button, on every screen unless this is off.
+ *
+ * Website only: the phone app has no button outside the notice. For everyone,
+ * signed in or not, and stored on the device like location - a guest is just
+ * as much at risk of being seen. Off is the less safe side, so it shows red,
+ * but asks nothing: turning it back on undoes it completely. The Shift key
+ * keeps working either way; it is invisible, so there is nothing to hide.
+ */
+export function LeaveNowSetting() {
+  const { leaveButton } = useSafety();
+  if (Platform.OS !== 'web') return null;
+
+  return (
+    <PrivacyToggle
+      icon={DoorOpen}
+      title="Leave now button"
+      enabled={leaveButton}
+      summary={
+        leaveButton
+          ? 'A button on every screen that leaves the site at once.'
+          : 'Hidden. On a computer, Shift 3 times still leaves.'
+      }
+      offWarning="Off: there's no one-tap way out if someone comes near."
+      explained={{
+        lead: 'One tap takes you off LavenderBook and onto an everyday website.',
+        whyItMatters:
+          'If someone comes near while LavenderBook is open, there may be no time to close it. In some places, being seen using it is dangerous.',
+        whatItDoes:
+          "Signs you out, clears LavenderBook's data from this browser and swaps the page for an everyday website in your language. On a computer, pressing Shift 3 times does the same.",
+        whatItCantHide:
+          "Your browser's history still shows the visit. Delete it in your browser's settings, or use a private window.",
+        ifTurnedOff:
+          'The button disappears from every screen. On a computer, pressing Shift 3 times still leaves.',
+      }}
+      onChange={setLeaveNowButton}
+    />
+  );
+}
+
 type PrivacySettingsProps = {
   /**
    * Called after turning per-place names on, which renames the account's
@@ -351,11 +399,12 @@ type PrivacySettingsProps = {
 };
 
 /**
- * The account's privacy switches: where the map is, a separate name on every
- * review, and no exact dates. The last two are on by default and enforced by
- * the database rather than by this screen - see the per_place_names and
- * hide_review_dates migrations. Location is first, and is the one a guest
- * gets too (on its own, as LocationSetting).
+ * The account's privacy switches: where the map is, the website's "Leave now"
+ * button, a separate name on every review, and no exact dates. The last two
+ * are on by default and enforced by the database rather than by this screen -
+ * see the per_place_names and hide_review_dates migrations. The first two are
+ * on the device, and a guest gets them too (as LocationSetting and
+ * LeaveNowSetting).
  */
 export function PrivacySettings({ onReviewsChanged }: PrivacySettingsProps) {
   const { profile, setPerPlaceNames, setHideDates } = useAuth();
@@ -369,6 +418,7 @@ export function PrivacySettings({ onReviewsChanged }: PrivacySettingsProps) {
   return (
     <View className="gap-3">
       <LocationSetting />
+      <LeaveNowSetting />
 
       <PrivacyToggle
         icon={VenetianMask}

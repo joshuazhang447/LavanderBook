@@ -196,6 +196,16 @@ export async function openLocationSettings(): Promise<boolean> {
   }
 }
 
+/**
+ * Forget the choice in memory too, after "Leave now" has wiped the app's
+ * storage. The app keeps running behind the browser it opened, and must come
+ * back as if new: the map asks again from the start.
+ */
+export function forgetMapLocation() {
+  awaitingSettings = false;
+  emit({ saved: null });
+}
+
 /** Where the map should start when it is not following, with words for it. */
 export type StartPlace = Coords & {
   /**

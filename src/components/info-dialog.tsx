@@ -3,6 +3,7 @@ import * as React from 'react';
 import { ScrollView, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useLeaveNowReserve } from '@/components/leave-now';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -48,7 +49,11 @@ export const DIALOG_WIDTH = 'sm:max-w-md';
 export function useDialogMaxHeight(): number {
   const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  return height - insets.top - insets.bottom - 32;
+  // A phone browser's "Leave now" button sits over the top-right corner, where
+  // a dialog's close button would be. Dialogs are centred, so the room is
+  // taken at both ends.
+  const { top: leaveNow } = useLeaveNowReserve();
+  return height - insets.top - insets.bottom - 32 - 2 * leaveNow;
 }
 
 /** One paragraph of an explanation, under a heading that says what it answers. */

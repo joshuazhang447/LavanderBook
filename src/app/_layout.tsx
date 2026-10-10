@@ -10,6 +10,7 @@ import { useColorScheme } from 'react-native';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
+import { BehindSafetyNotice, SafetyLayer } from '@/components/safety-notice';
 import { AuthProvider } from '@/lib/auth';
 import { NAV_THEME } from '@/lib/theme';
 
@@ -25,8 +26,13 @@ export default function RootLayout() {
           {/* Icons were white on a white map, so invisible. Contrast the scheme. */}
           <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
           <AnimatedSplashOverlay />
-          <Stack screenOptions={{ headerShown: false }} />
-          <PortalHost />
+          <BehindSafetyNotice>
+            <Stack screenOptions={{ headerShown: false }} />
+            <PortalHost />
+          </BehindSafetyNotice>
+          {/* After the portal host, so no sheet or dialog covers "Leave now" or
+              the notice. */}
+          <SafetyLayer />
         </ThemeProvider>
       </KeyboardProvider>
     </AuthProvider>

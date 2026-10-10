@@ -98,6 +98,16 @@ loaded by someone who is not an administrator is simply empty.
   it does follow you, your exact position never leaves the phone. To load nearby places it
   sends only the rough block you're in (a 250 m square), and never with your account
   attached. The choice is saved on the device, not on your account.
+- **A safety notice comes first.** Before anything else, everyone sees what using
+  LavenderBook can risk in some countries and how to protect themselves. It is shown to
+  everybody, because the app never tries to detect the country. It is available in
+  English, Arabic, Chinese, French and Russian, each reviewed by a native speaker, and
+  opens in the device's language.
+- **A way out on every screen.** On the website, a "Leave now" button (and, on a
+  computer, pressing Shift three times) signs you out, clears LavenderBook's data from the
+  browser and replaces the page with an everyday website in your language. It can be
+  hidden in the account tab. The phone app offers the same on the notice itself. No
+  website can erase browser history, and the notice says so.
 - **Email addresses are never public.** They are held by the authentication service and are
   not shown to other members.
 - **Account identifiers stay private.** An account's internal id, sign-up date and
