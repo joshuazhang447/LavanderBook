@@ -23,6 +23,7 @@ import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import type { PlaceResult } from '@/lib/place-search';
 import { searchPlaces } from '@/lib/place-search';
+import { useFieldText } from '@/lib/use-field-text';
 import type { Coords } from '@/lib/use-location';
 
 /** Past this the dropdown covers the map it is meant to be searching. */
@@ -140,6 +141,7 @@ export function MapSearch({ origin, onPick, onClear, open, onOpenChange }: MapSe
   }, [origin]);
 
   const trimmed = query.trim();
+  const field = useFieldText({ value: query, onChangeText: change });
 
   /**
    * On a phone the rest of the controls row collapses while this is open, which
@@ -261,8 +263,11 @@ export function MapSearch({ origin, onPick, onClear, open, onOpenChange }: MapSe
             // reflow - and the text jump around - on every frame of the expand.
             <View style={{ width: fieldWidth }} className="flex-row items-center">
               <TextInput
-                value={query}
-                onChangeText={change}
+                // On a phone, the field keeps its own text - see useFieldText.
+                // The clear button remounts it empty, and autoFocus keeps the
+                // keyboard up across that.
+                key={field.key}
+                {...field.props}
                 onSubmitEditing={() => {
                   // Enter is an override, not the only way in: it searches at
                   // once rather than waiting out the pause.
