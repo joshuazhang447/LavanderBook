@@ -3,6 +3,7 @@ import * as React from 'react';
 import { ScrollView, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useLeaveNowReserve } from '@/components/leave-now';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -27,6 +28,33 @@ import { Text } from '@/components/ui/text';
  * where the buttons size to their labels, grow has no room to take.
  */
 export const BUTTON_LABEL = 'grow text-center';
+
+/**
+ * For any dialog's content: wide on a tablet or the web, and on a phone the
+ * library's own inset from both edges.
+ *
+ * sm: only. An unprefixed max-w replaces the base max-w-[calc(100%-2rem)] that
+ * keeps the dialog inside a phone screen, and 28rem is wider than most phones -
+ * a dialog was clipped on both sides on Android before this.
+ */
+export const DIALOG_WIDTH = 'sm:max-w-md';
+
+/**
+ * The tallest a dialog may be: between the status bar and the navigation bar,
+ * with a margin, on any screen - a short phone, split screen, a foldable's
+ * cover screen, or text turned up in the system settings. Put it on the
+ * DialogContent's style and let one part inside (a ScrollView with
+ * `shrink grow-0`) give way.
+ */
+export function useDialogMaxHeight(): number {
+  const { height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  // A phone browser's "Leave now" button sits over the top-right corner, where
+  // a dialog's close button would be. Dialogs are centred, so the room is
+  // taken at both ends.
+  const { top: leaveNow } = useLeaveNowReserve();
+  return height - insets.top - insets.bottom - 32 - 2 * leaveNow;
+}
 
 /** One paragraph of an explanation, under a heading that says what it answers. */
 export function InfoPoint({ title, children }: React.PropsWithChildren<{ title: string }>) {
@@ -73,22 +101,14 @@ type InfoDialogProps = React.PropsWithChildren<{
  * losing its last word - and a copy would have to find them all again.
  */
 export function InfoDialog({ open, onOpenChange, icon, title, lead, children }: InfoDialogProps) {
-  const { height } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
-  // The whole dialog fits between the status bar and the navigation bar, with
-  // a margin, on any screen: a short phone, split screen, a foldable's cover
-  // screen, or text turned up in the system settings. The title and "Got it"
-  // keep their size; the explanation between them is what gives way and
-  // scrolls. A cap on the middle alone would not hold, because the title and
-  // the button grow with the text size too.
-  const maxHeight = height - insets.top - insets.bottom - 32;
+  // The title and "Got it" keep their size; the explanation between them is
+  // what gives way and scrolls. A cap on the middle alone would not hold,
+  // because the title and the button grow with the text size too.
+  const maxHeight = useDialogMaxHeight();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* sm: only. An unprefixed max-w replaces the base max-w-[calc(100%-2rem)]
-          that keeps the dialog inside a phone screen, and 28rem is wider than
-          most phones - the dialog was clipped on both sides on Android. */}
-      <DialogContent className="sm:max-w-md" style={{ maxHeight }}>
+      <DialogContent className={DIALOG_WIDTH} style={{ maxHeight }}>
         <DialogHeader>
           <View className="flex-row items-center gap-2">
             <Icon as={icon} className="size-5 text-foreground" />

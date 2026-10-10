@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useLeaveNowReserve } from '@/components/leave-now';
 import { MAP_CONTROLS_CLEARANCE } from '@/components/map-controls';
 import { StarRating } from '@/components/star-rating';
 import { TagPill } from '@/components/tag-pill';
@@ -11,8 +12,9 @@ import { Icon } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
 import { useIsWideViewport } from '@/components/tab-bar';
-import { supabase } from '@/lib/supabase';
-import type { Coords } from '@/lib/use-location';
+import { snapToGrid } from '@/lib/location-privacy';
+import { publicSupabase } from '@/lib/supabase';
+import { distanceMeters, type Coords } from '@/lib/use-location';
 import type { NearbyVenue } from '@/lib/use-nearby-venues';
 import { venueTags } from '@/lib/venue-tags';
 
@@ -27,12 +29,14 @@ function formatDistance(meters: number | null): string {
 
 type VenueRowProps = {
   venue: NearbyVenue;
+  /** From the list's origin, worked out on the device. Null without an origin. */
+  distance: number | null;
   index: number;
   onSelect: (venue: NearbyVenue) => void;
   onLocate: (venue: NearbyVenue) => void;
 };
 
-function VenueRow({ venue, index, onSelect, onLocate }: VenueRowProps) {
+function VenueRow({ venue, distance, index, onSelect, onLocate }: VenueRowProps) {
   const average = Number(venue.avg_stars ?? 0);
   // Listed by us, not yet reviewed by anyone. Drawing an empty star row here
   // would read as a rating of zero rather than as no rating at all.
@@ -56,8 +60,8 @@ function VenueRow({ venue, index, onSelect, onLocate }: VenueRowProps) {
         accessibilityRole="button"
         accessibilityLabel={
           unreviewed
-            ? `${venue.name}, listed, not yet reviewed, ${formatDistance(venue.distance_meters)}`
-            : `${venue.name}, ${average.toFixed(1)} of 5, ${formatDistance(venue.distance_meters)}`
+            ? `${venue.name}, listed, not yet reviewed, ${formatDistance(distance)}`
+            : `${venue.name}, ${average.toFixed(1)} of 5, ${formatDistance(distance)}`
         }
         className="flex-1 gap-1 p-4 active:bg-accent">
         <View className="flex-row items-center gap-2">
@@ -73,9 +77,7 @@ function VenueRow({ venue, index, onSelect, onLocate }: VenueRowProps) {
               <TagPill key={tag.slug} tag={tag} />
             ))}
           </View>
-          <Text className="text-xs text-muted-foreground">
-            {formatDistance(venue.distance_meters)}
-          </Text>
+          <Text className="text-xs text-muted-foreground">{formatDistance(distance)}</Text>
         </View>
         <View className="flex-row items-center gap-2">
           {unreviewed ? (
@@ -108,7 +110,12 @@ function VenueRow({ venue, index, onSelect, onLocate }: VenueRowProps) {
 type VenueListProps = {
   /** Already fetched for the visible map region - rendering these costs nothing. */
   venues: NearbyVenue[];
-  /** Where distances are measured from, and where search results are ordered from. */
+  /**
+   * Where distances are measured from: the user's own position while the map
+   * follows them, otherwise the middle of the map. Exact, and used only here,
+   * on the device. The server is only ever sent its grid square, so
+   * `distance_meters` from the server is not used for display.
+   */
   origin: Coords | null;
   onSelectVenue: (venue: NearbyVenue) => void;
   onLocateVenue: (venue: NearbyVenue) => void;
@@ -124,6 +131,8 @@ type VenueListProps = {
  */
 export function VenueList({ venues, origin, onSelectVenue, onLocateVenue }: VenueListProps) {
   const insets = useSafeAreaInsets();
+  // The map's controls sit a row lower under a phone browser's "Leave now".
+  const leaveNow = useLeaveNowReserve();
   // Wide viewports get a header row that already clears the status bar; narrow
   // ones run under the notch, so the screen pays its own inset.
   const { isWide } = useIsWideViewport();
@@ -137,12 +146,15 @@ export function VenueList({ venues, origin, onSelectVenue, onLocateVenue }: Venu
     if (!searching || !origin) return;
 
     let active = true;
+    // The square, not the point, and without the account: see
+    // @/lib/location-privacy.
+    const near = snapToGrid(origin);
     const timer = setTimeout(() => {
-      supabase
+      publicSupabase
         .rpc('venues_search', {
           p_query: trimmed,
-          p_lat: origin.latitude,
-          p_lng: origin.longitude,
+          p_lat: near.latitude,
+          p_lng: near.longitude,
         })
         .then(({ data }) => {
           if (active) setResults((data as NearbyVenue[] | null) ?? []);
@@ -157,14 +169,28 @@ export function VenueList({ venues, origin, onSelectVenue, onLocateVenue }: Venu
 
   // While a new search is in flight the previous results stay put rather than
   // flashing empty, which reads as "no matches" for a moment.
-  const rows = searching ? results : venues;
   const loading = searching && results === null;
+  // Nearest first, measured here. The server ordered them from the centre of a
+  // grid square, which can differ from the real order by a couple of blocks.
+  const rows = React.useMemo(() => {
+    const list = searching ? results : venues;
+    if (!list) return null;
+    return list
+      .map((venue) => ({
+        venue,
+        distance:
+          origin && venue.lat !== null && venue.lng !== null
+            ? distanceMeters(origin, { latitude: venue.lat, longitude: venue.lng })
+            : null,
+      }))
+      .sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
+  }, [searching, results, venues, origin]);
 
   return (
     <View className="flex-1 bg-background">
       <View
         className="gap-3 px-4 pb-3"
-        style={{ paddingTop: (isWide ? 0 : insets.top) + MAP_CONTROLS_CLEARANCE }}>
+        style={{ paddingTop: (isWide ? 0 : insets.top) + MAP_CONTROLS_CLEARANCE + leaveNow.top }}>
         <View className="flex-row items-center gap-2 rounded-lg border border-border bg-card px-3">
           <Icon as={Search} className="size-4 text-muted-foreground" />
           <Input
@@ -187,10 +213,11 @@ export function VenueList({ venues, origin, onSelectVenue, onLocateVenue }: Venu
           <Animated.View
             layout={LinearTransition.duration(200)}
             className="overflow-hidden rounded-lg border border-border">
-            {rows.map((venue, index) => (
+            {rows.map(({ venue, distance }, index) => (
               <VenueRow
                 key={venue.id}
                 venue={venue}
+                distance={distance}
                 index={index}
                 onSelect={onSelectVenue}
                 onLocate={onLocateVenue}

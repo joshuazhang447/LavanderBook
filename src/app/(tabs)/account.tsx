@@ -1,21 +1,29 @@
+import { ShieldAlert } from 'lucide-react-native';
 import * as React from 'react';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AccountSettingsCard } from '@/components/account-settings-card';
+import { useLeaveNowReserve } from '@/components/leave-now';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { MyReviewsList } from '@/components/my-reviews-list';
-import { PrivacySettings } from '@/components/privacy-settings';
+import { LeaveNowSetting, LocationSetting } from '@/components/privacy-settings';
 import { useIsWideViewport } from '@/components/tab-bar';
 import { useAuth } from '@/lib/auth';
+import { reopenSafetyNotice } from '@/lib/safety';
 
 export default function AccountScreen() {
-  const { session, profile, loading, signInWithGoogle, signOut } = useAuth();
+  const { session, loading, signInWithGoogle, signOut } = useAuth();
   const insets = useSafeAreaInsets();
   const { isWide } = useIsWideViewport();
-  // On wide the header row already clears the status bar; on narrow nothing does.
-  const topInset = isWide ? 0 : insets.top;
+  // On wide the header row already clears the status bar; on narrow nothing
+  // does - and a phone browser's "Leave now" button holds the corner above the
+  // title, which "Partir maintenant" would otherwise all but touch.
+  const { top: leaveNow } = useLeaveNowReserve();
+  const topInset = (isWide ? 0 : insets.top) + leaveNow;
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   /** Bumped when a privacy switch turned on has changed how the reviews below are shown. */
@@ -50,27 +58,19 @@ export default function AccountScreen() {
           <Text className="text-3xl font-bold text-foreground">My Account</Text>
 
           {session ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>{profile?.display_name ?? 'Loading name...'}</CardTitle>
-                <CardDescription>
-                  {/* Unknown until the profile arrives, so say only what is
-                      true either way rather than guess at the switch. */}
-                  {profile === null
-                    ? 'Your account name. Your email is never public.'
-                    : profile.per_place_names
-                      ? 'Your account name. Your reviews never show it: each one has its own. Your email is never public.'
-                      : 'Your account name, shown on reviews you post from now on. Your email is never public.'}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="gap-4">
-                <PrivacySettings onReviewsChanged={() => setReviewChanges((count) => count + 1)} />
-                <Button variant="outline" disabled={busy} onPress={() => run(signOut)}>
-                  <Text>Sign out</Text>
-                </Button>
-              </CardContent>
-            </Card>
-          ) : null}
+            <AccountSettingsCard
+              busy={busy}
+              onSignOut={() => run(signOut)}
+              onReviewsChanged={() => setReviewChanges((count) => count + 1)}
+            />
+          ) : (
+            // A guest's only settings, so nothing to fold. Where the map is,
+            // and a way out, have nothing to do with having an account.
+            <View className="gap-3">
+              <LocationSetting />
+              <LeaveNowSetting />
+            </View>
+          )}
 
           {session ? (
             // Keyed by account, so a different one starts from an empty list
@@ -95,6 +95,11 @@ export default function AccountScreen() {
           )}
 
           {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
+
+          <Button variant="ghost" className="self-center" onPress={reopenSafetyNotice}>
+            <Icon as={ShieldAlert} className="size-4 text-muted-foreground" />
+            <Text className="text-muted-foreground">Read the safety notice again</Text>
+          </Button>
         </View>
       </ScrollView>
     </View>

@@ -418,6 +418,10 @@ function regionOf(map: google.maps.Map): MapRegion | null {
 
 type VenueMapProps = {
   center: { latitude: number; longitude: number };
+  /** How much ground to show around `center` when the map opens. */
+  initialRadiusMeters?: number;
+  /** Native only: the web map draws no position dot. Accepted so both share one call site. */
+  showsUser: boolean;
   onSelectPoi: (poi: SelectedPoi) => void;
   /** Tapping bare map, away from any place label. */
   onDismiss: () => void;
@@ -448,6 +452,7 @@ type VenueMapProps = {
  */
 export function VenueMap({
   center,
+  initialRadiusMeters = VIEW_RADIUS_METERS,
   onSelectPoi,
   onDismiss,
   venues,
@@ -542,7 +547,7 @@ export function VenueMap({
           style={{ width: '100%', height: '100%' }}
           mapId={mapId}
           defaultCenter={{ lat: center.latitude, lng: center.longitude }}
-          defaultZoom={zoomForRadius(center.latitude, VIEW_RADIUS_METERS)}
+          defaultZoom={zoomForRadius(center.latitude, initialRadiusMeters)}
           gestureHandling="greedy"
           clickableIcons
           // Unlike native - where a POI tap goes to onPoiClick and never to

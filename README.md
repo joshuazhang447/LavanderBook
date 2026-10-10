@@ -92,6 +92,22 @@ loaded by someone who is not an administrator is simply empty.
   repeatedly learns no more than the week. With it off, readers see the day but never the
   time. Each review keeps the setting it was posted with. New reviews still appear on the
   map straight away; only administrators can see exactly when one was posted.
+- **Location is optional, and stays on the phone.** The map can follow you as you walk, but
+  it doesn't have to: you can start it at a general area worked out from your phone's time
+  zone, or at a city you pick, and nothing else changes - including posting reviews. When
+  it does follow you, your exact position never leaves the phone. To load nearby places it
+  sends only the rough block you're in (a 250 m square), and never with your account
+  attached. The choice is saved on the device, not on your account.
+- **A safety notice comes first.** Before anything else, everyone sees what using
+  LavenderBook can risk in some countries and how to protect themselves. It is shown to
+  everybody, because the app never tries to detect the country. It is available in
+  English, Arabic, Chinese, French and Russian, each reviewed by a native speaker, and
+  opens in the device's language.
+- **A way out on every screen.** On the website, a "Leave now" button (and, on a
+  computer, pressing Shift three times) signs you out, clears LavenderBook's data from the
+  browser and replaces the page with an everyday website in your language. It can be
+  hidden in the account tab. The phone app offers the same on the notice itself. No
+  website can erase browser history, and the notice says so.
 - **Email addresses are never public.** They are held by the authentication service and are
   not shown to other members.
 - **Account identifiers stay private.** An account's internal id, sign-up date and
