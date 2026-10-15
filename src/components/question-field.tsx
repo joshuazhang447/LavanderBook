@@ -1,7 +1,9 @@
 import * as React from 'react';
 import { Pressable, View } from 'react-native';
 
+import { DatePicker } from '@/components/date-picker';
 import { StarRating } from '@/components/star-rating';
+import { TimePicker } from '@/components/time-picker';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -304,49 +306,42 @@ export function QuestionField({
 
     case 'time_of_day':
       return (
-        <Input
+        <TimePicker
           value={text}
-          onChangeText={onChange}
-          editable={!disabled}
-          placeholder="23:00"
-          className="w-32"
+          onChange={onChange}
+          disabled={disabled}
+          label="Pick a time"
+          defaultTime="12:00"
         />
       );
 
     case 'time_range': {
-      // Stored as one 'HH:MM-HH:MM' string, so the two boxes edit halves of it.
+      // Stored as one 'HH:MM-HH:MM' string, so the two pickers set halves of it.
+      // Clearing both leaves '-', which isAnswered reads as a skip.
       const [from = '', to = ''] = text.split('-');
       return (
-        <View className="flex-row items-center gap-2">
-          <Input
+        <View className="flex-row flex-wrap items-center gap-2">
+          <TimePicker
             value={from}
-            onChangeText={(next) => onChange(`${next}-${to}`)}
-            editable={!disabled}
-            placeholder="09:00"
-            className="w-28"
+            onChange={(next) => onChange(`${next}-${to}`)}
+            disabled={disabled}
+            label="From"
+            defaultTime="09:00"
           />
           <Text className="text-sm text-muted-foreground">to</Text>
-          <Input
+          <TimePicker
             value={to}
-            onChangeText={(next) => onChange(`${from}-${next}`)}
-            editable={!disabled}
-            placeholder="17:00"
-            className="w-28"
+            onChange={(next) => onChange(`${from}-${next}`)}
+            disabled={disabled}
+            label="To"
+            defaultTime="17:00"
           />
         </View>
       );
     }
 
     case 'date':
-      return (
-        <Input
-          value={text}
-          onChangeText={onChange}
-          editable={!disabled}
-          placeholder="2026-09-11"
-          className="w-40"
-        />
-      );
+      return <DatePicker value={text} onChange={onChange} disabled={disabled} label="Pick a date" />;
 
     case 'short_text':
       return (
