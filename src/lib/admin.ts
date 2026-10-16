@@ -4,6 +4,7 @@ import * as React from 'react';
 import type { Answer } from '@/lib/answers';
 import { useAuth } from '@/lib/auth';
 import type { Database, Json } from '@/lib/database.types';
+import { moderationStatus, type ModerationStatus } from '@/lib/moderation-text';
 import { supabase } from '@/lib/supabase';
 
 /**
@@ -210,6 +211,10 @@ export type AdminReview = {
   /** How many tag questions this review answered. */
   answerCount: number;
   venueTags: TagRef[];
+  /** published, held (waiting for a person) or rejected. */
+  moderation: ModerationStatus;
+  /** The review's open queue item, if it has one. */
+  openCaseId: string | null;
 };
 
 /**
@@ -224,6 +229,7 @@ export function reviewerLabel(review: AdminReview): string {
 /** 'with' is a review that has prose; 'without' is a rating on its own. */
 export type ReviewBodyFilter = 'any' | 'with' | 'without';
 export type ReviewAuthorStatus = 'any' | 'active' | 'banned';
+export type ReviewModerationFilter = 'any' | ModerationStatus;
 
 /** The sortable columns, matching the whitelist inside admin_list_reviews. */
 export type ReviewSort = 'created_at' | 'updated_at' | 'stars' | 'venue_name' | 'author_name';
@@ -241,6 +247,7 @@ export type AdminReviewQuery = {
   authorStatus: ReviewAuthorStatus;
   /** ISO timestamp, or null for any time. */
   postedAfter: string | null;
+  moderation: ReviewModerationFilter;
   sort: ReviewSort;
   descending: boolean;
   limit: number;
@@ -296,6 +303,7 @@ export async function listAdminReviews(query: AdminReviewQuery): Promise<AdminRe
     p_tag_id: query.tagId ?? undefined,
     p_author_status: query.authorStatus,
     p_posted_after: query.postedAfter ?? undefined,
+    p_moderation: query.moderation,
     p_sort: query.sort,
     p_desc: query.descending,
     p_limit: query.limit,
@@ -326,6 +334,8 @@ export async function listAdminReviews(query: AdminReviewQuery): Promise<AdminRe
     postedPeriod: row.posted_period,
     answerCount: Number(row.answer_count),
     venueTags: toTagRefs(row.venue_tags),
+    moderation: moderationStatus(row.moderation) ?? 'published',
+    openCaseId: (row.open_case_id as string | null) ?? null,
   }));
 
   // total_count rides on every row, so an empty page is genuinely an empty set.
@@ -898,4 +908,545 @@ export async function setVenueTags(venueId: string, tagIds: string[]): Promise<v
     p_tag_ids: tagIds,
   });
   if (error) throw new Error(describe(error));
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Moderation                                                                */
+/* -------------------------------------------------------------------------- */
+
+// The queue and the word list. Every call is a definer function that checks
+// is_admin() itself; see supabase/migrations/20261016100400_moderators_decide_in_the_queue.sql.
+
+export type TermTier = 'hold' | 'watch';
+export type TermCategory = 'transphobic' | 'homophobic' | 'racist' | 'ableist' | 'misogynist';
+export type TermMatch = 'word' | 'prefix' | 'anywhere';
+
+/** A piece of a text, marked when a term matched it. Concatenated, they give the text back. */
+export type Segment = { text: string; hit: boolean };
+
+export type MatchedTerm = {
+  id: string;
+  term: string;
+  tier: TermTier;
+  category: TermCategory;
+};
+
+/** The three lists: open items to decide, open items to look at, and the record. */
+export type CaseQueue = 'decide' | 'look' | 'decided';
+export type CaseKindFilter = 'any' | 'review' | 'venue_name' | 'reported';
+
+export type CaseReview = AdminReview & {
+  bodySegments: Segment[];
+  /** The free-text answers that matched, each with its question. */
+  answerSegments: { questionId: string; prompt: string; segments: Segment[] }[];
+};
+
+export type CaseVenue = {
+  id: string;
+  /** What readers see now - the placeholder while a name is held. */
+  name: string;
+  address: string | null;
+  googlePlaceId: string | null;
+  /** The name waiting for a person, when it is held. */
+  pendingName: string | null;
+  nameSegments: Segment[];
+};
+
+/** One item in the queue. */
+export type AdminCase = {
+  id: string;
+  kind: 'review' | 'venue_name';
+  state: 'open' | 'closed';
+  queue: 'decide' | 'look';
+  priority: number;
+  /** What put it here: held, report, watch, resubmitted... */
+  signals: string[];
+  reportCount: number;
+  reportReasons: { reason: string; count: number }[];
+  openedAt: string;
+  updatedAt: string;
+  decision: string | null;
+  reason: string | null;
+  note: string | null;
+  decidedAt: string | null;
+  decidedByName: string | null;
+  terms: MatchedTerm[];
+  /** The review as it stands now. Null for a place name, or a review since deleted. */
+  review: CaseReview | null;
+  venue: CaseVenue | null;
+  /** Who wrote the review, or who added the place. */
+  authorId: string | null;
+  authorName: string | null;
+  authorBannedAt: string | null;
+};
+
+export type CasePage = { rows: AdminCase[]; total: number };
+
+export type CaseReport = {
+  id: string;
+  reporterId: string;
+  reporterName: string;
+  reporterJoinedAt: string;
+  reporterBannedAt: string | null;
+  reporterReviewCount: number;
+  reportsSent: number;
+  reportsUpheld: number;
+  reportsDismissed: number;
+  reason: string;
+  note: string | null;
+  createdAt: string;
+  outcome: 'upheld' | 'dismissed' | null;
+};
+
+export type ModerationCounts = {
+  /** Open items needing a decision: the badge. */
+  decide: number;
+  /** Open items worth a look. Not on the badge. */
+  look: number;
+  enforced: boolean;
+};
+
+export type ModerationSettings = {
+  enforced: boolean;
+  updatedAt: string;
+  updatedByName: string | null;
+  /** Reviews waiting for a person right now. */
+  heldNow: number;
+  /** What enforcing would have held over the last seven days, from shadow mode. */
+  shadowLastWeek: number;
+};
+
+export type ModerationTerm = {
+  id: string;
+  term: string;
+  language: string | null;
+  tier: TermTier;
+  category: TermCategory;
+  matchMode: TermMatch;
+  allow: string[];
+  note: string | null;
+  archivedAt: string | null;
+  createdAt: string;
+  createdByName: string | null;
+  updatedAt: string;
+  /** Reviews it matched at their last scan. */
+  reviewCount: number;
+  /** Of those, how many are held now. */
+  heldCount: number;
+  /**
+   * Named by any review's screening or any queue item, past decisions
+   * included: it can be archived, never deleted. admin_delete_term's own test.
+   */
+  inUse: boolean;
+};
+
+export type TermDraft = {
+  term: string;
+  tier: TermTier;
+  category: TermCategory;
+  matchMode: TermMatch;
+  language: string;
+  allow: string[];
+  note: string;
+};
+
+/** One row of a pasted import, before the server has judged it. */
+export type ImportRow = {
+  line: number;
+  term: string;
+  tier: string;
+  category: string;
+  match?: string;
+  language?: string;
+  /** Phrases separated by semicolons. */
+  allow?: string;
+  note?: string;
+};
+
+export type ImportAction = 'add' | 'update' | 'same' | 'duplicate' | 'invalid';
+
+export type ImportResult = {
+  line: number;
+  term: string;
+  language: string | null;
+  tier: string;
+  category: string;
+  matchMode: string;
+  action: ImportAction;
+  problem: string | null;
+};
+
+export type TryResult = {
+  folded: string;
+  terms: MatchedTerm[];
+  /** Whether a review saying this would be held. */
+  held: boolean;
+  /** How readers would see it once a person had published it. */
+  masked: string;
+  segments: Segment[];
+};
+
+export type RescanProgress = { scanned: number; changed: number; opened: number };
+
+function toSegments(value: unknown): Segment[] {
+  return (Array.isArray(value) ? value : []).map((entry) => {
+    const segment = (entry ?? {}) as Record<string, unknown>;
+    return { text: String(segment.text ?? ''), hit: segment.hit === true };
+  });
+}
+
+function toMatchedTerms(value: unknown): MatchedTerm[] {
+  return (Array.isArray(value) ? value : []).map((entry) => {
+    const term = (entry ?? {}) as Record<string, unknown>;
+    return {
+      id: term.id as string,
+      term: term.term as string,
+      tier: term.tier as TermTier,
+      category: term.category as TermCategory,
+    };
+  });
+}
+
+export async function fetchModerationCounts(): Promise<ModerationCounts> {
+  const { data, error } = await supabase.rpc('admin_moderation_counts');
+  if (error) throw new Error(describe(error));
+  const row = data?.[0];
+  return {
+    decide: Number(row?.decide ?? 0),
+    look: Number(row?.look ?? 0),
+    enforced: row?.enforced === true,
+  };
+}
+
+export async function listCases(query: {
+  queue: CaseQueue;
+  kind: CaseKindFilter;
+  limit: number;
+  offset: number;
+}): Promise<CasePage> {
+  const { data, error } = await supabase.rpc('admin_list_cases', {
+    p_queue: query.queue,
+    p_kind: query.kind,
+    p_limit: query.limit,
+    p_offset: query.offset,
+  });
+
+  if (error) throw new Error(describe(error));
+
+  const rows: AdminCase[] = (data ?? []).map((row) => {
+    // Every review column is null together: a place name, or a deleted review.
+    const reviewId = (row.review_id as string | null) ?? null;
+    const hasReview = reviewId !== null && row.stars !== null;
+    const venueId = (row.venue_id as string | null) ?? null;
+
+    return {
+      id: row.id,
+      kind: row.kind === 'venue_name' ? 'venue_name' : 'review',
+      state: row.state === 'closed' ? 'closed' : 'open',
+      queue: row.queue === 'look' ? 'look' : 'decide',
+      priority: Number(row.priority),
+      signals: row.signals ?? [],
+      reportCount: Number(row.report_count),
+      reportReasons: (Array.isArray(row.report_reasons) ? row.report_reasons : []).map((entry) => {
+        const reason = (entry ?? {}) as Record<string, unknown>;
+        return { reason: String(reason.reason ?? ''), count: Number(reason.count ?? 0) };
+      }),
+      openedAt: row.opened_at,
+      updatedAt: row.updated_at,
+      decision: (row.decision as string | null) ?? null,
+      reason: (row.reason as string | null) ?? null,
+      note: (row.note as string | null) ?? null,
+      decidedAt: (row.decided_at as string | null) ?? null,
+      decidedByName: (row.decided_by_name as string | null) ?? null,
+      terms: toMatchedTerms(row.terms),
+      review: hasReview
+        ? {
+            id: reviewId,
+            venueId: venueId ?? '',
+            venueName: (row.venue_name as string | null) ?? '',
+            venueAddress: (row.venue_address as string | null) ?? null,
+            authorId: (row.author_id as string | null) ?? '',
+            authorName: (row.author_name as string | null) ?? '',
+            alias: (row.alias as string | null) ?? null,
+            authorBannedAt: (row.author_banned_at as string | null) ?? null,
+            authorIsAdmin: row.author_is_admin === true,
+            stars: Number(row.stars),
+            transBathroom: row.trans_bathroom,
+            body: (row.body as string | null) ?? null,
+            createdAt: row.review_created_at,
+            updatedAt: row.review_updated_at,
+            adminEditedAt: (row.admin_edited_at as string | null) ?? null,
+            hideDate: row.hide_date === true,
+            postedPeriod: (row.posted_period as string | null) ?? '',
+            answerCount: Number(row.answer_count ?? 0),
+            venueTags: toTagRefs(row.venue_tags),
+            moderation: moderationStatus(row.moderation) ?? 'published',
+            openCaseId: row.state === 'open' ? row.id : null,
+            bodySegments: toSegments(row.body_segments),
+            answerSegments: (Array.isArray(row.answer_segments) ? row.answer_segments : []).map(
+              (entry) => {
+                const answer = (entry ?? {}) as Record<string, unknown>;
+                return {
+                  questionId: answer.question_id as string,
+                  prompt: String(answer.prompt ?? ''),
+                  segments: toSegments(answer.segments),
+                };
+              }
+            ),
+          }
+        : null,
+      venue:
+        row.kind === 'venue_name' && venueId
+          ? {
+              id: venueId,
+              name: (row.venue_name as string | null) ?? '',
+              address: (row.venue_address as string | null) ?? null,
+              googlePlaceId: (row.google_place_id as string | null) ?? null,
+              pendingName: (row.pending_name as string | null) ?? null,
+              nameSegments: toSegments(row.name_segments),
+            }
+          : null,
+      authorId: (row.author_id as string | null) ?? null,
+      authorName: (row.author_name as string | null) ?? null,
+      authorBannedAt: (row.author_banned_at as string | null) ?? null,
+    };
+  });
+
+  return { rows, total: data?.length ? Number(data[0].total_count) : 0 };
+}
+
+/** The reports behind one item, with each reporter's record. */
+export async function listCaseReports(caseId: string): Promise<CaseReport[]> {
+  const { data, error } = await supabase.rpc('admin_case_reports', { p_case_id: caseId });
+  if (error) throw new Error(describe(error));
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    reporterId: row.reporter_id,
+    reporterName: row.reporter_name,
+    reporterJoinedAt: row.reporter_joined_at,
+    reporterBannedAt: (row.reporter_banned_at as string | null) ?? null,
+    reporterReviewCount: Number(row.reporter_review_count),
+    reportsSent: Number(row.reports_sent),
+    reportsUpheld: Number(row.reports_upheld),
+    reportsDismissed: Number(row.reports_dismissed),
+    reason: row.reason,
+    note: (row.note as string | null) ?? null,
+    createdAt: row.created_at,
+    outcome: row.outcome === 'upheld' || row.outcome === 'dismissed' ? row.outcome : null,
+  }));
+}
+
+export type ReviewDecision = 'publish' | 'keep' | 'reject';
+
+/**
+ * Decide on a review. Sends what the moderator was looking at, so a decision
+ * on words the author has since changed - or one another moderator has already
+ * made - is refused rather than silently applied.
+ */
+export async function decideReview(
+  reviewId: string,
+  decision: ReviewDecision,
+  options: {
+    reason?: string | null;
+    note?: string | null;
+    seenStatus?: ModerationStatus | null;
+    seenUpdatedAt?: string | null;
+  } = {}
+): Promise<ModerationStatus | null> {
+  const { data, error } = await supabase.rpc('admin_decide_review', {
+    p_review_id: reviewId,
+    p_decision: decision,
+    p_reason: options.reason ?? undefined,
+    p_note: options.note?.trim() || undefined,
+    p_seen_status: options.seenStatus ?? undefined,
+    p_seen_updated_at: options.seenUpdatedAt ?? undefined,
+  });
+  if (error) throw new Error(describe(error));
+  return moderationStatus(data as string | null);
+}
+
+export async function decideVenueName(
+  venueId: string,
+  decision: 'publish' | 'rename' | 'keep',
+  name?: string
+): Promise<string> {
+  const { data, error } = await supabase.rpc('admin_decide_venue_name', {
+    p_venue_id: venueId,
+    p_decision: decision,
+    p_name: name?.trim() || undefined,
+  });
+  if (error) throw new Error(describe(error));
+  return data as string;
+}
+
+/**
+ * Rejects every review a banned account has up. The server refuses it for an
+ * account that is not banned: rows that change together read as one person.
+ */
+export async function takeDownAuthorReviews(userId: string, reason: string, note: string): Promise<number> {
+  const { data, error } = await supabase.rpc('admin_take_down_author_reviews', {
+    p_user: userId,
+    p_reason: reason,
+    p_note: note.trim() || undefined,
+  });
+  if (error) throw new Error(describe(error));
+  return Number(data ?? 0);
+}
+
+export async function listTerms(includeArchived = true): Promise<ModerationTerm[]> {
+  const { data, error } = await supabase.rpc('admin_list_terms', {
+    p_include_archived: includeArchived,
+  });
+  if (error) throw new Error(describe(error));
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    term: row.term,
+    language: (row.language as string | null) ?? null,
+    tier: row.tier as TermTier,
+    category: row.category as TermCategory,
+    matchMode: row.match_mode as TermMatch,
+    allow: row.allow ?? [],
+    note: (row.note as string | null) ?? null,
+    archivedAt: (row.archived_at as string | null) ?? null,
+    createdAt: row.created_at,
+    createdByName: (row.created_by_name as string | null) ?? null,
+    updatedAt: row.updated_at,
+    reviewCount: Number(row.review_count),
+    heldCount: Number(row.held_count),
+    // Before 20261016110000 the function did not say; then a current match is
+    // the best guess, and the server still refuses whatever it must.
+    inUse: typeof row.in_use === 'boolean' ? row.in_use : Number(row.review_count) > 0,
+  }));
+}
+
+export async function createTerm(draft: TermDraft): Promise<string> {
+  const { data, error } = await supabase.rpc('admin_create_term', {
+    p_term: draft.term.trim(),
+    p_tier: draft.tier,
+    p_category: draft.category,
+    p_match_mode: draft.matchMode,
+    p_language: draft.language.trim() || undefined,
+    p_allow: draft.allow,
+    p_note: draft.note.trim() || undefined,
+  });
+  if (error) throw new Error(describe(error));
+  return data as string;
+}
+
+export async function updateTerm(id: string, draft: TermDraft): Promise<void> {
+  const { error } = await supabase.rpc('admin_update_term', {
+    p_id: id,
+    p_term: draft.term.trim(),
+    p_tier: draft.tier,
+    p_category: draft.category,
+    p_match_mode: draft.matchMode,
+    p_language: draft.language.trim(),
+    p_allow: draft.allow,
+    p_note: draft.note.trim(),
+  });
+  if (error) throw new Error(describe(error));
+}
+
+/** Archive or restore a term. Returns archived_at. */
+export async function setTermArchived(id: string, archived: boolean): Promise<string | null> {
+  const { data, error } = await supabase.rpc('admin_set_term_archived', {
+    p_id: id,
+    p_archived: archived,
+  });
+  if (error) throw new Error(describe(error));
+  return (data as string | null) ?? null;
+}
+
+/** Refused once a term has matched anything; archive it instead. */
+export async function deleteTerm(id: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_delete_term', { p_id: id });
+  if (error) throw new Error(describe(error));
+}
+
+/** Preview (apply false) or apply a pasted import, row by row. */
+export async function importTerms(rows: ImportRow[], apply: boolean): Promise<ImportResult[]> {
+  const { data, error } = await supabase.rpc('admin_import_terms', {
+    p_rows: rows as unknown as Json,
+    p_apply: apply,
+  });
+  if (error) throw new Error(describe(error));
+
+  return (data ?? []).map((row) => ({
+    line: Number(row.line),
+    term: (row.term as string | null) ?? '',
+    language: (row.language as string | null) ?? null,
+    tier: (row.tier as string | null) ?? '',
+    category: (row.category as string | null) ?? '',
+    matchMode: (row.match_mode as string | null) ?? '',
+    action: row.action as ImportAction,
+    problem: (row.problem as string | null) ?? null,
+  }));
+}
+
+/** What the list makes of a piece of text, without saving anything. */
+export async function tryModeration(text: string): Promise<TryResult> {
+  const { data, error } = await supabase.rpc('admin_moderation_try', { p_text: text });
+  if (error) throw new Error(describe(error));
+
+  const result = (data ?? {}) as Record<string, unknown>;
+  return {
+    folded: String(result.folded ?? ''),
+    terms: toMatchedTerms(result.terms),
+    held: result.held === true,
+    masked: String(result.masked ?? ''),
+    segments: toSegments(result.segments),
+  };
+}
+
+export async function fetchModerationSettings(): Promise<ModerationSettings> {
+  const { data, error } = await supabase.rpc('admin_moderation_settings');
+  if (error) throw new Error(describe(error));
+  const row = data?.[0];
+  return {
+    enforced: row?.enforced === true,
+    updatedAt: row?.updated_at ?? '',
+    updatedByName: (row?.updated_by_name as string | null | undefined) ?? null,
+    heldNow: Number(row?.held_now ?? 0),
+    shadowLastWeek: Number(row?.shadow_last_week ?? 0),
+  };
+}
+
+export async function setModerationEnforced(enforced: boolean): Promise<boolean> {
+  const { data, error } = await supabase.rpc('admin_set_moderation_enforced', {
+    p_enforced: enforced,
+  });
+  if (error) throw new Error(describe(error));
+  return data === true;
+}
+
+/**
+ * Scans every review already posted against the list as it is now, one batch
+ * per request - PostgREST stops a statement after a few seconds, so one call
+ * for everything would be cut off. Never changes a review.
+ */
+export async function rescreenReviews(
+  onProgress: (progress: RescanProgress) => void
+): Promise<RescanProgress> {
+  const total: RescanProgress = { scanned: 0, changed: 0, opened: 0 };
+  let after: string | undefined;
+
+  for (;;) {
+    const { data, error } = await supabase.rpc('admin_rescreen_reviews', {
+      p_after: after,
+      p_limit: 200,
+    });
+    if (error) throw new Error(describe(error));
+
+    const batch = data?.[0];
+    total.scanned += Number(batch?.scanned ?? 0);
+    total.changed += Number(batch?.changed ?? 0);
+    total.opened += Number(batch?.opened ?? 0);
+    onProgress({ ...total });
+
+    const next = (batch?.next_after as string | null | undefined) ?? null;
+    if (!next) return total;
+    after = next;
+  }
 }

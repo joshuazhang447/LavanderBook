@@ -14,6 +14,10 @@ import { venueTags } from '@/lib/venue-tags';
 export type VenueReview = {
   id: string;
   stars: number;
+  /**
+   * Masked where it quotes a slur a moderator let stand: the word's first
+   * letter, then bullets. See supabase/migrations/20261016100200.
+   */
   body: string | null;
   author_name: string | null;
   is_mine: boolean;
@@ -21,6 +25,15 @@ export type VenueReview = {
   posted_period: string | null;
   /** The UTC day, only when the author shows dates. Never a time. */
   posted_on: string | null;
+  /**
+   * published | held | rejected, on the caller's own review only - null on
+   * everyone else's, and on every review from a server older than moderation.
+   */
+  status?: string | null;
+  /** The words as written, when `body` has something masked. */
+  unmasked_body?: string | null;
+  /** Whether the caller has reported this review. */
+  reported_by_me?: boolean | null;
 };
 
 /** An admin-written bullet about this venue. */
@@ -60,6 +73,9 @@ export function useVenueDetails(venue: NearbyVenue) {
   const [notes, setNotes] = React.useState<Note[]>([]);
   const [summary, setSummary] = React.useState<AnswerSummaryRow[]>([]);
   const [newQuestions, setNewQuestions] = React.useState(0);
+  /** Bumped to ask again, after a report changes what this reader sees. */
+  const [reloads, setReloads] = React.useState(0);
+  const refetch = React.useCallback(() => setReloads((count) => count + 1), []);
 
 
 /**
@@ -119,7 +135,7 @@ export function useVenueDetails(venue: NearbyVenue) {
     return () => {
       active = false;
     };
-  }, [venue.id]);
+  }, [venue.id, reloads]);
 
   const userId = session?.user.id ?? null;
 
@@ -147,6 +163,18 @@ export function useVenueDetails(venue: NearbyVenue) {
   const nudge = userId ? newQuestions : 0;
   const hasTagPage = notes.length > 0 || summary.length > 0;
 
-  return { reviews, notes, summary, average, count, bathroom, hasOwnReview, tags, nudge, hasTagPage };
+  return {
+    reviews,
+    notes,
+    summary,
+    average,
+    count,
+    bathroom,
+    hasOwnReview,
+    tags,
+    nudge,
+    hasTagPage,
+    refetch,
+  };
 }
 

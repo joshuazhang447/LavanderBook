@@ -1,23 +1,11 @@
-import {
-  CalendarOff,
-  Check,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Copy,
-  MessageSquareText,
-  MoreHorizontal,
-  Search,
-  VenetianMask,
-  X,
-} from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, MessageSquareText, Search, X } from 'lucide-react-native';
 import * as React from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, View } from 'react-native';
 
 import { FilterSelect, useDebounced } from '@/components/admin/filters';
+import { RejectDialog } from '@/components/admin/reject-dialog';
 import { ReviewDialog } from '@/components/admin/review-dialog';
-import { TagChip } from '@/components/admin/tag-chip';
-import { StarRating } from '@/components/star-rating';
+import { ReviewRow, type ReviewFocus } from '@/components/admin/review-row';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,49 +16,27 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Icon } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
 import {
+  decideReview,
   deleteReview,
   listAdminReviews,
   listAdminTags,
-  listReviewAnswers,
   reviewerLabel,
   type AdminReview,
   type AdminTag,
-  type ReviewAnswer,
   type ReviewAuthorStatus,
   type ReviewBodyFilter,
+  type ReviewModerationFilter,
   type ReviewSort,
 } from '@/lib/admin';
-import { ANSWER_LABEL, formatStoredAnswer, type Answer } from '@/lib/answers';
-import { periodLabel } from '@/lib/review-dates';
+import type { Answer } from '@/lib/answers';
 import { cn } from '@/lib/utils';
 
-/**
- * What the tab was opened *about*, when it was reached by a link rather than
- * from the nav.
- *
- * One focus, not two: Places links through by venue and Users by author, and
- * neither flow can produce both at once. Stacking them would be a filter nobody
- * can reach and a banner nobody can read.
- */
-export type ReviewFocus = {
-  kind: 'author' | 'venue';
-  id: string;
-  /** Carried so the banner can name it without a second round trip. */
-  label: string;
-};
+export type { ReviewFocus } from '@/components/admin/review-row';
 
 const PAGE_SIZES = [25, 50, 100];
 
@@ -122,6 +88,13 @@ const POSTED_OPTIONS = [
   { value: '30', label: 'Last 30 days', days: 30 },
 ] as const;
 
+const STATUS_OPTIONS = [
+  { value: 'any', label: 'Any status' },
+  { value: 'published', label: 'Published' },
+  { value: 'held', label: 'Being checked' },
+  { value: 'rejected', label: 'Not published' },
+] as const;
+
 /** Each option is a (column, direction) pair, so the list needs no header row. */
 const SORT_OPTIONS = [
   { value: 'newest', label: 'Newest first', sort: 'created_at', desc: true },
@@ -135,17 +108,6 @@ const SORT_OPTIONS = [
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-const DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
-  year: 'numeric',
-  month: 'short',
-  day: 'numeric',
-});
-
-const EXACT_FORMAT = new Intl.DateTimeFormat(undefined, {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-});
-
 /** The filter state a link-through resets, and its starting values. */
 const DEFAULTS = {
   search: '',
@@ -155,310 +117,8 @@ const DEFAULTS = {
   tag: 'any',
   author: 'any' as ReviewAuthorStatus,
   posted: 'any',
+  status: 'any' as ReviewModerationFilter,
 };
-
-/* -------------------------------------------------------------------------- */
-
-/**
- * One review's tag-question answers, fetched when the row is opened.
- *
- * Its own component so the fetch lives and dies with the expansion - the same
- * arrangement VenueNotes uses in Places - rather than the section holding a
- * cache it then has to invalidate.
- */
-function ReviewAnswers({ reviewId }: { reviewId: string }) {
-  const [answers, setAnswers] = React.useState<ReviewAnswer[] | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    let active = true;
-
-    listReviewAnswers(reviewId)
-      .then((rows) => active && setAnswers(rows))
-      .catch((cause: unknown) => {
-        if (!active) return;
-        setAnswers([]);
-        setError(cause instanceof Error ? cause.message : 'Could not load the answers.');
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [reviewId]);
-
-  if (answers === null) {
-    return (
-      <View className="py-2">
-        <ActivityIndicator size="small" />
-      </View>
-    );
-  }
-
-  if (error) {
-    return (
-      <Text className="text-xs text-destructive" accessibilityRole="alert">
-        {error}
-      </Text>
-    );
-  }
-
-  if (answers.length === 0) {
-    return (
-      <Text className="text-xs text-muted-foreground">
-        No custom fields answered. Either this place carries no tags, or none of its questions
-        existed when this was written.
-      </Text>
-    );
-  }
-
-  return (
-    <View className="gap-2">
-      {answers.map((answer) => {
-        const value = formatStoredAnswer(answer.kind, answer.config, answer);
-        return (
-          <View key={answer.questionId} className="gap-0.5">
-            <View className="flex-row flex-wrap items-center gap-2">
-              <Text className="text-xs font-medium text-foreground">{answer.prompt}</Text>
-              {/* The question has been reworded since. The prompt above is still
-                  the one this person was asked, which is the point of archiving
-                  rather than editing an answered question. */}
-              {answer.archived ? (
-                <Text className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                  retired wording
-                </Text>
-              ) : null}
-            </View>
-            <Text className={cn('text-sm', value === null ? 'text-muted-foreground' : 'text-foreground')}>
-              {value ?? 'Answered, but the value could not be read.'}
-            </Text>
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-
-/**
- * Who actually wrote it, in full.
- *
- * A per-place name hides the account from readers and from nobody here. The
- * uuid is spelled out and copyable because it is the one identifier that
- * survives everything - the Users search, a ban, a support thread.
- */
-function AuthorAccount({ review }: { review: AdminReview }) {
-  const [copied, setCopied] = React.useState(false);
-
-  function copy() {
-    navigator.clipboard?.writeText(review.authorId);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1200);
-  }
-
-  return (
-    <View className="gap-1">
-      <Text className="text-xs text-muted-foreground">
-        Posted by account <Text className="text-xs font-medium text-foreground">{review.authorName}</Text>
-        {review.alias
-          ? `. Readers see ${review.alias} instead, a name used on this review only.`
-          : '. Readers see that name too: per-place names have been off since this was posted.'}
-      </Text>
-      {/* The panel shows the exact time; readers never get it. Said here so a
-          moderator quoting a review back knows which date that person saw. */}
-      <Text className="text-xs text-muted-foreground">
-        {review.hideDate
-          ? `Readers see "${periodLabel(review.postedPeriod) ?? 'a rough time'}" instead of the date. Exact times are shown only here.`
-          : `Readers see the day it was posted (in UTC), never the time.`}
-      </Text>
-      <Pressable
-        onPress={copy}
-        role="button"
-        aria-label={`Copy the UUID of ${review.authorName}`}
-        className={cn(
-          'flex-row items-center gap-1 self-start',
-          Platform.select({ web: 'cursor-pointer hover:opacity-80' })
-        )}>
-        <Text className="font-mono text-xs text-muted-foreground">{review.authorId}</Text>
-        <Icon
-          as={copied ? Check : Copy}
-          className={cn('size-3', copied ? 'text-primary' : 'text-muted-foreground/50')}
-        />
-      </Pressable>
-    </View>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-
-type ReviewRowProps = {
-  review: AdminReview;
-  onEdit: () => void;
-  onDelete: () => void;
-  onFocus: (focus: ReviewFocus) => void;
-};
-
-function ReviewRow({ review, onEdit, onDelete, onFocus }: ReviewRowProps) {
-  const [expanded, setExpanded] = React.useState(false);
-
-  const hasBody = review.body !== null && review.body.trim() !== '';
-  // Bumped by the trigger itself, so "edited" means the author came back - not
-  // that updated_at was touched a millisecond after insert.
-  const edited = new Date(review.updatedAt).getTime() - new Date(review.createdAt).getTime() > 1000;
-
-  return (
-    <View className="border-b border-border px-6 py-3">
-      <View className="flex-row items-start gap-3">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-6"
-          aria-label={`${expanded ? 'Hide' : 'Show'} the full review of ${review.venueName}`}
-          aria-expanded={expanded}
-          onPress={() => setExpanded(!expanded)}>
-          <Icon as={expanded ? ChevronDown : ChevronRight} className="size-4 text-muted-foreground" />
-        </Button>
-
-        <View className="flex-1 gap-1">
-          <View className="flex-row flex-wrap items-center gap-2">
-            <StarRating value={review.stars} size="sm" />
-            <Text className="text-sm font-medium text-foreground">{review.venueName}</Text>
-            {review.venueTags.map((tag) => (
-              <TagChip key={tag.id} label={tag.label} color={tag.color} textColor={tag.textColor} />
-            ))}
-          </View>
-
-          <View className="flex-row flex-wrap items-center gap-2">
-            {/* The name readers see first, because that is the one a report
-                quotes; the account it hides second, because that is the one
-                every action here acts on. */}
-            {review.alias ? (
-              <>
-                <View className="flex-row items-center gap-1">
-                  <Icon as={VenetianMask} className="size-3.5 text-muted-foreground" />
-                  <Text className="text-xs font-medium text-foreground">{review.alias}</Text>
-                </View>
-                <Text className="text-xs text-muted-foreground">· account {review.authorName}</Text>
-              </>
-            ) : (
-              <Text className="text-xs text-muted-foreground">{review.authorName}</Text>
-            )}
-            {review.authorBannedAt ? (
-              <Badge variant="destructive">
-                <Text>Banned</Text>
-              </Badge>
-            ) : null}
-            {review.authorIsAdmin ? (
-              <Badge>
-                <Text>Admin</Text>
-              </Badge>
-            ) : null}
-            {/* The crossed-out calendar: readers see only a period for this
-                one. The date beside it is the panel's view, not theirs. */}
-            <View className="flex-row items-center gap-1">
-              {review.hideDate ? (
-                <Icon as={CalendarOff} className="size-3.5 text-muted-foreground" />
-              ) : null}
-              <Text
-                className="text-xs text-muted-foreground"
-                {...Platform.select({
-                  web: { title: EXACT_FORMAT.format(new Date(review.createdAt)) },
-                })}>
-                {DATE_FORMAT.format(new Date(review.createdAt))}
-              </Text>
-            </View>
-            {edited ? (
-              <Text
-                className="text-xs text-muted-foreground"
-                {...Platform.select({
-                  web: { title: EXACT_FORMAT.format(new Date(review.updatedAt)) },
-                })}>
-                · edited
-              </Text>
-            ) : null}
-            {/* updated_at cannot tell an admin's edit from the author's own, so
-                it is said outright rather than left to look like the latter. */}
-            {review.adminEditedAt ? (
-              <Text
-                className="text-xs text-primary"
-                {...Platform.select({
-                  web: { title: EXACT_FORMAT.format(new Date(review.adminEditedAt)) },
-                })}>
-                · edited by an admin
-              </Text>
-            ) : null}
-          </View>
-
-          {hasBody ? (
-            <Text
-              className="text-sm text-foreground"
-              // Clamped closed, whole when open: 2000 characters is a legitimate
-              // review and also where a wall of abuse would sit.
-              numberOfLines={expanded ? undefined : 3}>
-              {review.body}
-            </Text>
-          ) : (
-            <Text className="text-sm italic text-muted-foreground">No written review</Text>
-          )}
-
-          <View className="flex-row flex-wrap items-center gap-2">
-            <Text className="text-xs text-muted-foreground">
-              Bathroom: {ANSWER_LABEL[review.transBathroom]}
-            </Text>
-            {review.answerCount > 0 ? (
-              <Text className="text-xs text-muted-foreground">
-                · {review.answerCount} custom {review.answerCount === 1 ? 'answer' : 'answers'}
-              </Text>
-            ) : null}
-          </View>
-        </View>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8"
-              aria-label={`Actions for ${reviewerLabel(review)}'s review of ${review.venueName}`}>
-              <Icon as={MoreHorizontal} className="size-4 text-muted-foreground" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuItem onPress={onEdit}>
-              <Text>Edit review</Text>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onPress={() =>
-                onFocus({ kind: 'venue', id: review.venueId, label: review.venueName })
-              }>
-              <Text>All reviews of this place</Text>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onPress={() =>
-                onFocus({ kind: 'author', id: review.authorId, label: review.authorName })
-              }>
-              <Text>All reviews by this author</Text>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" onPress={onDelete}>
-              <Text>Delete review</Text>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </View>
-
-      {expanded ? (
-        <View className="ml-9 mt-3 gap-3 border-l border-border pl-4">
-          {review.venueAddress ? (
-            <Text className="text-xs text-muted-foreground">{review.venueAddress}</Text>
-          ) : null}
-          <AuthorAccount review={review} />
-          <ReviewAnswers reviewId={review.id} />
-        </View>
-      ) : null}
-    </View>
-  );
-}
 
 /* -------------------------------------------------------------------------- */
 
@@ -474,6 +134,10 @@ type ReviewsSectionProps = {
   focusNonce: number;
   onFocus: (focus: ReviewFocus) => void;
   onClearFocus: () => void;
+  /** Opens the queue, for a review with an open item there. */
+  onOpenQueue: () => void;
+  /** Called after a publish or reject, so the queue's badge catches up. */
+  onModerated: () => void;
   /** Whether this section is the one on screen. See UsersSection. */
   visible: boolean;
 };
@@ -483,6 +147,8 @@ export function ReviewsSection({
   focusNonce,
   onFocus,
   onClearFocus,
+  onOpenQueue,
+  onModerated,
   visible,
 }: ReviewsSectionProps) {
   const [search, setSearch] = React.useState(DEFAULTS.search);
@@ -492,6 +158,7 @@ export function ReviewsSection({
   const [tag, setTag] = React.useState<string>(DEFAULTS.tag);
   const [author, setAuthor] = React.useState<ReviewAuthorStatus>(DEFAULTS.author);
   const [posted, setPosted] = React.useState<string>(DEFAULTS.posted);
+  const [status, setStatus] = React.useState<ReviewModerationFilter>(DEFAULTS.status);
   const [sort, setSort] = React.useState<string>('newest');
   const [pageSize, setPageSize] = React.useState(PAGE_SIZES[0]);
   const [page, setPage] = React.useState(0);
@@ -500,8 +167,12 @@ export function ReviewsSection({
   const [total, setTotal] = React.useState(0);
   const [tags, setTags] = React.useState<AdminTag[]>([]);
   const [error, setError] = React.useState<string | null>(null);
+  // Kept apart from error, which every successful fetch clears: a refused
+  // publish must still be on screen after the refetch that follows it.
+  const [actionError, setActionError] = React.useState<string | null>(null);
   const [editing, setEditing] = React.useState<AdminReview | null>(null);
   const [confirming, setConfirming] = React.useState<AdminReview | null>(null);
+  const [rejecting, setRejecting] = React.useState<AdminReview | null>(null);
   /** Bumped to force a refetch after an action leaves the page possibly stale. */
   const [reloads, setReloads] = React.useState(0);
 
@@ -527,6 +198,7 @@ export function ReviewsSection({
     setTag(DEFAULTS.tag);
     setAuthor(DEFAULTS.author);
     setPosted(DEFAULTS.posted);
+    setStatus(DEFAULTS.status);
     setPage(0);
   }
 
@@ -569,6 +241,7 @@ export function ReviewsSection({
       authorStatus: author,
       postedAfter:
         since.days === null ? null : new Date(Date.now() - since.days * DAY_MS).toISOString(),
+      moderation: status,
       sort: order.sort,
       descending: order.desc,
       limit: pageSize,
@@ -610,6 +283,7 @@ export function ReviewsSection({
     tag,
     author,
     posted,
+    status,
     sort,
     pageSize,
     page,
@@ -628,15 +302,30 @@ export function ReviewsSection({
   }
 
   async function remove(review: AdminReview) {
-    setError(null);
+    setActionError(null);
     try {
       await deleteReview(review.id);
     } catch (cause: unknown) {
       // Includes "no such review", which is what a second admin deleting the
       // same row looks like. Either way the page is stale, so it refetches.
-      setError(cause instanceof Error ? cause.message : 'That review could not be deleted.');
+      setActionError(cause instanceof Error ? cause.message : 'That review could not be deleted.');
     }
     refetch();
+    onModerated();
+  }
+
+  async function publish(review: AdminReview) {
+    setActionError(null);
+    try {
+      await decideReview(review.id, 'publish', {
+        seenStatus: review.moderation,
+        seenUpdatedAt: review.updatedAt,
+      });
+    } catch (cause: unknown) {
+      setActionError(cause instanceof Error ? cause.message : 'That review could not be published.');
+    }
+    refetch();
+    onModerated();
   }
 
   const tagOptions = React.useMemo(
@@ -654,7 +343,8 @@ export function ReviewsSection({
     bathroom !== DEFAULTS.bathroom ||
     tag !== DEFAULTS.tag ||
     author !== DEFAULTS.author ||
-    posted !== DEFAULTS.posted;
+    posted !== DEFAULTS.posted ||
+    status !== DEFAULTS.status;
 
   const from = total === 0 ? 0 : page * pageSize + 1;
   const to = Math.min(total, (page + 1) * pageSize);
@@ -666,9 +356,10 @@ export function ReviewsSection({
         <View className="gap-1">
           <Text className="text-2xl font-bold text-foreground">Reviews</Text>
           <Text className="text-sm text-muted-foreground">
-            Every review posted to LavenderBook. Editing one is recorded on it. A mask marks a
-            per-place name, shown to readers instead of the account name. A crossed-out calendar
-            marks a date readers can&apos;t see; they get a rough period instead.
+            Every review posted to LavenderBook, published or not. Editing one is recorded on it. A
+            mask marks a per-place name, shown to readers instead of the account name. A
+            crossed-out calendar marks a date readers can&apos;t see; they get a rough period
+            instead.
           </Text>
         </View>
 
@@ -714,6 +405,13 @@ export function ReviewsSection({
         </View>
 
         <View className="flex-row flex-wrap items-center gap-3">
+          <FilterSelect
+            label="Status"
+            width="w-[160px]"
+            value={status}
+            options={STATUS_OPTIONS}
+            onChange={(next) => refine(() => setStatus(next as ReviewModerationFilter))}
+          />
           <FilterSelect
             label="Rating"
             width="w-[170px]"
@@ -763,6 +461,11 @@ export function ReviewsSection({
             {error}
           </Text>
         ) : null}
+        {actionError ? (
+          <Text className="text-sm text-destructive" accessibilityRole="alert">
+            {actionError}
+          </Text>
+        ) : null}
       </View>
 
       {rows === null ? (
@@ -792,6 +495,9 @@ export function ReviewsSection({
               onEdit={() => setEditing(review)}
               onDelete={() => setConfirming(review)}
               onFocus={onFocus}
+              onPublish={() => void publish(review)}
+              onReject={() => setRejecting(review)}
+              onOpenQueue={onOpenQueue}
             />
           ))}
         </ScrollView>
@@ -799,6 +505,30 @@ export function ReviewsSection({
 
       {editing ? (
         <ReviewDialog review={editing} onClose={() => setEditing(null)} onSaved={refetch} />
+      ) : null}
+
+      {rejecting ? (
+        <RejectDialog
+          title={rejecting.moderation === 'held' ? 'Reject this review?' : 'Take this review down?'}
+          description={
+            rejecting.moderation === 'held'
+              ? 'It stays unpublished. Its author sees the reason and your note, and editing it sends it back to the queue.'
+              : 'Readers stop seeing it. Its author sees the reason and your note, and editing it sends it back to the queue.'
+          }
+          confirmLabel={rejecting.moderation === 'held' ? 'Reject' : 'Take down'}
+          onClose={() => setRejecting(null)}
+          onConfirm={async (reason, note) => {
+            const target = rejecting;
+            await decideReview(target.id, 'reject', {
+              reason,
+              note,
+              seenStatus: target.moderation,
+              seenUpdatedAt: target.updatedAt,
+            });
+            refetch();
+            onModerated();
+          }}
+        />
       ) : null}
 
       <AlertDialog open={confirming !== null} onOpenChange={(next) => !next && setConfirming(null)}>
@@ -813,7 +543,7 @@ export function ReviewsSection({
                       : confirming.answerCount === 1
                         ? ', along with its one custom-field answer'
                         : `, along with its ${confirming.answerCount} custom-field answers`
-                  }. The place's rating is recalculated without it, and this cannot be undone.`
+                  }. The place's rating is recalculated without it, and this cannot be undone. To take it off the map but keep it, its author told why, use Take down instead.`
                 : null}
             </AlertDialogDescription>
           </AlertDialogHeader>

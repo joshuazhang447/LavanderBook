@@ -345,7 +345,14 @@ export async function fetchNewQuestionCount(venueId: string): Promise<number> {
 export type OptionCount = { optionId: string; label: string; count: number };
 export type ValueCount = { value: string; count: number };
 export type StepCount = { value: number; count: number };
-export type RecentText = { text: string; displayName: string; answeredAt: string };
+export type RecentText = {
+  /** Masked where it quotes a slur a moderator let stand. */
+  text: string;
+  /** The words as written, when `text` has something masked. */
+  unmasked: string | null;
+  displayName: string;
+  answeredAt: string;
+};
 
 /**
  * One question's answers, aggregated. The shape follows the kind, because a
@@ -436,6 +443,7 @@ function parseSummary(kind: QuestionKind, raw: unknown): AnswerSummary {
           .map(asRecord)
           .map((r) => ({
             text: asString(r.text),
+            unmasked: asString(r.unmasked) || null,
             displayName: asString(r.display_name) || 'Someone',
             answeredAt: asString(r.answered_at),
           })),

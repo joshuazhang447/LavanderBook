@@ -1,14 +1,16 @@
-import { Route, SquarePen } from 'lucide-react-native';
+import { Ellipsis, Eye, EyeOff, Flag, Route, SquarePen } from 'lucide-react-native';
 import * as React from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 
 import { AnswerSummaryCard } from '@/components/answer-summary';
+import { ChenfengReportSheet } from '@/components/chenfeng/report-sheet';
 import { openDirections } from '@/components/directions-button';
 import { StarRating } from '@/components/star-rating';
 import { TagPill } from '@/components/tag-pill';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { List, Row, Section } from '@/components/ui/list';
+import { Menu, measureAnchor, type MenuAnchor, type MenuItem } from '@/components/ui/menu';
 import {
   Sheet,
   SheetBackButton,
@@ -19,6 +21,8 @@ import {
 } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import type { VenueSheetProps } from '@/components/venue-sheet';
+import { lightImpact } from '@/lib/haptics';
+import { MASK_TEXT, moderationStatus, REPORT_TEXT, spokenMasked, STATUS_TEXT } from '@/lib/moderation-text';
 import type { AnswerSummaryRow } from '@/lib/questionnaire';
 import { postedLabel } from '@/lib/review-dates';
 import { cn } from '@/lib/utils';
@@ -38,46 +42,63 @@ export function ChenfengVenueSheet({ venue, onClose, onWriteReview }: VenueSheet
   const details = useVenueDetails(venue);
   const [pushed, setPushed] = React.useState(false);
   const [popToken, setPopToken] = React.useState(0);
+  /** The review being reported, in a sheet of its own beside this one. */
+  const [reporting, setReporting] = React.useState<VenueReview | null>(null);
 
   return (
-    <Sheet
-      name="venue-sheet"
-      detents={['medium', 'large']}
-      undimmedThrough="medium"
-      grouped
-      accessibilityLabel={venue.name}
-      onClose={onClose}>
-      <SheetPush
-        base={
-          <PlaceCard
-            details={details}
-            name={venue.name}
-            onDirections={() =>
-              openDirections({
-                latitude: venue.lat,
-                longitude: venue.lng,
-                placeId: venue.google_place_id,
-              })
-            }
-            onWriteReview={onWriteReview}
-            onMoreDetails={() => setPushed(true)}
-          />
-        }
-        pushed={
-          pushed ? (
-            <DetailsPage
+    <>
+      <Sheet
+        name="venue-sheet"
+        detents={['medium', 'large']}
+        undimmedThrough="medium"
+        grouped
+        accessibilityLabel={venue.name}
+        onClose={onClose}>
+        <SheetPush
+          base={
+            <PlaceCard
+              details={details}
               name={venue.name}
-              notes={details.notes}
-              summary={details.summary}
-              reviewCount={details.count}
-              onBack={() => setPopToken((token) => token + 1)}
+              onDirections={() =>
+                openDirections({
+                  latitude: venue.lat,
+                  longitude: venue.lng,
+                  placeId: venue.google_place_id,
+                })
+              }
+              onWriteReview={onWriteReview}
+              onMoreDetails={() => setPushed(true)}
+              onReport={setReporting}
             />
-          ) : null
-        }
-        popToken={popToken}
-        onPopped={() => setPushed(false)}
-      />
-    </Sheet>
+          }
+          pushed={
+            pushed ? (
+              <DetailsPage
+                name={venue.name}
+                notes={details.notes}
+                summary={details.summary}
+                reviewCount={details.count}
+                onBack={() => setPopToken((token) => token + 1)}
+              />
+            ) : null
+          }
+          popToken={popToken}
+          onPopped={() => setPushed(false)}
+        />
+      </Sheet>
+
+      {/* A sibling, as the review form's Learn More is: a sheet stacked on the
+          place card, which stays where it was underneath. */}
+      {reporting ? (
+        <ChenfengReportSheet
+          key={reporting.id}
+          reviewId={reporting.id}
+          authorName={reporting.author_name ?? 'Someone'}
+          onClose={() => setReporting(null)}
+          onSent={details.refetch}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -89,12 +110,14 @@ function PlaceCard({
   onDirections,
   onWriteReview,
   onMoreDetails,
+  onReport,
 }: {
   details: Details;
   name: string;
   onDirections: () => void;
   onWriteReview: () => void;
   onMoreDetails: () => void;
+  onReport: (review: VenueReview) => void;
 }) {
   const { reviews, average, count, bathroom, hasOwnReview, tags, nudge, hasTagPage } = details;
   // "New" means asked since this author last saved - not merely unanswered,
@@ -201,7 +224,7 @@ function PlaceCard({
         ) : (
           <Section header="Reviews">
             {reviews.map((review) => (
-              <ReviewRow key={review.id} review={review} />
+              <ReviewRow key={review.id} review={review} onReport={() => onReport(review)} />
             ))}
           </Section>
         )}
@@ -210,12 +233,34 @@ function PlaceCard({
   );
 }
 
-function ReviewRow({ review }: { review: VenueReview }) {
+function ReviewRow({ review, onReport }: { review: VenueReview; onReport: () => void }) {
   // A period, or the day when the author shows dates: nothing finer exists.
   const posted = postedLabel(review.posted_period, review.posted_on);
   const [expanded, setExpanded] = React.useState(false);
   const [long, setLong] = React.useState(false);
   const name = review.author_name ?? 'Someone';
+  // Only ever set on the reader's own review: nobody else's status is sent.
+  const status = review.is_mine ? moderationStatus(review.status) : null;
+  // A slur the reviewer quoted, masked until the reader asks to see it.
+  const masked = !!review.unmasked_body;
+  const [revealed, setRevealed] = React.useState(false);
+  const body = masked && revealed ? review.unmasked_body : review.body;
+  const canReport = !review.is_mine && !review.reported_by_me;
+
+  const anchorRef = React.useRef<View>(null);
+  const [menu, setMenu] = React.useState<MenuAnchor | null>(null);
+  const items: MenuItem[] = [
+    ...(masked
+      ? [
+          {
+            label: revealed ? MASK_TEXT.hideTitle : MASK_TEXT.showTitle,
+            icon: revealed ? EyeOff : Eye,
+            onPress: () => setRevealed(!revealed),
+          },
+        ]
+      : []),
+    ...(canReport ? [{ label: REPORT_TEXT.actionTitle, icon: Flag, onPress: onReport }] : []),
+  ];
 
   return (
     <Row
@@ -224,12 +269,25 @@ function ReviewRow({ review }: { review: VenueReview }) {
         `${review.stars} stars`,
         posted,
         review.is_mine ? 'You' : null,
-        review.body,
+        status === 'held' || status === 'rejected' ? STATUS_TEXT[status].labelTitle : null,
+        review.reported_by_me ? REPORT_TEXT.reported : null,
+        body && masked && !revealed ? spokenMasked(body) : body,
       ]
         .filter(Boolean)
-        .join(', ')}>
+        .join(', ')}
+      // The row is one element to VoiceOver, so its buttons are offered here.
+      accessibilityActions={[
+        ...(masked
+          ? [{ name: 'reveal', label: revealed ? MASK_TEXT.hideTitle : MASK_TEXT.showTitle }]
+          : []),
+        ...(canReport ? [{ name: 'report', label: REPORT_TEXT.actionTitle }] : []),
+      ]}
+      onAccessibilityAction={(event) => {
+        if (event.nativeEvent.actionName === 'reveal') setRevealed(!revealed);
+        if (event.nativeEvent.actionName === 'report') onReport();
+      }}>
       <View className="flex-row items-center gap-2">
-        <View className="flex-1 flex-row items-center gap-2">
+        <View className="flex-1 flex-row flex-wrap items-center gap-2">
           {/* The alias when the review has one; venue_reviews decides. */}
           <Text textStyle="headline" numberOfLines={1} className="shrink text-foreground">
             {name}
@@ -243,15 +301,53 @@ function ReviewRow({ review }: { review: VenueReview }) {
               </Text>
             </View>
           ) : null}
+          {status === 'held' || status === 'rejected' ? (
+            <View className="rounded-full bg-fill-tertiary px-2 py-0.5">
+              <Text
+                textStyle="caption1"
+                emphasized
+                className={status === 'rejected' ? 'text-destructive' : 'text-label-secondary'}>
+                {STATUS_TEXT[status].labelTitle}
+              </Text>
+            </View>
+          ) : null}
         </View>
         <StarRating value={review.stars} size="xs" />
+        {/* A sibling of the "more" button, never around it: a button inside a
+            button breaks the web. */}
+        {items.length > 0 ? (
+          <View ref={anchorRef} collapsable={false}>
+            <Pressable
+              onPress={async () => {
+                const anchor = await measureAnchor(anchorRef.current);
+                if (!anchor) return;
+                lightImpact();
+                setMenu(anchor);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="More"
+              hitSlop={8}
+              className="active:opacity-30">
+              <Icon as={Ellipsis} size={17} className="text-label-secondary" />
+            </Pressable>
+          </View>
+        ) : null}
       </View>
-      {posted ? (
+      {posted || review.reported_by_me ? (
         <Text textStyle="footnote" className="text-label-secondary">
-          {posted}
+          {[posted, review.reported_by_me ? REPORT_TEXT.reported : null].filter(Boolean).join(' · ')}
         </Text>
       ) : null}
-      {review.body ? (
+      {status === 'held' ? (
+        <Text textStyle="footnote" className="mt-1 text-label-secondary">
+          {STATUS_TEXT.held.line}
+        </Text>
+      ) : status === 'rejected' ? (
+        <Text textStyle="footnote" className="mt-1 text-destructive">
+          {STATUS_TEXT.rejected.formLine}
+        </Text>
+      ) : null}
+      {body ? (
         <View className="mt-1">
           <Text
             textStyle="body"
@@ -260,7 +356,7 @@ function ReviewRow({ review }: { review: VenueReview }) {
               if (!expanded && event.nativeEvent.lines.length >= 6) setLong(true);
             }}
             className="text-foreground">
-            {review.body}
+            {body}
           </Text>
           {long && !expanded ? (
             <Pressable
@@ -276,6 +372,12 @@ function ReviewRow({ review }: { review: VenueReview }) {
           ) : null}
         </View>
       ) : null}
+      <Menu
+        anchor={menu}
+        groups={[items]}
+        onClose={() => setMenu(null)}
+        accessibilityLabel={`Actions for ${name}'s review`}
+      />
     </Row>
   );
 }

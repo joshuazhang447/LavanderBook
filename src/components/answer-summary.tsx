@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import { StarRating } from '@/components/star-rating';
 import { Text } from '@/components/ui/text';
@@ -11,7 +11,14 @@ import {
   money,
   NUMBER_FORMAT as number,
 } from '@/lib/answers';
-import type { AnswerSummary, AnswerSummaryRow, OptionCount, ValueCount } from '@/lib/questionnaire';
+import { MASK_TEXT, spokenMasked } from '@/lib/moderation-text';
+import type {
+  AnswerSummary,
+  AnswerSummaryRow,
+  OptionCount,
+  RecentText,
+  ValueCount,
+} from '@/lib/questionnaire';
 import { useSkin } from '@/lib/skin';
 import { cn } from '@/lib/utils';
 
@@ -320,24 +327,60 @@ function Moment({
   );
 }
 
-function Quotes({ row, summary }: { row: AnswerSummaryRow; summary: Extract<AnswerSummary, { kind: 'short_text' | 'long_text' }> }) {
+/**
+ * One free-text answer. A slur the answer quotes, which a moderator let stand,
+ * arrives masked; the reader can show it, in every skin, from here.
+ */
+function Quote({ entry, clamp }: { entry: RecentText; clamp: boolean }) {
   const cf = useChenfeng();
+  const [revealed, setRevealed] = React.useState(false);
+  const masked = !!entry.unmasked;
+  const text = masked && revealed ? (entry.unmasked ?? entry.text) : entry.text;
+
+  return (
+    <View className="gap-0.5">
+      <Text
+        numberOfLines={clamp ? 4 : undefined}
+        textStyle={cf ? 'body' : undefined}
+        accessibilityLabel={masked && !revealed ? spokenMasked(text) : undefined}
+        className={cf ? 'text-foreground' : 'text-sm leading-5 text-foreground'}>
+        “{text}”
+      </Text>
+      <View className="flex-row flex-wrap items-center gap-x-3">
+        <Text
+          textStyle={cf ? 'footnote' : undefined}
+          className={cf ? 'text-label-secondary' : 'text-xs text-muted-foreground'}>
+          — {entry.displayName}
+        </Text>
+        {masked ? (
+          <Pressable
+            onPress={() => setRevealed(!revealed)}
+            accessibilityRole="button"
+            hitSlop={8}
+            className="active:opacity-50">
+            <Text
+              textStyle={cf ? 'footnote' : undefined}
+              className={cf ? 'text-primary' : 'text-xs font-medium text-muted-foreground underline'}>
+              {cf
+                ? revealed
+                  ? MASK_TEXT.hideTitle
+                  : MASK_TEXT.showTitle
+                : revealed
+                  ? MASK_TEXT.hide
+                  : MASK_TEXT.show}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+function Quotes({ row, summary }: { row: AnswerSummaryRow; summary: Extract<AnswerSummary, { kind: 'short_text' | 'long_text' }> }) {
   return (
     <View className="gap-2">
       {summary.recent.map((entry, index) => (
-        <View key={`${entry.answeredAt}-${index}`} className="gap-0.5">
-          <Text
-            numberOfLines={row.kind === 'long_text' ? 4 : undefined}
-            textStyle={cf ? 'body' : undefined}
-            className={cf ? 'text-foreground' : 'text-sm leading-5 text-foreground'}>
-            “{entry.text}”
-          </Text>
-          <Text
-            textStyle={cf ? 'footnote' : undefined}
-            className={cf ? 'text-label-secondary' : 'text-xs text-muted-foreground'}>
-            — {entry.displayName}
-          </Text>
-        </View>
+        <Quote key={`${entry.answeredAt}-${index}`} entry={entry} clamp={row.kind === 'long_text'} />
       ))}
       <Tally>
         {row.respondents > summary.recent.length

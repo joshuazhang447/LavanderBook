@@ -1,6 +1,14 @@
 import { useFocusEffect } from 'expo-router';
 import { useTabTrigger } from 'expo-router/ui';
-import { Calendar, CalendarOff, CircleUser, MapPin, VenetianMask } from 'lucide-react-native';
+import {
+  Calendar,
+  CalendarOff,
+  CircleUser,
+  Clock,
+  MapPin,
+  TriangleAlert,
+  VenetianMask,
+} from 'lucide-react-native';
 import * as React from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
@@ -10,6 +18,12 @@ import { StarRating } from '@/components/star-rating';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { focusMapOn } from '@/lib/map-focus';
+import {
+  moderationStatus,
+  rejectedLine,
+  STATUS_TEXT,
+  type ModerationStatus,
+} from '@/lib/moderation-text';
 import { postedLabel } from '@/lib/review-dates';
 import { supabase } from '@/lib/supabase';
 import type { SelectedPoi } from '@/lib/venues';
@@ -23,6 +37,11 @@ export type MyReview = {
   hideDate: boolean;
   /** What readers see for when it was posted: a period, or the day. */
   posted: string | null;
+  /** Null from a server older than moderation, which publishes everything. */
+  status: ModerationStatus | null;
+  /** Why a moderator did not publish it, and what they wrote. Rejected only. */
+  reason: string | null;
+  note: string | null;
   venue: {
     id: string;
     name: string;
@@ -64,6 +83,9 @@ export function useMyReviews(changes = 0) {
           alias: (row.alias as string | null) ?? null,
           hideDate: row.hide_date,
           posted: postedLabel(row.posted_period, row.posted_on as string | null),
+          status: moderationStatus(row.moderation),
+          reason: (row.moderation_reason as string | null) ?? null,
+          note: (row.moderation_note as string | null) ?? null,
           venue: {
             id: row.venue_id,
             name: row.venue_name,
@@ -90,6 +112,16 @@ export function useMyReviews(changes = 0) {
   }, [changes, refetch]);
 
   return { reviews, refetch };
+}
+
+/**
+ * What an author is told about a review that is not up, in every skin's list:
+ * waiting for a person, or not published and why. Null while it is published.
+ */
+export function statusLine(review: MyReview): string | null {
+  if (review.status === 'held') return STATUS_TEXT.held.formLine;
+  if (review.status === 'rejected') return rejectedLine(review.reason, review.note);
+  return null;
 }
 
 /** The signed-in account's reviews. my_reviews() knows who is asking, so no id is passed in. */
@@ -144,7 +176,9 @@ export function MyReviewsList({ changes = 0 }: MyReviewsListProps) {
                 accessibilityRole="button"
                 accessibilityLabel={`${review.venue.name}, ${review.stars} of 5, shown as ${
                   review.alias ?? 'your account name'
-                }${review.posted ? `, ${review.posted}` : ''}`}
+                }${review.posted ? `, ${review.posted}` : ''}${
+                  statusLine(review) ? `. ${statusLine(review)}` : ''
+                }`}
                 className="flex-1 gap-1 p-4 active:bg-accent">
                 {/* numberOfLines truncates with an ellipsis rather than wrapping
                     a long venue name across the row. */}
@@ -173,6 +207,24 @@ export function MyReviewsList({ changes = 0 }: MyReviewsListProps) {
                     />
                     <Text numberOfLines={1} className="flex-1 text-xs text-muted-foreground">
                       {review.hideDate ? `Dated "${review.posted}"` : `Dated ${review.posted}`}
+                    </Text>
+                  </View>
+                ) : null}
+                {/* Only while it is not up: the one place an author learns a
+                    person is reading it, or why it did not go up. */}
+                {review.status === 'held' || review.status === 'rejected' ? (
+                  <View className="flex-row items-start gap-1">
+                    <Icon
+                      as={review.status === 'held' ? Clock : TriangleAlert}
+                      className={`mt-0.5 size-3.5 ${
+                        review.status === 'rejected' ? 'text-destructive' : 'text-muted-foreground'
+                      }`}
+                    />
+                    <Text
+                      className={`flex-1 text-xs ${
+                        review.status === 'rejected' ? 'text-destructive' : 'text-muted-foreground'
+                      }`}>
+                      {statusLine(review)}
                     </Text>
                   </View>
                 ) : null}

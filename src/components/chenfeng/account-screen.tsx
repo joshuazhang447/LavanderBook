@@ -4,6 +4,7 @@ import {
   Calendar,
   CalendarOff,
   CircleUser,
+  Clock,
   DoorOpen,
   Map as MapIcon,
   Navigation,
@@ -21,7 +22,7 @@ import { ActivityIndicator, Platform, View } from 'react-native';
 import { LargeTitleScreen } from '@/components/chenfeng/large-title-screen';
 import { SignInSheet } from '@/components/chenfeng/sign-in-sheet';
 import { SwipeRow } from '@/components/chenfeng/swipe-row';
-import { useMyReviews, type MyReview } from '@/components/my-reviews-list';
+import { statusLine, useMyReviews, type MyReview } from '@/components/my-reviews-list';
 import { OauBadge } from '@/components/oau-badge';
 import { ReviewSheet } from '@/components/review-sheet';
 import { StarRating } from '@/components/star-rating';
@@ -472,6 +473,8 @@ function ReviewRow({
       ? `Dated "${review.posted}"`
       : `Dated ${review.posted}`
     : null;
+  // Only while it is not up: waiting for a person, or not published and why.
+  const status = statusLine(review);
 
   return (
     <View ref={ref} collapsable={false}>
@@ -482,7 +485,7 @@ function ReviewRow({
         // One element, read as one sentence.
         accessibilityLabel={`${review.venue.name}, ${review.stars} of 5 stars, ${shownAs}${
           dated ? `, ${dated}` : ''
-        }`}
+        }${status ? `. ${status}` : ''}`}
         accessibilityHint="Opens the review to edit it."
         accessibilityActions={[
           { name: 'edit', label: 'Edit Review' },
@@ -523,6 +526,22 @@ function ReviewRow({
               />
               <Text textStyle="footnote" numberOfLines={1} className="flex-1 text-label-secondary">
                 {dated}
+              </Text>
+            </View>
+          ) : null}
+          {status ? (
+            <View className="flex-row items-start gap-1.5">
+              <Icon
+                as={review.status === 'held' ? Clock : TriangleAlert}
+                size={13}
+                className={review.status === 'held' ? 'text-label-secondary' : 'text-destructive'}
+              />
+              <Text
+                textStyle="footnote"
+                className={
+                  review.status === 'held' ? 'flex-1 text-label-secondary' : 'flex-1 text-destructive'
+                }>
+                {status}
               </Text>
             </View>
           ) : null}

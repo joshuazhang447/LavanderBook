@@ -23,6 +23,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { FilterSelect, useDebounced } from '@/components/admin/filters';
+import { RejectDialog } from '@/components/admin/reject-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -39,6 +40,7 @@ import {
   listAdminUsers,
   setUserAdmin,
   setUserBanned,
+  takeDownAuthorReviews,
   type AdminUser,
   type AdminUserSort,
   type AdminUserStatus,
@@ -129,6 +131,8 @@ function HeaderCell({ label, className, column, sort, descending, onSort }: Head
 
 type UsersSectionProps = {
   onShowReviews: (user: AdminUser) => void;
+  /** Called after taking an account's reviews down, so the queue's badge catches up. */
+  onModerated: () => void;
   /**
    * Whether this section is the one on screen.
    *
@@ -140,7 +144,7 @@ type UsersSectionProps = {
   visible: boolean;
 };
 
-export function UsersSection({ onShowReviews, visible }: UsersSectionProps) {
+export function UsersSection({ onShowReviews, onModerated, visible }: UsersSectionProps) {
   const { session } = useAuth();
   const selfId = session?.user.id ?? null;
 
@@ -167,6 +171,8 @@ export function UsersSection({ onShowReviews, visible }: UsersSectionProps) {
    * do this.
    */
   const [promoting, setPromoting] = React.useState<{ user: AdminUser; next: boolean } | null>(null);
+  /** A banned account whose reviews are about to come down, all at once. */
+  const [takingDown, setTakingDown] = React.useState<AdminUser | null>(null);
   /** Bumped to force a refetch after an action leaves the page possibly stale. */
   const [reloads, setReloads] = React.useState(0);
 
@@ -603,6 +609,23 @@ export function UsersSection({ onShowReviews, visible }: UsersSectionProps) {
                         <Text>Grant admin access</Text>
                       </DropdownMenuItem>
                     )}
+
+                    {/* Only for a banned account: reviews that come down together
+                        read as one person's, which is only fine once who that
+                        person is was the reason. Disabled with the reason on it
+                        rather than hidden. */}
+                    <DropdownMenuItem
+                      variant="destructive"
+                      disabled={!row.bannedAt || row.reviewCount === 0}
+                      onPress={() => setTakingDown(row)}>
+                      <Text>
+                        {!row.bannedAt
+                          ? 'Take down reviews: ban first'
+                          : row.reviewCount === 0
+                            ? 'No reviews to take down'
+                            : 'Take down all their reviews...'}
+                      </Text>
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </View>
@@ -610,6 +633,20 @@ export function UsersSection({ onShowReviews, visible }: UsersSectionProps) {
           ))}
         </ScrollView>
       )}
+
+      {takingDown ? (
+        <RejectDialog
+          title={`Take down every review by ${takingDown.displayName}?`}
+          description="All of them come down at once, which tells anyone comparing the map before and after that they were written by one person. That is why this is kept for banned accounts. Each one is recorded with this reason."
+          confirmLabel="Take them all down"
+          onClose={() => setTakingDown(null)}
+          onConfirm={async (reason, note) => {
+            await takeDownAuthorReviews(takingDown.id, reason, note);
+            setReloads((count) => count + 1);
+            onModerated();
+          }}
+        />
+      ) : null}
 
       <AlertDialog open={promoting !== null} onOpenChange={(next) => !next && setPromoting(null)}>
         <AlertDialogContent>
