@@ -1,0 +1,11 @@
+// Cloudflare hosting for the website (lavenderbook.oau.app).
+// Cloudflare builds it from GitHub with `npx expo export --platform web` and
+// serves the static files in dist/ - there is no server code. The EXPO_PUBLIC_*
+// values are build variables in the Cloudflare dashboard, since .env is not in git.
+{
+  "name": "lavenderbook",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist"
+  }
+}

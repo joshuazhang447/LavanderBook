@@ -51,3 +51,7 @@ example
 
 # local tooling
 .claude/
+
+# Built app packages - published as releases, not committed
+*.apk
+*.aab
