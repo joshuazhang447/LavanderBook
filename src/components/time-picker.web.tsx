@@ -1,4 +1,5 @@
 import type { TimePickerProps } from '@/components/time-picker';
+import { useSkin } from '@/lib/skin';
 import { cn } from '@/lib/utils';
 
 /**
@@ -7,6 +8,7 @@ import { cn } from '@/lib/utils';
  * 'HH:MM' - exactly what is stored. @expo/ui's picker renders nothing here.
  */
 export function TimePicker({ value, onChange, label, disabled }: TimePickerProps) {
+  const chenfeng = useSkin().skin === 'chenfeng';
   return (
     <input
       type="time"
@@ -14,11 +16,20 @@ export function TimePicker({ value, onChange, label, disabled }: TimePickerProps
       value={value}
       disabled={disabled}
       onChange={(event) => onChange(event.currentTarget.value)}
-      className={cn(
-        'h-9 w-32 rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm shadow-black/5 outline-none transition-[color,box-shadow] dark:bg-input/30 dark:[color-scheme:dark]',
-        'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
-        'disabled:cursor-not-allowed disabled:opacity-50'
-      )}
+      className={
+        // Chenfeng: iOS's compact pill - the tertiary fill, Body, no border.
+        chenfeng
+          ? cn(
+              'h-[34px] rounded-full border-0 bg-fill-tertiary px-3 text-[17px] text-foreground outline-none dark:[color-scheme:dark]',
+              'focus-visible:ring-[3px] focus-visible:ring-ring/50',
+              'disabled:cursor-not-allowed disabled:opacity-50'
+            )
+          : cn(
+              'h-9 w-32 rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm shadow-black/5 outline-none transition-[color,box-shadow] dark:bg-input/30 dark:[color-scheme:dark]',
+              'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
+              'disabled:cursor-not-allowed disabled:opacity-50'
+            )
+      }
     />
   );
 }

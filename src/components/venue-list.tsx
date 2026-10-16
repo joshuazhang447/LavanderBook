@@ -22,7 +22,7 @@ import { venueTags } from '@/lib/venue-tags';
 const SEARCH_DEBOUNCE_MS = 300;
 
 /** Raw metres stop being readable past a few hundred. */
-function formatDistance(meters: number | null): string {
+export function formatDistance(meters: number | null): string {
   if (meters === null) return '';
   return meters < 1000 ? `${Math.round(meters)} m` : `${(meters / 1000).toFixed(1)} km`;
 }
@@ -129,14 +129,13 @@ type VenueListProps = {
  * only for rated venues - an unrated place is found by tapping its label on the
  * map, which costs nothing where a Places search would.
  */
-export function VenueList({ venues, origin, onSelectVenue, onLocateVenue }: VenueListProps) {
-  const insets = useSafeAreaInsets();
-  // The map's controls sit a row lower under a phone browser's "Leave now".
-  const leaveNow = useLeaveNowReserve();
-  // Wide viewports get a header row that already clears the status bar; narrow
-  // ones run under the notch, so the screen pays its own inset.
-  const { isWide } = useIsWideViewport();
-  const [query, setQuery] = React.useState('');
+/**
+ * The rows the list shows: the venues already fetched for the map, or - while
+ * something is typed - the reviewed venues matching it, nearest first either
+ * way, measured here. Shared with Chenfeng's list, whose search field is the
+ * tab bar's rather than its own.
+ */
+export function useVenueRows(venues: NearbyVenue[], origin: Coords | null, query: string) {
   const [results, setResults] = React.useState<NearbyVenue[] | null>(null);
 
   const trimmed = query.trim();
@@ -185,6 +184,19 @@ export function VenueList({ venues, origin, onSelectVenue, onLocateVenue }: Venu
       }))
       .sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
   }, [searching, results, venues, origin]);
+
+  return { rows, loading, searching, trimmed };
+}
+
+export function VenueList({ venues, origin, onSelectVenue, onLocateVenue }: VenueListProps) {
+  const insets = useSafeAreaInsets();
+  // The map's controls sit a row lower under a phone browser's "Leave now".
+  const leaveNow = useLeaveNowReserve();
+  // Wide viewports get a header row that already clears the status bar; narrow
+  // ones run under the notch, so the screen pays its own inset.
+  const { isWide } = useIsWideViewport();
+  const [query, setQuery] = React.useState('');
+  const { rows, loading, searching, trimmed } = useVenueRows(venues, origin, query);
 
   return (
     <View className="flex-1 bg-background">

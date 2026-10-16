@@ -116,15 +116,17 @@ type MapSearchProps = {
  * venues only and is free because it never leaves Postgres. Both exist on
  * purpose: the list answers "where that people rated", this answers "where is".
  */
-export function MapSearch({ origin, onPick, onClear, open, onOpenChange }: MapSearchProps) {
-  const { width: windowWidth } = useWindowDimensions();
+/**
+ * The search itself, without its field: what has been typed, what came back,
+ * and the guards that keep a billed Places call from going out more than it
+ * must (see MapSearch). Shared by the pill below and Chenfeng's search field,
+ * so both pay for searches the same way. Searches only while `active`.
+ */
+export function usePlaceSearch(origin: Coords | null, active: boolean) {
   const [query, setQuery] = React.useState('');
   const [results, setResults] = React.useState<PlaceResult[] | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
-  // Where the pill sits in the controls row, so the field can expand into
-  // exactly the space left on screen rather than a guessed width.
-  const [pillX, setPillX] = React.useState(0);
 
   // Bumped on every search so a response that arrives after a newer one, or
   // after the box was closed, is dropped rather than replacing what is shown.
@@ -141,6 +143,75 @@ export function MapSearch({ origin, onPick, onClear, open, onOpenChange }: MapSe
   }, [origin]);
 
   const trimmed = query.trim();
+
+  const run = React.useCallback(async (q: string) => {
+    const id = ++requestId.current;
+    lastSearched.current = q;
+    setBusy(true);
+    setError(null);
+
+    const outcome = await searchPlaces(q, originRef.current);
+    if (id !== requestId.current) return;
+
+    if (outcome.ok) {
+      setResults(outcome.results);
+    } else {
+      setResults(null);
+      setError(outcome.message);
+    }
+    setBusy(false);
+  }, []);
+
+  // Search when typing stops. The cleanup is what makes it a debounce: every
+  // keystroke tears down the pending timer before setting a new one.
+  React.useEffect(() => {
+    if (!active) return;
+    if (trimmed.length < MIN_QUERY_CHARS) return;
+    if (trimmed === lastSearched.current) return;
+
+    const timer = setTimeout(() => void run(trimmed), TYPING_PAUSE_MS);
+    return () => clearTimeout(timer);
+  }, [active, trimmed, run]);
+
+  function reset() {
+    // Invalidate anything in flight, or its results would repopulate the list
+    // moments after the user emptied it.
+    requestId.current++;
+    lastSearched.current = null;
+    setQuery('');
+    setResults(null);
+    setError(null);
+    setBusy(false);
+  }
+
+  function change(next: string) {
+    setQuery(next);
+    // Emptying the box should empty the dropdown with it, rather than leaving
+    // the last search hanging over a map the user is now looking at.
+    if (next.trim().length < MIN_QUERY_CHARS) {
+      requestId.current++;
+      lastSearched.current = null;
+      setResults(null);
+      setError(null);
+      setBusy(false);
+    }
+  }
+
+  /** Enter: search now, rather than waiting out the pause. */
+  function submit() {
+    if (trimmed.length > 0 && trimmed !== lastSearched.current) void run(trimmed);
+  }
+
+  return { query, trimmed, results, setResults, error, busy, change, reset, submit };
+}
+
+export function MapSearch({ origin, onPick, onClear, open, onOpenChange }: MapSearchProps) {
+  const { width: windowWidth } = useWindowDimensions();
+  // Where the pill sits in the controls row, so the field can expand into
+  // exactly the space left on screen rather than a guessed width.
+  const [pillX, setPillX] = React.useState(0);
+  const search = usePlaceSearch(origin, open);
+  const { query, trimmed, results, setResults, error, busy, change, reset } = search;
   const field = useFieldText({ value: query, onChangeText: change });
 
   /**
@@ -169,62 +240,9 @@ export function MapSearch({ origin, onPick, onClear, open, onOpenChange }: MapSe
 
   const fieldStyle = useAnimatedStyle(() => ({ width: width.get() }));
 
-  const run = React.useCallback(async (q: string) => {
-    const id = ++requestId.current;
-    lastSearched.current = q;
-    setBusy(true);
-    setError(null);
-
-    const outcome = await searchPlaces(q, originRef.current);
-    if (id !== requestId.current) return;
-
-    if (outcome.ok) {
-      setResults(outcome.results);
-    } else {
-      setResults(null);
-      setError(outcome.message);
-    }
-    setBusy(false);
-  }, []);
-
-  // Search when typing stops. The cleanup is what makes it a debounce: every
-  // keystroke tears down the pending timer before setting a new one.
-  React.useEffect(() => {
-    if (!open) return;
-    if (trimmed.length < MIN_QUERY_CHARS) return;
-    if (trimmed === lastSearched.current) return;
-
-    const timer = setTimeout(() => void run(trimmed), TYPING_PAUSE_MS);
-    return () => clearTimeout(timer);
-  }, [open, trimmed, run]);
-
-  function reset() {
-    // Invalidate anything in flight, or its results would repopulate the list
-    // moments after the user emptied it.
-    requestId.current++;
-    lastSearched.current = null;
-    setQuery('');
-    setResults(null);
-    setError(null);
-    setBusy(false);
-  }
-
   function toggle() {
     if (open) reset();
     onOpenChange(!open);
-  }
-
-  function change(next: string) {
-    setQuery(next);
-    // Emptying the box should empty the dropdown with it, rather than leaving
-    // the last search hanging over a map the user is now looking at.
-    if (next.trim().length < MIN_QUERY_CHARS) {
-      requestId.current++;
-      lastSearched.current = null;
-      setResults(null);
-      setError(null);
-      setBusy(false);
-    }
   }
 
   function pick(place: PlaceResult) {
@@ -271,7 +289,7 @@ export function MapSearch({ origin, onPick, onClear, open, onOpenChange }: MapSe
                 onSubmitEditing={() => {
                   // Enter is an override, not the only way in: it searches at
                   // once rather than waiting out the pause.
-                  if (trimmed.length > 0 && trimmed !== lastSearched.current) void run(trimmed);
+                  search.submit();
                 }}
                 placeholder="Search any place"
                 returnKeyType="search"

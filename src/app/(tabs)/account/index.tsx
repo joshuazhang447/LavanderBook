@@ -4,18 +4,29 @@ import { ActivityIndicator, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AccountSettingsCard } from '@/components/account-settings-card';
+import { AppearanceSetting } from '@/components/appearance-setting';
+import { ChenfengAccountScreen } from '@/components/chenfeng/account-screen';
 import { useLeaveNowReserve } from '@/components/leave-now';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { MyReviewsList } from '@/components/my-reviews-list';
+import { OauBadge } from '@/components/oau-badge';
 import { LeaveNowSetting, LocationSetting } from '@/components/privacy-settings';
-import { useIsWideViewport } from '@/components/tab-bar';
+import { useIsWideViewport, useTabBarOverlap } from '@/components/tab-bar';
 import { useAuth } from '@/lib/auth';
 import { reopenSafetyNotice } from '@/lib/safety';
+import { useSkin } from '@/lib/skin';
 
 export default function AccountScreen() {
+  const { skin } = useSkin();
+  // Chenfeng's is a settings list with a page per setting (its own file);
+  // Basic and Material keep this one.
+  return skin === 'chenfeng' ? <ChenfengAccountScreen /> : <BasicAccountScreen />;
+}
+
+function BasicAccountScreen() {
   const { session, loading, signInWithGoogle, signOut } = useAuth();
   const insets = useSafeAreaInsets();
   const { isWide } = useIsWideViewport();
@@ -24,6 +35,8 @@ export default function AccountScreen() {
   // title, which "Partir maintenant" would otherwise all but touch.
   const { top: leaveNow } = useLeaveNowReserve();
   const topInset = (isWide ? 0 : insets.top) + leaveNow;
+  // Non-zero only under a tab bar that floats over the screen.
+  const tabBarOverlap = useTabBarOverlap();
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   /** Bumped when a privacy switch turned on has changed how the reviews below are shown. */
@@ -53,7 +66,10 @@ export default function AccountScreen() {
     <View className="flex-1 bg-background" style={{ paddingTop: topInset }}>
       {/* The reviews list grows with every review posted, so this has to scroll.
           Bottom padding only - the tab bar owns the bottom inset itself. */}
-      <ScrollView className="flex-1" contentContainerClassName="pb-10">
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="pb-10"
+        contentContainerStyle={tabBarOverlap ? { paddingBottom: 40 + tabBarOverlap } : undefined}>
         <View className="w-full max-w-md gap-6 self-center px-6 pt-8">
           <Text className="text-3xl font-bold text-foreground">My Account</Text>
 
@@ -71,6 +87,9 @@ export default function AccountScreen() {
               <LeaveNowSetting />
             </View>
           )}
+
+          {/* Outside the account's card: a guest picks a look too. */}
+          <AppearanceSetting />
 
           {session ? (
             // Keyed by account, so a different one starts from an empty list
@@ -100,6 +119,8 @@ export default function AccountScreen() {
             <Icon as={ShieldAlert} className="size-4 text-muted-foreground" />
             <Text className="text-muted-foreground">Read the safety notice again</Text>
           </Button>
+
+          <OauBadge />
         </View>
       </ScrollView>
     </View>

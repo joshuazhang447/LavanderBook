@@ -11,6 +11,7 @@ import { Pressable, View } from 'react-native';
 import { Text } from '@/components/ui/text';
 import type { PlaceResult } from '@/lib/place-search';
 import { lookupPlace } from '@/lib/place-search';
+import { useSkin } from '@/lib/skin';
 import { supabase } from '@/lib/supabase';
 import { deriveTagColors } from '@/lib/tag-colors';
 import { VIEW_RADIUS_METERS } from '@/lib/use-location';
@@ -369,6 +370,56 @@ type CameraProps = {
 };
 
 /**
+ * Nudges the map's box until its tiles have drawn.
+ *
+ * Google's map draws no tiles until its box changes size after the map has
+ * finished setting itself up. Under a tab bar that takes a row of its own -
+ * Basic's, Material's - that happens by accident: the bar arrives a render
+ * after the map, and the map's box shrinks to make room. Under one that floats
+ * over the map, as Chenfeng's does, nothing moves and the map stayed blank.
+ *
+ * So until Google says tiles have loaded, the box alternates between its full
+ * height and a pixel less, twice a second: each change is a resize, and the
+ * first to land after the map is ready starts the tiles. No fixed delay: how
+ * long the setting up takes depends on the network, and a tab opened in the
+ * background renders nothing until it is shown. Stops at the first tiles, or
+ * after half a minute, and always ends at full height.
+ */
+function SizeNudge() {
+  const map = useMap();
+  // Only under Chenfeng's floating bar; the others' maps are left as they were.
+  const floating = useSkin().skin === 'chenfeng';
+
+  React.useEffect(() => {
+    if (!map || !floating) return;
+    const box = map.getDiv();
+    let tries = 0;
+    const stop = () => {
+      clearInterval(timer);
+      box.style.height = '100%';
+    };
+    const loaded = map.addListener('tilesloaded', () => {
+      stop();
+      loaded.remove();
+    });
+    const timer = setInterval(() => {
+      tries += 1;
+      if (tries > 60) {
+        stop();
+        return;
+      }
+      box.style.height = tries % 2 === 1 ? 'calc(100% - 1px)' : '100%';
+    }, 500);
+    return () => {
+      clearInterval(timer);
+      loaded.remove();
+    };
+  }, [map, floating]);
+
+  return null;
+}
+
+/**
  * Drives the camera imperatively from inside the map.
  *
  * panTo on an uncontrolled map, never a controlled `center` prop: a controlled
@@ -436,6 +487,11 @@ type VenueMapProps = {
   focusToken: number;
   /** Fires only for a pan or zoom the user performed, never our own moves. */
   onUserPannedTo: (region: MapRegion) => void;
+  /**
+   * Unused here: Google's credits on the website cannot be moved, so the tab
+   * bar sits above them instead (tab-bar.tsx).
+   */
+  bottomInset?: number;
 };
 
 /**
@@ -580,6 +636,7 @@ export function VenueMap({
           cameraControl={false}
           rotateControl={false}
           zoomControl={false}>
+          <SizeNudge />
           <Camera
             followCenter={followCenter}
             focusToken={focusToken}

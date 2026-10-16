@@ -4,6 +4,7 @@ import * as React from 'react';
 
 import type { DatePickerProps } from '@/components/date-picker';
 import { PickerButton } from '@/components/picker-button';
+import { DIALOG_HOST } from '@/components/time-picker.android';
 import { dateToDay, dayToDate } from '@/lib/calendar-day';
 
 /**
@@ -28,6 +29,7 @@ export function DatePicker({ value, onChange, label, disabled }: DatePickerProps
       {open ? (
         <DateTimePicker
           mode="date"
+          style={DIALOG_HOST}
           value={dayToDate(value, 'utc')}
           onValueChange={(_, date) => {
             setOpen(false);

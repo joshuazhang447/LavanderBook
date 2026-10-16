@@ -3,7 +3,7 @@ import { Clock } from 'lucide-react-native';
 import * as React from 'react';
 import { useColorScheme, View } from 'react-native';
 
-import { PickerButton } from '@/components/picker-button';
+import { ChenfengPill, ClearButton, PickerButton } from '@/components/picker-button';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { Text } from '@/components/ui/text';
 import { clockToDate, dateToClock } from '@/lib/clock-time';
+import { useSkin } from '@/lib/skin';
 
 export type TimePickerProps = {
   /** 'HH:MM', or '' for no answer. */
@@ -31,7 +32,45 @@ export type TimePickerProps = {
  * way to another one doesn't answer the question. Android has its own file,
  * because there the system already shows a dialog; the web has the browser's.
  */
-export function TimePicker({ value, onChange, label, defaultTime, disabled }: TimePickerProps) {
+export function TimePicker(props: TimePickerProps) {
+  const { skin } = useSkin();
+  return skin === 'chenfeng' ? <CompactTimePicker {...props} /> : <DialogTimePicker {...props} />;
+}
+
+/**
+ * Chenfeng: SwiftUI's compact time picker in the row, which opens the system's
+ * wheels in a popover. Until there is an answer, a pill that starts one at the
+ * question's default time; beside an answer, its clear.
+ */
+function CompactTimePicker({ value, onChange, label, defaultTime, disabled }: TimePickerProps) {
+  const dark = useColorScheme() === 'dark';
+  if (!value) {
+    return (
+      <ChenfengPill
+        value=""
+        label={label}
+        disabled={disabled}
+        onPress={() => onChange(defaultTime)}
+        onClear={() => onChange('')}
+      />
+    );
+  }
+  return (
+    <View className="flex-row items-center gap-1.5">
+      <DateTimePicker
+        mode="time"
+        display="compact"
+        value={clockToDate(value, defaultTime)}
+        disabled={disabled}
+        themeVariant={dark ? 'dark' : 'light'}
+        onValueChange={(_, date) => onChange(dateToClock(date))}
+      />
+      {disabled ? null : <ClearButton label={label} onClear={() => onChange('')} />}
+    </View>
+  );
+}
+
+function DialogTimePicker({ value, onChange, label, defaultTime, disabled }: TimePickerProps) {
   const [draft, setDraft] = React.useState<Date | null>(null);
   const dark = useColorScheme() === 'dark';
 

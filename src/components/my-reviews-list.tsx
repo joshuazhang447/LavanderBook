@@ -14,7 +14,7 @@ import { postedLabel } from '@/lib/review-dates';
 import { supabase } from '@/lib/supabase';
 import type { SelectedPoi } from '@/lib/venues';
 
-type MyReview = {
+export type MyReview = {
   stars: number;
   updated_at: string;
   /** The name readers see on this review. Null: the account's display name. */
@@ -41,13 +41,14 @@ type MyReviewsListProps = {
   changes?: number;
 };
 
-/** The signed-in account's reviews. my_reviews() knows who is asking, so no id is passed in. */
-export function MyReviewsList({ changes = 0 }: MyReviewsListProps) {
-  // switchTab rather than router.navigate: this is the mechanism the tab bar
-  // itself uses, so it lands on the tab rather than pushing over it.
-  const { switchTab } = useTabTrigger({ name: 'map' });
+/**
+ * The signed-in account's reviews, fetched on focus and whenever `changes` is
+ * bumped. Null while the first fetch is out. Shared by this list and
+ * Chenfeng's Reviews section, so the two can never disagree about what an
+ * account has posted.
+ */
+export function useMyReviews(changes = 0) {
   const [reviews, setReviews] = React.useState<MyReview[] | null>(null);
-  const [open, setOpen] = React.useState<MyReview | null>(null);
   const refetch = React.useCallback(() => {
     let active = true;
 
@@ -87,6 +88,17 @@ export function MyReviewsList({ changes = 0 }: MyReviewsListProps) {
     if (changes === 0) return;
     return refetch();
   }, [changes, refetch]);
+
+  return { reviews, refetch };
+}
+
+/** The signed-in account's reviews. my_reviews() knows who is asking, so no id is passed in. */
+export function MyReviewsList({ changes = 0 }: MyReviewsListProps) {
+  // switchTab rather than router.navigate: this is the mechanism the tab bar
+  // itself uses, so it lands on the tab rather than pushing over it.
+  const { switchTab } = useTabTrigger({ name: 'map' });
+  const { reviews, refetch } = useMyReviews(changes);
+  const [open, setOpen] = React.useState<MyReview | null>(null);
 
   if (reviews === null) {
     return (

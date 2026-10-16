@@ -10,6 +10,9 @@ import { clockToDate, dateToClock, uses24HourClock } from '@/lib/clock-time';
  * Android: the system clock dialog. It opens when mounted and reports once -
  * a time on OK, nothing on Cancel - so it is mounted only while open.
  */
+/** Where the dialog's host view sits: nowhere, at no size. */
+export const DIALOG_HOST = { position: 'absolute', width: 0, height: 0 } as const;
+
 export function TimePicker({ value, onChange, label, defaultTime, disabled }: TimePickerProps) {
   const [open, setOpen] = React.useState(false);
 
@@ -27,6 +30,9 @@ export function TimePicker({ value, onChange, label, defaultTime, disabled }: Ti
       {open ? (
         <DateTimePicker
           mode="time"
+          // The dialog's host view takes no room: in the row it pushed the
+          // pill aside while the clock was open.
+          style={DIALOG_HOST}
           value={clockToDate(value, defaultTime)}
           is24Hour={uses24HourClock()}
           onValueChange={(_, date) => {

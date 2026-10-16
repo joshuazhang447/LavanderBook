@@ -1,10 +1,11 @@
 import type { LucideIcon } from 'lucide-react-native';
-import { X } from 'lucide-react-native';
-import { View } from 'react-native';
+import { CircleX, X } from 'lucide-react-native';
+import { Platform, Pressable, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
+import { useSkin } from '@/lib/skin';
 import { cn } from '@/lib/utils';
 
 /**
@@ -29,6 +30,19 @@ export function PickerButton({
   disabled?: boolean;
   className?: string;
 }) {
+  const { skin } = useSkin();
+  if (skin === 'chenfeng') {
+    return (
+      <ChenfengPill
+        value={value}
+        label={label}
+        onPress={onPress}
+        onClear={onClear}
+        disabled={disabled}
+      />
+    );
+  }
+
   return (
     <View className="flex-row items-center">
       <Button
@@ -52,5 +66,58 @@ export function PickerButton({
         </Button>
       ) : null}
     </View>
+  );
+}
+
+/**
+ * Chenfeng's: iOS's compact date and time pill - about 34 pt, the tertiary
+ * fill, the value in Body - with the clear button beside it as a grey
+ * xmark.circle.fill.
+ */
+export function ChenfengPill({
+  value,
+  label,
+  onPress,
+  onClear,
+  disabled,
+}: {
+  value: string;
+  label: string;
+  onPress: () => void;
+  onClear: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <View className="flex-row items-center gap-1.5">
+      <Pressable
+        onPress={onPress}
+        disabled={disabled}
+        accessibilityRole="button"
+        accessibilityLabel={value ? `${label}: ${value}` : `Choose ${label.toLowerCase()}`}
+        className={cn(
+          'h-[34px] justify-center rounded-full bg-fill-tertiary px-3 active:opacity-75',
+          disabled && 'opacity-50',
+          Platform.select({ web: 'cursor-pointer select-none' })
+        )}>
+        <Text textStyle="body" className={value ? 'text-foreground' : 'text-primary'}>
+          {value || 'Add'}
+        </Text>
+      </Pressable>
+      {value && !disabled ? <ClearButton label={label} onClear={onClear} /> : null}
+    </View>
+  );
+}
+
+/** The grey ✕ beside a pill, taking the answer back. */
+export function ClearButton({ label, onClear }: { label: string; onClear: () => void }) {
+  return (
+    <Pressable
+      onPress={onClear}
+      accessibilityRole="button"
+      accessibilityLabel={`Clear ${label.toLowerCase()}`}
+      hitSlop={8}
+      className={cn('p-1 active:opacity-60', Platform.select({ web: 'cursor-pointer' }))}>
+      <Icon as={CircleX} size={17} className="text-label-tertiary" />
+    </Pressable>
   );
 }

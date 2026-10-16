@@ -47,6 +47,12 @@ type VenueMapProps = {
   focusToken: number;
   /** Fires only for a pan or zoom the user performed, never our own camera moves. */
   onUserPannedTo: (region: MapRegion) => void;
+  /**
+   * How much of the map's bottom edge something floats over - Chenfeng's tab
+   * bar. The map's own legal label and logo move up out from under it, as
+   * they must stay visible. Zero or absent: nothing does.
+   */
+  bottomInset?: number;
 };
 
 /**
@@ -70,6 +76,7 @@ export function VenueMap({
   followCenter,
   focusToken,
   onUserPannedTo,
+  bottomInset = 0,
 }: VenueMapProps) {
   const mapRef = React.useRef<MapView>(null);
   const [ready, setReady] = React.useState(false);
@@ -149,6 +156,9 @@ export function VenueMap({
         onUserPannedTo(region);
       }}
       onMapReady={() => setReady(true)}
+      // Lifts the legal label and logo clear of a tab bar floating over the
+      // map: 10 above its top edge.
+      mapPadding={bottomInset > 0 ? { top: 0, left: 0, right: 0, bottom: bottomInset + 10 } : undefined}
       showsUserLocation={showsUser}
       // Google's own chrome, hidden to match the web map. The my-location button
       // is deliberately off: react-native-maps registers no click listener for

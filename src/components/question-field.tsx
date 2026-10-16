@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { Pressable, View } from 'react-native';
 
+import { ChenfengQuestionField } from '@/components/chenfeng/question-field';
 import { DatePicker } from '@/components/date-picker';
 import { StarRating } from '@/components/star-rating';
 import { TimePicker } from '@/components/time-picker';
@@ -11,6 +12,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Text } from '@/components/ui/text';
 import { Textarea } from '@/components/ui/textarea';
 import type { Database } from '@/lib/database.types';
+import { useSkin } from '@/lib/skin';
 import { cn } from '@/lib/utils';
 
 export type QuestionKind = Database['public']['Enums']['question_kind'];
@@ -135,7 +137,15 @@ type QuestionFieldProps = {
  * Fully controlled, so the same component serves a throwaway preview (local
  * state, discarded) and a real answer (state that gets submitted).
  */
-export function QuestionField({
+export function QuestionField(props: QuestionFieldProps) {
+  // Chenfeng answers inside a section of its form, iOS's way (its own file).
+  // The admin panel is always Basic, so its previews never take this branch.
+  const { skin } = useSkin();
+  if (skin === 'chenfeng') return <ChenfengQuestionField {...props} />;
+  return <BasicQuestionField {...props} />;
+}
+
+function BasicQuestionField({
   kind,
   config,
   options,

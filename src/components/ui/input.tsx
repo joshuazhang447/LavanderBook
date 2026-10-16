@@ -1,15 +1,62 @@
+import { useSkin } from '@/lib/skin';
 import { useFieldText } from '@/lib/use-field-text';
 import { cn } from '@/lib/utils';
+import { useColorScheme } from 'nativewind';
 import { Platform, TextInput } from 'react-native';
+
+/**
+ * Chenfeng's text field, two ways (guideline section 13.9):
+ *
+ *   field  standing alone: a 44 pt capsule in the tertiary fill, iOS 27's
+ *          bordered text field
+ *   row    a row of a form: no border, no fill, Body text, 16 pt in from the
+ *          section's edges, 52 tall - the section is the field's shape
+ *
+ * No focus ring, no red outline for an error: iOS shows neither. A single line
+ * sets no line height, which would push the text off centre on iOS.
+ */
+const CHENFENG_INPUT = {
+  field: 'h-11 rounded-full bg-fill-tertiary px-4',
+  row: 'min-h-[52px] bg-transparent px-4 py-[15px]',
+} as const;
 
 function Input({
   className,
   value,
   onChangeText,
+  look = 'field',
   ...props
-}: React.ComponentProps<typeof TextInput> & React.RefAttributes<TextInput>) {
+}: React.ComponentProps<typeof TextInput> &
+  React.RefAttributes<TextInput> & {
+    /** Chenfeng only: alone, or a row of a form. */
+    look?: keyof typeof CHENFENG_INPUT;
+  }) {
   // On a phone, the field keeps its own text - see useFieldText.
   const field = useFieldText({ value, onChangeText });
+  const { skin } = useSkin();
+  const { colorScheme } = useColorScheme();
+
+  if (skin === 'chenfeng') {
+    return (
+      <TextInput
+        key={field.key}
+        keyboardAppearance={colorScheme === 'dark' ? 'dark' : 'light'}
+        className={cn(
+          'w-full min-w-0 border-0 text-[17px] text-foreground',
+          CHENFENG_INPUT[look],
+          props.editable === false && 'text-label-tertiary',
+          Platform.select({
+            web: 'outline-none placeholder:text-label-tertiary selection:bg-primary/30',
+            native: 'placeholder:text-label-tertiary',
+          }),
+          className
+        )}
+        {...props}
+        {...field.props}
+      />
+    );
+  }
+
   return (
     <TextInput
       key={field.key}
