@@ -271,6 +271,7 @@ export type Database = {
           created_at: string
           hide_date: boolean
           id: string
+          moderation: string
           stars: number
           trans_bathroom: Database["public"]["Enums"]["answer"]
           updated_at: string
@@ -285,6 +286,7 @@ export type Database = {
           created_at?: string
           hide_date?: boolean
           id?: string
+          moderation?: string
           stars: number
           trans_bathroom: Database["public"]["Enums"]["answer"]
           updated_at?: string
@@ -299,6 +301,7 @@ export type Database = {
           created_at?: string
           hide_date?: boolean
           id?: string
+          moderation?: string
           stars?: number
           trans_bathroom?: Database["public"]["Enums"]["answer"]
           updated_at?: string
@@ -504,6 +507,7 @@ export type Database = {
           lat: number | null
           lng: number | null
           name: string
+          pending_name: string | null
         }
         Insert: {
           address?: string | null
@@ -514,6 +518,7 @@ export type Database = {
           lat?: number | null
           lng?: number | null
           name: string
+          pending_name?: string | null
         }
         Update: {
           address?: string | null
@@ -524,6 +529,7 @@ export type Database = {
           lat?: number | null
           lng?: number | null
           name?: string
+          pending_name?: string | null
         }
         Relationships: []
       }
@@ -545,6 +551,24 @@ export type Database = {
       admin_assign_questions: {
         Args: { p_question_ids: string[]; p_tag_id: string }
         Returns: undefined
+      }
+      admin_case_reports: {
+        Args: { p_case_id: string }
+        Returns: {
+          created_at: string
+          id: string
+          note: string
+          outcome: string
+          reason: string
+          reporter_banned_at: string
+          reporter_id: string
+          reporter_joined_at: string
+          reporter_name: string
+          reporter_review_count: number
+          reports_dismissed: number
+          reports_sent: number
+          reports_upheld: number
+        }[]
       }
       admin_create_question: {
         Args: {
@@ -569,15 +593,108 @@ export type Database = {
         }
         Returns: string
       }
+      admin_create_term: {
+        Args: {
+          p_allow?: string[]
+          p_category: string
+          p_language?: string
+          p_match_mode?: string
+          p_note?: string
+          p_term: string
+          p_tier: string
+        }
+        Returns: string
+      }
       admin_create_venue_note: {
         Args: { p_body: string; p_venue_id: string }
+        Returns: string
+      }
+      admin_decide_review: {
+        Args: {
+          p_decision: string
+          p_note?: string
+          p_reason?: string
+          p_review_id: string
+          p_seen_status?: string
+          p_seen_updated_at?: string
+        }
+        Returns: string
+      }
+      admin_decide_venue_name: {
+        Args: { p_decision: string; p_name?: string; p_venue_id: string }
         Returns: string
       }
       admin_delete_question: { Args: { p_id: string }; Returns: undefined }
       admin_delete_review: { Args: { p_id: string }; Returns: undefined }
       admin_delete_tag: { Args: { p_id: string }; Returns: undefined }
+      admin_delete_term: { Args: { p_id: string }; Returns: undefined }
       admin_delete_venue: { Args: { p_id: string }; Returns: undefined }
       admin_delete_venue_note: { Args: { p_id: string }; Returns: undefined }
+      admin_import_terms: {
+        Args: { p_apply?: boolean; p_rows: Json }
+        Returns: {
+          action: string
+          category: string
+          language: string
+          line: number
+          match_mode: string
+          problem: string
+          term: string
+          tier: string
+        }[]
+      }
+      admin_list_cases: {
+        Args: {
+          p_kind?: string
+          p_limit?: number
+          p_offset?: number
+          p_queue?: string
+        }
+        Returns: {
+          admin_edited_at: string
+          alias: string
+          answer_count: number
+          answer_segments: Json
+          author_banned_at: string
+          author_id: string
+          author_is_admin: boolean
+          author_name: string
+          body: string
+          body_segments: Json
+          decided_at: string
+          decided_by_name: string
+          decision: string
+          google_place_id: string
+          hide_date: boolean
+          id: string
+          kind: string
+          moderation: string
+          name_segments: Json
+          note: string
+          opened_at: string
+          pending_name: string
+          posted_period: string
+          priority: number
+          queue: string
+          reason: string
+          report_count: number
+          report_reasons: Json
+          review_created_at: string
+          review_id: string
+          review_updated_at: string
+          signals: string[]
+          stars: number
+          state: string
+          terms: Json
+          total_count: number
+          trans_bathroom: Database["public"]["Enums"]["answer"]
+          updated_at: string
+          venue_address: string
+          venue_id: string
+          venue_name: string
+          venue_tags: Json
+        }[]
+      }
       admin_list_profiles: {
         Args: {
           p_desc?: boolean
@@ -626,6 +743,7 @@ export type Database = {
           p_limit?: number
           p_max_stars?: number
           p_min_stars?: number
+          p_moderation?: string
           p_offset?: number
           p_posted_after?: string
           p_search?: string
@@ -645,6 +763,8 @@ export type Database = {
           created_at: string
           hide_date: boolean
           id: string
+          moderation: string
+          open_case_id: string
           posted_period: string
           stars: number
           total_count: number
@@ -683,6 +803,26 @@ export type Database = {
           sort_order: number
           text_color: string
           venue_count: number
+        }[]
+      }
+      admin_list_terms: {
+        Args: { p_include_archived?: boolean }
+        Returns: {
+          allow: string[]
+          archived_at: string
+          category: string
+          created_at: string
+          created_by_name: string
+          held_count: number
+          id: string
+          in_use: boolean
+          language: string
+          match_mode: string
+          note: string
+          review_count: number
+          term: string
+          tier: string
+          updated_at: string
         }[]
       }
       admin_list_venue_notes: {
@@ -724,6 +864,25 @@ export type Database = {
           total_count: number
         }[]
       }
+      admin_moderation_counts: {
+        Args: never
+        Returns: {
+          decide: number
+          enforced: boolean
+          look: number
+        }[]
+      }
+      admin_moderation_settings: {
+        Args: never
+        Returns: {
+          enforced: boolean
+          held_now: number
+          shadow_last_week: number
+          updated_at: string
+          updated_by_name: string
+        }[]
+      }
+      admin_moderation_try: { Args: { p_text: string }; Returns: Json }
       admin_reorder_questions: {
         Args: { p_ids: string[]; p_tag_id: string }
         Returns: undefined
@@ -732,6 +891,15 @@ export type Database = {
       admin_reorder_venue_notes: {
         Args: { p_ids: string[]; p_venue_id: string }
         Returns: undefined
+      }
+      admin_rescreen_reviews: {
+        Args: { p_after?: string; p_limit?: number }
+        Returns: {
+          changed: number
+          next_after: string
+          opened: number
+          scanned: number
+        }[]
       }
       admin_review_answers: {
         Args: { p_review_id: string }
@@ -770,6 +938,10 @@ export type Database = {
         Args: { p_banned: boolean; p_user: string }
         Returns: string
       }
+      admin_set_moderation_enforced: {
+        Args: { p_enforced: boolean }
+        Returns: boolean
+      }
       admin_set_question_archived: {
         Args: { p_archived: boolean; p_id: string }
         Returns: string
@@ -782,9 +954,17 @@ export type Database = {
         Args: { p_archived: boolean; p_id: string }
         Returns: string
       }
+      admin_set_term_archived: {
+        Args: { p_archived: boolean; p_id: string }
+        Returns: string
+      }
       admin_set_venue_tags: {
         Args: { p_tag_ids: string[]; p_venue_id: string }
         Returns: undefined
+      }
+      admin_take_down_author_reviews: {
+        Args: { p_note?: string; p_reason: string; p_user: string }
+        Returns: number
       }
       admin_unassign_question: {
         Args: { p_question_id: string; p_tag_id: string }
@@ -810,6 +990,19 @@ export type Database = {
         }
         Returns: undefined
       }
+      admin_update_term: {
+        Args: {
+          p_allow: string[]
+          p_category: string
+          p_id: string
+          p_language: string
+          p_match_mode: string
+          p_note: string
+          p_term: string
+          p_tier: string
+        }
+        Returns: undefined
+      }
       admin_update_venue_note: {
         Args: { p_body: string; p_id: string }
         Returns: undefined
@@ -832,6 +1025,66 @@ export type Database = {
       generate_display_name: { Args: never; Returns: string }
       is_admin: { Args: never; Returns: boolean }
       is_banned: { Args: { p_user: string }; Returns: boolean }
+      moderation_apply_mask: {
+        Args: { p_term_ids: string[]; p_text: string }
+        Returns: string
+      }
+      moderation_char_class: { Args: { p_char: string }; Returns: string }
+      moderation_compile: {
+        Args: { p_folded: string; p_mode: string }
+        Returns: string
+      }
+      moderation_compile_allow: { Args: { p_allow: string[] }; Returns: string }
+      moderation_enforced: { Args: never; Returns: boolean }
+      moderation_fold: { Args: { p_text: string }; Returns: string }
+      moderation_marks: {
+        Args: { p_hold_only: boolean; p_term_ids: string[]; p_text: string }
+        Returns: {
+          seg_hit: boolean
+          seg_keep_first: boolean
+          seg_ord: number
+          seg_text: string
+        }[]
+      }
+      moderation_mask: {
+        Args: { p_term_ids: string[]; p_text: string }
+        Returns: string
+      }
+      moderation_next_status: {
+        Args: { p_current: string; p_enforced: boolean; p_new_hold: boolean }
+        Returns: string
+      }
+      moderation_note_case: {
+        Args: {
+          p_author_id: string
+          p_kind: string
+          p_priority: number
+          p_queue: string
+          p_review_id: string
+          p_signal: string
+          p_term_ids: string[]
+          p_venue_id: string
+        }
+        Returns: string
+      }
+      moderation_reason_valid: { Args: { p_reason: string }; Returns: boolean }
+      moderation_screen: { Args: { p_texts: string[] }; Returns: string[] }
+      moderation_segments: {
+        Args: { p_term_ids: string[]; p_text: string }
+        Returns: Json
+      }
+      moderation_term_problem: {
+        Args: {
+          p_allow: string[]
+          p_category: string
+          p_language: string
+          p_match_mode: string
+          p_note: string
+          p_term: string
+          p_tier: string
+        }
+        Returns: string
+      }
       my_new_question_count: { Args: { p_venue_id: string }; Returns: number }
       my_reviews: {
         Args: never
@@ -840,6 +1093,9 @@ export type Database = {
           body: string
           hide_date: boolean
           id: string
+          moderation: string
+          moderation_note: string
+          moderation_reason: string
           posted_on: string
           posted_period: string
           stars: number
@@ -865,6 +1121,11 @@ export type Database = {
         Args: { p_kind: Database["public"]["Enums"]["question_kind"] }
         Returns: boolean
       }
+      report_review: {
+        Args: { p_note?: string; p_reason: string; p_review_id: string }
+        Returns: boolean
+      }
+      review_is_readable: { Args: { p_review_id: string }; Returns: boolean }
       secure_random_below: { Args: { p_n: number }; Returns: number }
       set_hide_dates: { Args: { p_enabled: boolean }; Returns: boolean }
       set_per_place_names: { Args: { p_enabled: boolean }; Returns: boolean }
@@ -930,7 +1191,10 @@ export type Database = {
           is_mine: boolean
           posted_on: string
           posted_period: string
+          reported_by_me: boolean
           stars: number
+          status: string
+          unmasked_body: string
         }[]
       }
       venues_near: {

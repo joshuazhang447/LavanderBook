@@ -1,8 +1,10 @@
 import {
+  Inbox,
   ListChecks,
   LogOut,
   MapPin,
   MessageSquareText,
+  SpellCheck,
   Tag as TagIcon,
   Users,
   type LucideIcon,
@@ -24,9 +26,11 @@ import { cn } from '@/lib/utils';
  * panel whose first move is to check the session anyway.
  */
 export const SECTIONS = [
-  // Ordered by how often a section is opened, not by how the data nests. Users
-  // and Reviews are the daily moderation work; tags are set up once and then
-  // rarely touched, so they sit at the bottom.
+  // Ordered by how often a section is opened, not by how the data nests. The
+  // queue is where the day starts; Users and Reviews are the rest of the
+  // moderation work; tags are set up once and then rarely touched, so they sit
+  // at the bottom.
+  { name: 'queue', label: 'Queue', icon: Inbox },
   { name: 'users', label: 'Users', icon: Users },
   { name: 'reviews', label: 'Reviews', icon: MessageSquareText },
   // Lucide's `Tag` collides with nothing here, but it is aliased anyway to match
@@ -35,9 +39,11 @@ export const SECTIONS = [
   // Below Tags because you reach for it second: a field is written once and then
   // attached from the tag that needs it.
   { name: 'fields', label: 'Custom fields', icon: ListChecks },
-  // Last because it depends on the three above: you tag a place with tags that
-  // exist, and it asks fields that exist.
+  // After Tags and Custom fields because it depends on them: you tag a place
+  // with tags that exist, and it asks fields that exist.
   { name: 'places', label: 'Places', icon: MapPin },
+  // Last: written once from the reviewers' workbook, then rarely opened.
+  { name: 'words', label: 'Word list', icon: SpellCheck },
 ] as const satisfies readonly { name: string; label: string; icon: LucideIcon }[];
 
 export type SectionName = (typeof SECTIONS)[number]['name'];
@@ -47,9 +53,12 @@ type NavItemProps = {
   label: string;
   active: boolean;
   onPress: () => void;
+  /** Waiting items, shown as a pill. Zero or absent shows nothing. */
+  count?: number;
 };
 
-function NavItem({ icon, label, active, onPress }: NavItemProps) {
+function NavItem({ icon, label, active, onPress, count }: NavItemProps) {
+  const waiting = count !== undefined && count > 0;
   return (
     // The context colours the icon and the label together, so neither can drift
     // out of step with the other - the same trick the tab bar uses.
@@ -59,6 +68,7 @@ function NavItem({ icon, label, active, onPress }: NavItemProps) {
         onPress={onPress}
         role="tab"
         aria-selected={active}
+        aria-label={waiting ? `${label}, ${count} waiting` : label}
         className={cn(
           'flex-row items-center gap-3 rounded-md px-3 py-2',
           active && 'bg-accent',
@@ -66,7 +76,14 @@ function NavItem({ icon, label, active, onPress }: NavItemProps) {
           Platform.select({ web: 'cursor-pointer transition-colors hover:bg-accent' })
         )}>
         <Icon as={icon} className="size-5" />
-        <Text className="text-sm">{label}</Text>
+        <Text className="flex-1 text-sm">{label}</Text>
+        {waiting ? (
+          <View className="min-w-5 items-center rounded-full bg-destructive px-1.5 py-0.5">
+            <Text className="text-xs font-semibold text-white">
+              {(count ?? 0) > 99 ? '99+' : count}
+            </Text>
+          </View>
+        ) : null}
       </Pressable>
     </TextClassContext.Provider>
   );
@@ -75,12 +92,14 @@ function NavItem({ icon, label, active, onPress }: NavItemProps) {
 type AdminNavProps = {
   section: SectionName;
   onSelect: (section: SectionName) => void;
+  /** Waiting items per section; only the queue has any. */
+  counts?: Partial<Record<SectionName, number>>;
   /** Shown at the foot, so it is obvious which account is acting. */
   email: string | null;
   onSignOut: () => void;
 };
 
-export function AdminNav({ section, onSelect, email, onSignOut }: AdminNavProps) {
+export function AdminNav({ section, onSelect, counts, email, onSignOut }: AdminNavProps) {
   return (
     <View className="w-56 border-r border-border bg-card">
       <View className="gap-0.5 px-4 py-5">
@@ -98,6 +117,7 @@ export function AdminNav({ section, onSelect, email, onSignOut }: AdminNavProps)
             label={item.label}
             active={section === item.name}
             onPress={() => onSelect(item.name)}
+            count={counts?.[item.name]}
           />
         ))}
       </View>

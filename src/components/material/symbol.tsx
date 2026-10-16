@@ -38,6 +38,7 @@ export const MATERIAL_SYMBOLS = {
   event_upcoming: 0xf238,
   expand_less: 0xe5ce,
   expand_more: 0xe5cf,
+  flag: 0xe153,
   gpp_maybe: 0xf014,
   group: 0xe7ef,
   info: 0xe88e,
@@ -66,6 +67,7 @@ export const MATERIAL_SYMBOLS = {
   theater_comedy: 0xea66,
   translate: 0xe8e2,
   unfold_more: 0xe5d7,
+  visibility: 0xe8f4,
   visibility_off: 0xe8f5,
   warning: 0xe002,
 } as const;

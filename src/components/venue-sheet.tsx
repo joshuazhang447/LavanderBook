@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, CircleUser, X } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, CircleUser, Eye, EyeOff, Flag, X } from 'lucide-react-native';
 import * as React from 'react';
 import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
 import Animated, {
@@ -11,6 +11,7 @@ import Animated, {
 import { AnswerSummaryCard } from '@/components/answer-summary';
 import { ChenfengVenueSheet } from '@/components/chenfeng/venue-sheet';
 import { DirectionsButton } from '@/components/directions-button';
+import { ReportReviewPage } from '@/components/report-review';
 import { StarRating } from '@/components/star-rating';
 import { TagPill } from '@/components/tag-pill';
 import { Badge } from '@/components/ui/badge';
@@ -19,16 +20,23 @@ import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Separator } from '@/components/ui/separator';
 import { Text } from '@/components/ui/text';
+import { MASK_TEXT, moderationStatus, REPORT_TEXT, spokenMasked, STATUS_TEXT } from '@/lib/moderation-text';
 import type { AnswerSummaryRow } from '@/lib/questionnaire';
 import { postedLabel } from '@/lib/review-dates';
 import { useSkin } from '@/lib/skin';
 import type { NearbyVenue } from '@/lib/use-nearby-venues';
 import { useVenueDetails, type Note, type VenueReview } from '@/lib/venue-details';
 
-function ReviewRow({ review }: { review: VenueReview }) {
+function ReviewRow({ review, onReport }: { review: VenueReview; onReport: () => void }) {
   // A period ("A few weeks ago"), or the day when the author shows dates. The
   // server sends nothing finer, so nothing here can be finer either.
   const posted = postedLabel(review.posted_period, review.posted_on);
+  // Only ever set on the reader's own review: nobody else's status is sent.
+  const status = review.is_mine ? moderationStatus(review.status) : null;
+  // A slur the reviewer quoted, masked until the reader asks to see it.
+  const masked = !!review.unmasked_body;
+  const [revealed, setRevealed] = React.useState(false);
+  const body = masked && revealed ? review.unmasked_body : review.body;
 
   return (
     <View className="gap-2 border-t border-border py-4">
@@ -37,7 +45,7 @@ function ReviewRow({ review }: { review: VenueReview }) {
           <Icon as={CircleUser} className="size-5 text-muted-foreground" />
         </View>
         <View className="flex-1 gap-0.5">
-          <View className="flex-row items-center gap-2">
+          <View className="flex-row flex-wrap items-center gap-2">
             {/* The alias when the review has one - venue_reviews decides, and
                 says nothing about which it is. */}
             <Text numberOfLines={1} className="shrink font-medium text-foreground">
@@ -51,13 +59,52 @@ function ReviewRow({ review }: { review: VenueReview }) {
                 <Text>You</Text>
               </Badge>
             ) : null}
+            {status === 'held' || status === 'rejected' ? (
+              <Badge variant={status === 'rejected' ? 'destructive' : 'outline'}>
+                <Text>{STATUS_TEXT[status].label}</Text>
+              </Badge>
+            ) : null}
           </View>
           {posted ? <Text className="text-xs text-muted-foreground">{posted}</Text> : null}
         </View>
         <StarRating value={review.stars} size="sm" />
+        {/* A sibling of the row's text, never wrapping it: a button inside a
+            button breaks the web. Not on your own review - edit or delete it. */}
+        {review.is_mine ? null : review.reported_by_me ? (
+          <Text className="text-xs text-muted-foreground">{REPORT_TEXT.reported}</Text>
+        ) : (
+          <Pressable
+            onPress={onReport}
+            accessibilityRole="button"
+            accessibilityLabel={REPORT_TEXT.actionLabel}
+            hitSlop={8}
+            className="rounded-full p-1.5 active:bg-accent">
+            <Icon as={Flag} className="size-4 text-muted-foreground" />
+          </Pressable>
+        )}
       </View>
-      {review.body ? (
-        <Text className="text-sm leading-5 text-muted-foreground">{review.body}</Text>
+      {status === 'held' ? (
+        <Text className="text-xs text-muted-foreground">{STATUS_TEXT.held.line}</Text>
+      ) : status === 'rejected' ? (
+        <Text className="text-xs text-destructive">{STATUS_TEXT.rejected.formLine}</Text>
+      ) : null}
+      {body ? (
+        <Text
+          className="text-sm leading-5 text-muted-foreground"
+          accessibilityLabel={masked && !revealed ? spokenMasked(body) : undefined}>
+          {body}
+        </Text>
+      ) : null}
+      {masked ? (
+        <Pressable
+          onPress={() => setRevealed(!revealed)}
+          accessibilityRole="button"
+          className="flex-row items-center gap-1.5 self-start rounded-full py-1 active:opacity-60">
+          <Icon as={revealed ? EyeOff : Eye} className="size-3.5 text-muted-foreground" />
+          <Text className="text-xs font-medium text-muted-foreground">
+            {revealed ? MASK_TEXT.hide : MASK_TEXT.show}
+          </Text>
+        </Pressable>
       ) : null}
     </View>
   );
@@ -176,14 +223,32 @@ export function VenueSheet(props: VenueSheetProps) {
 }
 
 function BasicVenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
-  const { reviews, notes, summary, average, count, bathroom, hasOwnReview, tags, nudge, hasTagPage } =
-    useVenueDetails(venue);
-  const [page, setPage] = React.useState<'reviews' | 'tag'>('reviews');
+  const {
+    reviews,
+    notes,
+    summary,
+    average,
+    count,
+    bathroom,
+    hasOwnReview,
+    tags,
+    nudge,
+    hasTagPage,
+    refetch,
+  } = useVenueDetails(venue);
+  const [page, setPage] = React.useState<'reviews' | 'tag' | 'report'>('reviews');
+  /** The review being reported, while the report page is open. */
+  const [reporting, setReporting] = React.useState<VenueReview | null>(null);
   /** The reviews page animates in only when it is being returned to. */
   const [returning, setReturning] = React.useState(false);
   function openTagPage() {
     setReturning(true);
     setPage('tag');
+  }
+  function openReport(review: VenueReview) {
+    setReturning(true);
+    setReporting(review);
+    setPage('report');
   }
 
   return (
@@ -193,6 +258,9 @@ function BasicVenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
       onClose={onClose}
       accessibilityLabel={venue.name}
       partial={0.62}
+      // For the report page's note: the keyboard lifts the sheet rather than
+      // covering the field. Nothing else here takes typing.
+      keyboardAvoiding
       header={
         <View className="flex-row items-start gap-3 px-5 pb-3 pt-2">
           <View className="flex-1 gap-2">
@@ -298,10 +366,26 @@ function BasicVenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
                     No written reviews yet.
                   </Text>
                 ) : (
-                  reviews.map((review) => <ReviewRow key={review.id} review={review} />)
+                  reviews.map((review) => (
+                    <ReviewRow key={review.id} review={review} onReport={() => openReport(review)} />
+                  ))
                 )}
               </ScrollView>
             )}
+          </Animated.View>
+        ) : page === 'report' && reporting ? (
+          <Animated.View
+            key="report"
+            entering={SlideInRight.duration(220)}
+            exiting={SlideOutRight.duration(180)}
+            className="absolute inset-0">
+            <ReportReviewPage
+              key={reporting.id}
+              reviewId={reporting.id}
+              authorName={reporting.author_name ?? 'Someone'}
+              onBack={() => setPage('reviews')}
+              onSent={refetch}
+            />
           </Animated.View>
         ) : (
           <Animated.View
@@ -320,22 +404,25 @@ function BasicVenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
       </View>
 
       {/* Pinned below the list rather than inside it, so it stays reachable
-          however many reviews a venue has. */}
-      <View className="border-t border-border px-5 pb-6 pt-4">
-        {/* "New" means asked since this author last saved - not merely
-            unanswered, which would nag anyone who skipped an optional one. */}
-        <Button onPress={onWriteReview}>
-          <Text>
-            {nudge > 0
-              ? nudge === 1
-                ? 'Answer 1 new question'
-                : `Answer ${nudge} new questions`
-              : hasOwnReview
-                ? 'Edit your review'
-                : 'Post review'}
-          </Text>
-        </Button>
-      </View>
+          however many reviews a venue has. Not under the report page, which
+          has its own button. */}
+      {page === 'report' ? null : (
+        <View className="border-t border-border px-5 pb-6 pt-4">
+          {/* "New" means asked since this author last saved - not merely
+              unanswered, which would nag anyone who skipped an optional one. */}
+          <Button onPress={onWriteReview}>
+            <Text>
+              {nudge > 0
+                ? nudge === 1
+                  ? 'Answer 1 new question'
+                  : `Answer ${nudge} new questions`
+                : hasOwnReview
+                  ? 'Edit your review'
+                  : 'Post review'}
+            </Text>
+          </Button>
+        </View>
+      )}
     </BottomSheet>
   );
 }

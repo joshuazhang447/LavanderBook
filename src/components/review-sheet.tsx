@@ -1,4 +1,4 @@
-import { EyeOff, Info, Trash2, X } from 'lucide-react-native';
+import { Clock, EyeOff, Info, Trash2, X } from 'lucide-react-native';
 import * as React from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
@@ -15,6 +15,7 @@ import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/lib/auth';
+import { HELD_AFTER_POST } from '@/lib/moderation-text';
 import type { AnswerMap, Questionnaire } from '@/lib/questionnaire';
 import { BATHROOM_OPTIONS, MAX_BODY, useReviewForm, WHAT_NOT_TO_WRITE } from '@/lib/review-form';
 import { useSkin } from '@/lib/skin';
@@ -165,6 +166,8 @@ function BasicReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Revi
     blockingHint,
     remove,
     submit,
+    outcome,
+    finish,
   } = useReviewForm({ poi, venueId: knownVenueId, onSaved });
   const [confirmingDelete, setConfirmingDelete] = React.useState(false);
   /** The "what not to write" explanation behind the free-text field's (i). */
@@ -207,6 +210,19 @@ function BasicReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Revi
       {loading ? (
         <View className="flex-1 items-center justify-center gap-2 p-8">
           <ActivityIndicator />
+        </View>
+      ) : outcome === 'held' ? (
+        // Posted, and waiting for a person: said before the sheet closes, or
+        // the review would seem to vanish from the map it was just posted to.
+        <View className="flex-1 items-center justify-center gap-3 p-6">
+          <Icon as={Clock} className="size-10 text-muted-foreground" />
+          <Text className="text-center text-lg font-semibold text-foreground">
+            {HELD_AFTER_POST.title}
+          </Text>
+          <Text className="text-center text-sm text-muted-foreground">{HELD_AFTER_POST.body}</Text>
+          <Button onPress={finish} className="mt-2 self-stretch">
+            <Text>{HELD_AFTER_POST.done}</Text>
+          </Button>
         </View>
       ) : !session ? (
         <View className="flex-1 justify-center gap-4 p-5">

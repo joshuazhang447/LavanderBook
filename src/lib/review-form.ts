@@ -2,6 +2,8 @@ import {
   Calendar,
   CalendarOff,
   CircleUser,
+  Clock,
+  TriangleAlert,
   VenetianMask,
   type LucideIcon,
 } from 'lucide-react-native';
@@ -9,6 +11,12 @@ import * as React from 'react';
 
 import { useAuth } from '@/lib/auth';
 import type { Database } from '@/lib/database.types';
+import {
+  moderationStatus,
+  rejectedLine,
+  STATUS_TEXT,
+  type ModerationStatus,
+} from '@/lib/moderation-text';
 import {
   answerProblem,
   fetchMyAnswers,
@@ -61,12 +69,21 @@ function hasCode(error: unknown, code: string): boolean {
 }
 
 /** What an existing review shows readers. Null fields: there is no review yet. */
-type Shown = { alias: string | null; hideDate: boolean; posted: string | null };
+type Shown = {
+  alias: string | null;
+  hideDate: boolean;
+  posted: string | null;
+  /** Null from a server older than moderation, which publishes everything. */
+  status: ModerationStatus | null;
+  /** Why a moderator did not publish it, and what they wrote. Rejected only. */
+  reason: string | null;
+  note: string | null;
+};
 
 /**
- * The name and the date this review is, or will be, shown with - said at the
- * point of posting, because that is when it matters and, for a new review, the
- * only time either is decided.
+ * Whether the review is up, then the name and the date it is, or will be,
+ * shown with - said at the point of posting, because that is when it matters
+ * and, for a new review, the only time either is decided.
  */
 export function postingAs(
   profile: { display_name: string; per_place_names: boolean; hide_dates: boolean },
@@ -74,6 +91,13 @@ export function postingAs(
   /** Where the switches are, by the name the skin gives the tab. */
   account = 'My Account'
 ): { icon: LucideIcon; text: string }[] {
+  const status =
+    existing?.status === 'held'
+      ? [{ icon: Clock, text: STATUS_TEXT.held.formLine }]
+      : existing?.status === 'rejected'
+        ? [{ icon: TriangleAlert, text: rejectedLine(existing.reason, existing.note) }]
+        : [];
+
   const name = existing
     ? existing.alias
       ? { icon: VenetianMask, text: `Shown as ${existing.alias}, a name only this review uses.` }
@@ -106,7 +130,7 @@ export function postingAs(
           text: `Readers see the day you post it. Hidden dates are off in ${account}.`,
         };
 
-  return [name, date];
+  return [...status, name, date];
 }
 
 
@@ -139,6 +163,11 @@ export function useReviewForm({ poi, venueId: knownVenueId, onSaved }: ReviewFor
   const [shown, setShown] = React.useState<Shown | null>(null);
   const [questionnaire, setQuestionnaire] = React.useState<Questionnaire>([]);
   const [answers, setAnswers] = React.useState<AnswerMap>({});
+  /**
+   * 'held' once a save went through and the review is waiting for a person:
+   * the form says so before it closes, and finish() closes it.
+   */
+  const [outcome, setOutcome] = React.useState<'held' | null>(null);
 
   const userId = session?.user.id ?? null;
 
@@ -192,6 +221,9 @@ export function useReviewForm({ poi, venueId: knownVenueId, onSaved }: ReviewFor
             alias: (review.alias as string | null) ?? null,
             hideDate: review.hide_date,
             posted: postedLabel(review.posted_period, review.posted_on as string | null),
+            status: moderationStatus(review.moderation),
+            reason: (review.moderation_reason as string | null) ?? null,
+            note: (review.moderation_note as string | null) ?? null,
           });
 
           const byId = new Map(tags.flatMap((tag) => tag.questions).map((q) => [q.id, q] as const));
@@ -301,7 +333,7 @@ export function useReviewForm({ poi, venueId: knownVenueId, onSaved }: ReviewFor
 
       // Review and answers land together or not at all; the server validates
       // every answer against the question's own kind and settings.
-      await submitReview({
+      const reviewId = await submitReview({
         venueId: targetVenueId,
         stars,
         bathroom,
@@ -311,6 +343,18 @@ export function useReviewForm({ poi, venueId: knownVenueId, onSaved }: ReviewFor
           return value === null ? [] : [{ question_id: question.id, value }];
         }),
       });
+
+      // Waiting for a person? Then say so before closing - otherwise the
+      // review seems to vanish from the map it was just posted to. A failed
+      // read-back is not worth blocking on: the save itself went through.
+      const { data: saved } = await supabase
+        .rpc('my_reviews')
+        .eq('id', reviewId)
+        .maybeSingle();
+      if (moderationStatus(saved?.moderation) === 'held') {
+        setOutcome('held');
+        return;
+      }
 
       onSaved();
     } catch (e) {
@@ -339,6 +383,9 @@ export function useReviewForm({ poi, venueId: knownVenueId, onSaved }: ReviewFor
     error,
     isExisting,
     shown,
+    outcome,
+    /** Closes the form after the held notice. */
+    finish: onSaved,
     questionnaire,
     answers,
     setAnswers,

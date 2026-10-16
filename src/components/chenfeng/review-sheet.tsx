@@ -1,4 +1,4 @@
-import { CircleUser, EyeOff } from 'lucide-react-native';
+import { CircleUser, Clock, EyeOff } from 'lucide-react-native';
 import * as React from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 
@@ -23,6 +23,7 @@ import { Text } from '@/components/ui/text';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/lib/auth';
 import { errorTick, successTick } from '@/lib/haptics';
+import { HELD_AFTER_POST } from '@/lib/moderation-text';
 import type { Questionnaire } from '@/lib/questionnaire';
 import { BATHROOM_OPTIONS, MAX_BODY, postingAs, useReviewForm, WHAT_NOT_TO_WRITE } from '@/lib/review-form';
 
@@ -68,8 +69,15 @@ export function ChenfengReviewSheet({ poi, venueId, onClose, onSaved }: ReviewSh
     });
   }, [form.error, form.isExisting]);
 
+  // Posted, and waiting for a person: the post went through, so it ticks now
+  // rather than at Done.
+  const held = form.outcome === 'held';
+  React.useEffect(() => {
+    if (held) successTick();
+  }, [held]);
+
   const signedIn = !!session;
-  const ready = signedIn && !form.loading;
+  const ready = signedIn && !form.loading && !held;
   const actionLabel = form.isExisting ? 'Save' : 'Post';
 
   return (
@@ -81,7 +89,8 @@ export function ChenfengReviewSheet({ poi, venueId, onClose, onSaved }: ReviewSh
         accessibilityLabel={form.isExisting ? `Your review of ${poi.name}` : `New review of ${poi.name}`}
         onClose={onClose}
         onDismissAttempt={
-          hasChanges
+          // After a held post there is nothing left to lose: it was saved.
+          hasChanges && !held
             ? (dismiss) => {
                 void confirmActionSheet({
                   actions: [{ label: 'Discard Changes', style: 'destructive' }],
@@ -94,11 +103,15 @@ export function ChenfengReviewSheet({ poi, venueId, onClose, onSaved }: ReviewSh
         }
         toolbar={
           <SheetToolbar
-            leading={<SheetCloseButton />}
+            leading={held ? null : <SheetCloseButton />}
             title={poi.name}
             subtitle={ready ? (form.isExisting ? 'Your Review' : 'New Review') : undefined}
             trailing={
-              ready ? (
+              held ? (
+                // onSaved itself rather than form.finish: the tick already
+                // came when the post went through.
+                <SheetActionButton accessibilityLabel={HELD_AFTER_POST.done} onPress={onSaved} />
+              ) : ready ? (
                 <SheetActionButton
                   label={actionLabel}
                   accessibilityLabel={form.isExisting ? 'Save Review' : 'Post Review'}
@@ -114,6 +127,14 @@ export function ChenfengReviewSheet({ poi, venueId, onClose, onSaved }: ReviewSh
           <View className="flex-1 items-center justify-center p-8">
             <ActivityIndicator />
           </View>
+        ) : held ? (
+          <SheetScrollView contentContainerClassName="grow justify-center pb-16">
+            <EmptyState
+              icon={Clock}
+              title={HELD_AFTER_POST.titleTitle}
+              description={HELD_AFTER_POST.body}
+            />
+          </SheetScrollView>
         ) : !signedIn ? (
           <SheetScrollView contentContainerClassName="grow justify-center pb-16">
             <EmptyState

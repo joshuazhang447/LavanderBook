@@ -33,6 +33,13 @@ The same codebase runs on Android, iOS and the web.
   community's reviews, and are clearly the organisation's own statements.
 - **Your own reviews, in one place.** The account tab lists everything you have posted,
   with a link back to each venue on the map. A review can be edited or deleted at any time.
+- **Report a review.** Anything that shouldn't be there can be reported, with a reason.
+  A report goes to the organisation's staff; it never hides a review by itself.
+- **Slurs are held, not refused.** A review that uses a slur waits for a member of staff
+  before anyone else can read it, and its author sees it marked "Being checked". It is not
+  rejected outright, because the same word is how people quote what was said to them, and
+  that review is the warning others need. Once published, the word is masked — the first
+  letter, then dots — with a Show button.
 - **Live updates.** A review posted by someone else appears on an open map without a
   refresh.
 - **Directions**, handed off to the device's usual maps application.
@@ -54,8 +61,15 @@ The same codebase runs on Android, iOS and the web.
 - **Write the questions.** Fourteen kinds of question are supported — yes/no, yes/no/unsure,
   single and multiple choice, a sliding scale, a star rating, a number, an amount of money,
   a duration, a time, a time range, a date, and short or long free text.
-- **Moderate.** Reviews can be searched, filtered, edited or removed. An edit made by an
-  administrator is recorded as such, so it is never mistaken for the author's own change.
+- **Moderate.** Held reviews, flagged reviews and readers' reports wait in one queue, the
+  panel's first page, with a count of what needs a decision. Each can be published, kept,
+  rejected with a reason the author sees, edited, or its author suspended. Reviews can also
+  be searched, filtered, edited or removed directly. An edit made by an administrator is
+  recorded as such, so it is never mistaken for the author's own change.
+- **Keep the word list.** Staff choose which words hold a review for a check and which only
+  flag it for a look, with phrases that never count (a street name, a dish on a menu). The
+  list can be imported from a spreadsheet, tried against a sentence before saving, and run
+  again over past reviews.
 - **Manage accounts.** Search the membership, suspend an account, and grant or revoke
   administrator access.
 
@@ -263,6 +277,21 @@ nobody able to use it.
 
 Full context is in the header comment of
 `supabase/migrations/20260911061500_admin_roles_and_moderation.sql`.
+
+## Setting up the word list
+
+A new database has an empty word list and starts in *shadow mode*: every review is checked
+and the result recorded, but nothing is held or masked. In the panel's **Word list**, add
+words one at a time or paste a spreadsheet into **Import** (columns: term, language, tier,
+category, match, allow, note). Run **Rescan** to see what the list would have caught, then
+switch it to enforcing.
+
+The list lives only in the database and is never committed: this repository contains no
+slurs, and its tests use made-up words. Keep your working copy outside git;
+`docs/moderation-terms*` is a good place if you add it to `.git/info/exclude`.
+
+How it works is in the header comments of `supabase/migrations/20261016100000` to
+`20261016100400`.
 
 ## Building for release
 
