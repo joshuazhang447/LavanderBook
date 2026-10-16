@@ -255,6 +255,7 @@ export function answerProblem(question: Question, value: AnswerValue): string | 
     case 'time_range': {
       // Start after end is fine: 22:00-06:00 is an overnight window.
       const [from, to] = splitRange(String(value));
+      if (from === '' || to === '') return 'Pick both a start and an end time.';
       return TIME.test(from) && TIME.test(to) ? null : 'Use two 24-hour times, like 09:00-17:00.';
     }
     case 'date': {

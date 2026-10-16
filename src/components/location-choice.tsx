@@ -32,24 +32,22 @@ import { cn } from '@/lib/utils';
  * so the way there is a button rather than an instruction to go and find it.
  * The web has no such button - no page can open the browser's settings.
  */
+export const LOCATION_BLOCKED_WEB =
+  'Location is blocked for this site. Allow it from the padlock or site settings beside the address, then come back.';
+
+export const LOCATION_BLOCKED_PHONE =
+  "Location is turned off for LavenderBook in your phone's settings. Turn it on there, then come back - the map will start following you.";
+
 export function LocationBlockedNotice() {
   const [unavailable, setUnavailable] = React.useState(Platform.OS === 'web');
 
   if (unavailable) {
-    return (
-      <Text className="text-xs text-destructive">
-        Location is blocked for this site. Allow it from the padlock or site settings beside the
-        address, then come back.
-      </Text>
-    );
+    return <Text className="text-xs text-destructive">{LOCATION_BLOCKED_WEB}</Text>;
   }
 
   return (
     <View className="gap-2">
-      <Text className="text-xs text-destructive">
-        Location is turned off for LavenderBook in your phone&apos;s settings. Turn it on there,
-        then come back - the map will start following you.
-      </Text>
+      <Text className="text-xs text-destructive">{LOCATION_BLOCKED_PHONE}</Text>
       <Button
         variant="outline"
         size="sm"

@@ -1,74 +1,29 @@
-import { Portal } from '@rn-primitives/portal';
 import { ChevronLeft, ChevronRight, CircleUser, X } from 'lucide-react-native';
 import * as React from 'react';
-import { ActivityIndicator, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
 import Animated, {
-  FadeIn,
-  FadeOut,
-  SlideInDown,
   SlideInLeft,
   SlideInRight,
-  SlideOutDown,
   SlideOutLeft,
   SlideOutRight,
 } from 'react-native-reanimated';
 
 import { AnswerSummaryCard } from '@/components/answer-summary';
+import { ChenfengVenueSheet } from '@/components/chenfeng/venue-sheet';
 import { DirectionsButton } from '@/components/directions-button';
 import { StarRating } from '@/components/star-rating';
 import { TagPill } from '@/components/tag-pill';
 import { Badge } from '@/components/ui/badge';
+import { BottomSheet } from '@/components/ui/bottom-sheet';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Separator } from '@/components/ui/separator';
 import { Text } from '@/components/ui/text';
-import { consensus } from '@/lib/answers';
-import { useAuth } from '@/lib/auth';
-import {
-  fetchAnswerSummary,
-  fetchNewQuestionCount,
-  type AnswerSummaryRow,
-} from '@/lib/questionnaire';
+import type { AnswerSummaryRow } from '@/lib/questionnaire';
 import { postedLabel } from '@/lib/review-dates';
-import { supabase } from '@/lib/supabase';
+import { useSkin } from '@/lib/skin';
 import type { NearbyVenue } from '@/lib/use-nearby-venues';
-import { venueTags } from '@/lib/venue-tags';
-
-type VenueReview = {
-  id: string;
-  stars: number;
-  body: string | null;
-  author_name: string | null;
-  is_mine: boolean;
-  /** A period counted in whole weeks; see @/lib/review-dates. */
-  posted_period: string | null;
-  /** The UTC day, only when the author shows dates. Never a time. */
-  posted_on: string | null;
-};
-
-/** An admin-written bullet about this venue. */
-type Note = {
-  id: string;
-  body: string;
-};
-
-type Ratings = {
-  review_count: number;
-  avg_stars: number;
-  trans_bathroom_yes: number;
-  trans_bathroom_no: number;
-  trans_bathroom_unsure: number;
-};
-
-/** The bathroom answer most reviewers gave, through the helper every yes/no tag question uses. */
-function bathroomConsensus(ratings: Ratings): { label: string; tally: string } | null {
-  const top = consensus({
-    yes: ratings.trans_bathroom_yes,
-    no: ratings.trans_bathroom_no,
-    unsure: ratings.trans_bathroom_unsure,
-  });
-  return top ? { label: top.label, tally: `${top.count} of ${top.total}` } : null;
-}
+import { useVenueDetails, type Note, type VenueReview } from '@/lib/venue-details';
 
 function ReviewRow({ review }: { review: VenueReview }) {
   // A period ("A few weeks ago"), or the day when the author shows dates. The
@@ -206,282 +161,181 @@ function TagPage({ notes, summary, reviewCount, onBack }: TagPageProps) {
   );
 }
 
-type VenueSheetProps = {
+export type VenueSheetProps = {
   venue: NearbyVenue;
   onClose: () => void;
   /** Hands off to the review form for this venue. */
   onWriteReview: () => void;
 };
 
-/**
- * Detail for a reviewed venue: everyone's reviews, read-only, with a single
- * button handing off to the review form.
- *
- * The sheet chrome mirrors ReviewSheet rather than sharing it: that one wraps a
- * keyboard-avoiding form, this one a scroll list, and the shared part is small.
- */
-export function VenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
-  const { session } = useAuth();
-  const [ratings, setRatings] = React.useState<Ratings | null>(null);
-  const [reviews, setReviews] = React.useState<VenueReview[] | null>(null);
-  const [notes, setNotes] = React.useState<Note[]>([]);
-  const [summary, setSummary] = React.useState<AnswerSummaryRow[]>([]);
-  const [newQuestions, setNewQuestions] = React.useState(0);
+export function VenueSheet(props: VenueSheetProps) {
+  const { skin } = useSkin();
+  // Chenfeng's place card is a sheet with detents and a page pushed inside
+  // (its own file); Basic and Material keep this one. Same data, same hook.
+  return skin === 'chenfeng' ? <ChenfengVenueSheet {...props} /> : <BasicVenueSheet {...props} />;
+}
+
+function BasicVenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
+  const { reviews, notes, summary, average, count, bathroom, hasOwnReview, tags, nudge, hasTagPage } =
+    useVenueDetails(venue);
   const [page, setPage] = React.useState<'reviews' | 'tag'>('reviews');
   /** The reviews page animates in only when it is being returned to. */
   const [returning, setReturning] = React.useState(false);
-  const { height: windowHeight } = useWindowDimensions();
-  // A definite height for the ScrollView to flex into; maxHeight alone would let
-  // it collapse.
-  const sheetHeight = Math.round(windowHeight * 0.62);
-
-  React.useEffect(() => {
-    let active = true;
-
-    supabase
-      .from('venue_ratings')
-      .select('review_count, avg_stars, trans_bathroom_yes, trans_bathroom_no, trans_bathroom_unsure')
-      .eq('venue_id', venue.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (active) setRatings(data as Ratings | null);
-      });
-
-    // A function rather than the table: author_id and the exact times are not
-    // public, so the name, "is this mine" and a rough date are all decided
-    // server-side. Newest week first, in the order the server sends them -
-    // within a week the order is deliberately meaningless.
-    supabase.rpc('venue_reviews', { p_venue_id: venue.id }).then(({ data, error }) => {
-      if (!active) return;
-      // An empty list and a failed request are not the same thing, and
-      // rendering them the same way is what hid a broken embed for a day.
-      if (error) console.error('Failed to load reviews', error);
-      setReviews(data ?? []);
-    });
-
-    // Public read: venue_notes is selectable by anyone, which is the point of
-    // writing them. Fetched up front rather than when a tag is tapped, because
-    // whether there is anything to show is what decides if the tag is tappable
-    // at all.
-    supabase
-      .from('venue_notes')
-      .select('id, body')
-      .eq('venue_id', venue.id)
-      .order('sort_order', { ascending: true })
-      .then(({ data }) => {
-        if (active) setNotes((data as Note[] | null) ?? []);
-      });
-
-    // Same reasoning as the notes: whether anyone has answered anything is what
-    // decides whether the tag pill opens a page at all.
-    fetchAnswerSummary(venue.id)
-      .then((rows) => {
-        if (active) setSummary(rows);
-      })
-      .catch(() => {
-        if (active) setSummary([]);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [venue.id]);
-
-  const userId = session?.user.id ?? null;
-
-  // Only a signed-in author can have new questions waiting; the function is
-  // not even callable signed out.
-  React.useEffect(() => {
-    if (!userId) return;
-    let active = true;
-    fetchNewQuestionCount(venue.id)
-      .then((n) => {
-        if (active) setNewQuestions(n);
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [venue.id, userId]);
-
-  const average = Number(ratings?.avg_stars ?? venue.avg_stars ?? 0);
-  const count = ratings?.review_count ?? venue.review_count;
-  const bathroom = ratings ? bathroomConsensus(ratings) : null;
-  // Signed out, we cannot know - the review sheet will ask them to sign in.
-  const hasOwnReview = !!session && !!reviews?.some((r) => r.is_mine);
-  const tags = venueTags(venue);
-  const nudge = userId ? newQuestions : 0;
-  const hasTagPage = notes.length > 0 || summary.length > 0;
-
   function openTagPage() {
     setReturning(true);
     setPage('tag');
   }
 
   return (
-    <Portal name="venue-sheet">
-      <View className="absolute inset-0 justify-end">
-        <Animated.View
-          entering={FadeIn.duration(180)}
-          exiting={FadeOut.duration(160)}
-          className="absolute inset-0">
+    // Opens most of the way up; its handle and top row drag it to full height.
+    <BottomSheet
+      name="venue-sheet"
+      onClose={onClose}
+      accessibilityLabel={venue.name}
+      partial={0.62}
+      header={
+        <View className="flex-row items-start gap-3 px-5 pb-3 pt-2">
+          <View className="flex-1 gap-2">
+            {/* One wrapping row: a tag says what kind of place this is, so it
+                belongs beside the name. Nothing is given shrink-0 - flex-wrap
+                moves the pills to their own line when the name is long, which
+                is what should happen, and a non-shrinkable name would instead
+                overflow the sheet. */}
+            <View className="flex-row flex-wrap items-center gap-x-2 gap-y-1">
+              <Text className="text-xl font-semibold text-foreground">{venue.name}</Text>
+              {tags.map((tag) => (
+                <TagPill
+                  key={tag.slug}
+                  tag={tag}
+                  // No chevron while the page is already open, and none when
+                  // there is nothing behind the tag to open.
+                  onPress={hasTagPage && page === 'reviews' ? openTagPage : undefined}
+                />
+              ))}
+            </View>
+            <View className="flex-row items-center gap-2">
+              {/* No star row before anyone has rated it. An empty one reads as
+                  zero out of five rather than as "not rated yet", and this
+                  sheet is where someone decides whether to go somewhere. */}
+              {count === 0 ? (
+                <Text className="text-sm text-muted-foreground">
+                  Listed by LavenderBook · no reviews yet
+                </Text>
+              ) : (
+                <>
+                  <StarRating value={average} size="sm" />
+                  <Text className="text-sm font-medium text-foreground">
+                    {average.toFixed(1)}
+                  </Text>
+                  <Text className="text-sm text-muted-foreground">
+                    {count === 1 ? '1 review' : `${count} reviews`}
+                  </Text>
+                </>
+              )}
+            </View>
+            {bathroom ? (
+              <Text className="text-sm text-muted-foreground">
+                Trans-friendly bathroom:{' '}
+                <Text className="font-medium text-foreground">{bathroom.label}</Text>{' '}
+                <Text className="text-xs">({bathroom.tally})</Text>
+              </Text>
+            ) : null}
+
+            {/* The same destination as the tag pill's chevron, and gated on
+                the same condition so the two can never disagree about whether
+                there is a page. The pill is easy to miss - it reads as a
+                label first - so the way in says so in words as well.
+
+                Borrowed from the Locate row in venue-list: a rounded outline
+                row is this app's small secondary action. A coloured link
+                would not work here, because --primary is near-black in light
+                mode and near-white in dark; colour carries no meaning. */}
+            {hasTagPage && page === 'reviews' ? (
+              <Pressable
+                onPress={openTagPage}
+                accessibilityRole="button"
+                accessibilityLabel="More details: what LavenderBook checked, and what visitors reported"
+                className="mt-0.5 flex-row items-center gap-1 self-start rounded-full border border-border py-1.5 pl-3 pr-2 active:bg-accent">
+                <Text className="text-xs font-medium text-foreground">More details</Text>
+                <Icon as={ChevronRight} className="size-3.5 text-muted-foreground" />
+              </Pressable>
+            ) : null}
+          </View>
+          <DirectionsButton
+            name={venue.name}
+            latitude={venue.lat}
+            longitude={venue.lng}
+            placeId={venue.google_place_id}
+          />
           <Pressable
+            onPress={onClose}
             accessibilityRole="button"
             accessibilityLabel="Close"
-            onPress={onClose}
-            className="flex-1 bg-black/50"
-          />
-        </Animated.View>
-
-        <Animated.View
-          entering={SlideInDown.duration(260)}
-          exiting={SlideOutDown.duration(200)}
-          style={{ height: sheetHeight }}
-          className="overflow-hidden rounded-t-3xl border-t border-border bg-background">
-          <View className="flex-row items-start gap-3 px-5 pb-3 pt-5">
-            <View className="flex-1 gap-2">
-              {/* One wrapping row: a tag says what kind of place this is, so it
-                  belongs beside the name. Nothing is given shrink-0 - flex-wrap
-                  moves the pills to their own line when the name is long, which
-                  is what should happen, and a non-shrinkable name would instead
-                  overflow the sheet. */}
-              <View className="flex-row flex-wrap items-center gap-x-2 gap-y-1">
-                <Text className="text-xl font-semibold text-foreground">{venue.name}</Text>
-                {tags.map((tag) => (
-                  <TagPill
-                    key={tag.slug}
-                    tag={tag}
-                    // No chevron while the page is already open, and none when
-                    // there is nothing behind the tag to open.
-                    onPress={hasTagPage && page === 'reviews' ? openTagPage : undefined}
-                  />
-                ))}
+            className="rounded-full p-2 active:bg-accent">
+            <Icon as={X} className="size-5 text-muted-foreground" />
+          </Pressable>
+        </View>
+      }>
+      {/* Two pages, one at a time, both absolutely filling this box so the
+          one leaving does not shove the one arriving around while they
+          cross. Each always enters and leaves on the same side, so the
+          motion reads as a push out and a pop back. */}
+      <View className="flex-1">
+        {page === 'reviews' ? (
+          <Animated.View
+            key="reviews"
+            entering={returning ? SlideInLeft.duration(220) : undefined}
+            exiting={SlideOutLeft.duration(180)}
+            className="absolute inset-0">
+            {reviews === null ? (
+              <View className="flex-1 items-center justify-center">
+                <ActivityIndicator />
               </View>
-              <View className="flex-row items-center gap-2">
-                {/* No star row before anyone has rated it. An empty one reads as
-                    zero out of five rather than as "not rated yet", and this
-                    sheet is where someone decides whether to go somewhere. */}
-                {count === 0 ? (
-                  <Text className="text-sm text-muted-foreground">
-                    Listed by LavenderBook · no reviews yet
+            ) : (
+              <ScrollView className="flex-1" contentContainerClassName="px-5 pb-4">
+                {reviews.length === 0 ? (
+                  <Text className="py-8 text-center text-sm text-muted-foreground">
+                    No written reviews yet.
                   </Text>
                 ) : (
-                  <>
-                    <StarRating value={average} size="sm" />
-                    <Text className="text-sm font-medium text-foreground">
-                      {average.toFixed(1)}
-                    </Text>
-                    <Text className="text-sm text-muted-foreground">
-                      {count === 1 ? '1 review' : `${count} reviews`}
-                    </Text>
-                  </>
+                  reviews.map((review) => <ReviewRow key={review.id} review={review} />)
                 )}
-              </View>
-              {bathroom ? (
-                <Text className="text-sm text-muted-foreground">
-                  Trans-friendly bathroom:{' '}
-                  <Text className="font-medium text-foreground">{bathroom.label}</Text>{' '}
-                  <Text className="text-xs">({bathroom.tally})</Text>
-                </Text>
-              ) : null}
-
-              {/* The same destination as the tag pill's chevron, and gated on
-                  the same condition so the two can never disagree about whether
-                  there is a page. The pill is easy to miss - it reads as a
-                  label first - so the way in says so in words as well.
-
-                  Borrowed from the Locate row in venue-list: a rounded outline
-                  row is this app's small secondary action. A coloured link
-                  would not work here, because --primary is near-black in light
-                  mode and near-white in dark; colour carries no meaning. */}
-              {hasTagPage && page === 'reviews' ? (
-                <Pressable
-                  onPress={openTagPage}
-                  accessibilityRole="button"
-                  accessibilityLabel="More details: what LavenderBook checked, and what visitors reported"
-                  className="mt-0.5 flex-row items-center gap-1 self-start rounded-full border border-border py-1.5 pl-3 pr-2 active:bg-accent">
-                  <Text className="text-xs font-medium text-foreground">More details</Text>
-                  <Icon as={ChevronRight} className="size-3.5 text-muted-foreground" />
-                </Pressable>
-              ) : null}
-            </View>
-            <DirectionsButton
-              name={venue.name}
-              latitude={venue.lat}
-              longitude={venue.lng}
-              placeId={venue.google_place_id}
-            />
-            <Pressable
-              onPress={onClose}
-              accessibilityRole="button"
-              accessibilityLabel="Close"
-              className="rounded-full p-2 active:bg-accent">
-              <Icon as={X} className="size-5 text-muted-foreground" />
-            </Pressable>
-          </View>
-
-          {/* Two pages, one at a time, both absolutely filling this box so the
-              one leaving does not shove the one arriving around while they
-              cross. Each always enters and leaves on the same side, so the
-              motion reads as a push out and a pop back. */}
-          <View className="flex-1">
-            {page === 'reviews' ? (
-              <Animated.View
-                key="reviews"
-                entering={returning ? SlideInLeft.duration(220) : undefined}
-                exiting={SlideOutLeft.duration(180)}
-                className="absolute inset-0">
-                {reviews === null ? (
-                  <View className="flex-1 items-center justify-center">
-                    <ActivityIndicator />
-                  </View>
-                ) : (
-                  <ScrollView className="flex-1" contentContainerClassName="px-5 pb-4">
-                    {reviews.length === 0 ? (
-                      <Text className="py-8 text-center text-sm text-muted-foreground">
-                        No written reviews yet.
-                      </Text>
-                    ) : (
-                      reviews.map((review) => <ReviewRow key={review.id} review={review} />)
-                    )}
-                  </ScrollView>
-                )}
-              </Animated.View>
-            ) : (
-              <Animated.View
-                key="tag"
-                entering={SlideInRight.duration(220)}
-                exiting={SlideOutRight.duration(180)}
-                className="absolute inset-0">
-                <TagPage
-                  notes={notes}
-                  summary={summary}
-                  reviewCount={count}
-                  onBack={() => setPage('reviews')}
-                />
-              </Animated.View>
+              </ScrollView>
             )}
-          </View>
-
-          {/* Pinned below the list rather than inside it, so it stays reachable
-              however many reviews a venue has. */}
-          <View className="border-t border-border px-5 pb-6 pt-4">
-            {/* "New" means asked since this author last saved - not merely
-                unanswered, which would nag anyone who skipped an optional one. */}
-            <Button onPress={onWriteReview}>
-              <Text>
-                {nudge > 0
-                  ? nudge === 1
-                    ? 'Answer 1 new question'
-                    : `Answer ${nudge} new questions`
-                  : hasOwnReview
-                    ? 'Edit your review'
-                    : 'Post review'}
-              </Text>
-            </Button>
-          </View>
-        </Animated.View>
+          </Animated.View>
+        ) : (
+          <Animated.View
+            key="tag"
+            entering={SlideInRight.duration(220)}
+            exiting={SlideOutRight.duration(180)}
+            className="absolute inset-0">
+            <TagPage
+              notes={notes}
+              summary={summary}
+              reviewCount={count}
+              onBack={() => setPage('reviews')}
+            />
+          </Animated.View>
+        )}
       </View>
-    </Portal>
+
+      {/* Pinned below the list rather than inside it, so it stays reachable
+          however many reviews a venue has. */}
+      <View className="border-t border-border px-5 pb-6 pt-4">
+        {/* "New" means asked since this author last saved - not merely
+            unanswered, which would nag anyone who skipped an optional one. */}
+        <Button onPress={onWriteReview}>
+          <Text>
+            {nudge > 0
+              ? nudge === 1
+                ? 'Answer 1 new question'
+                : `Answer ${nudge} new questions`
+              : hasOwnReview
+                ? 'Edit your review'
+                : 'Post review'}
+          </Text>
+        </Button>
+      </View>
+    </BottomSheet>
   );
 }

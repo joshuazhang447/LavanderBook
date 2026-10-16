@@ -31,6 +31,24 @@ import {
   stopUsingDeviceLocation,
   useMapLocation,
 } from '@/lib/map-location';
+import {
+  DATES_CONFIRM_OFF,
+  DATES_EXPLAINED,
+  DATES_OFF_WARNING,
+  datesSummary,
+  EXPLANATION_HEADINGS,
+  LEAVE_NOW_EXPLAINED,
+  LEAVE_NOW_OFF_WARNING,
+  leaveNowSummary,
+  LOCATION_DENIED,
+  LOCATION_EXPLAINED,
+  locationSummary,
+  namesConfirmOff,
+  namesExplained,
+  NAMES_OFF_WARNING,
+  namesSummary,
+  type Explained,
+} from '@/lib/privacy-text';
 import { setLeaveNowButton, useSafety } from '@/lib/safety';
 import { cn } from '@/lib/utils';
 
@@ -51,17 +69,6 @@ const SWITCH_TARGET: ViewStyle = { pointerEvents: 'auto' };
 /** Content drawn over a pressable that must never take a touch from it. */
 const IGNORE_TOUCHES: ViewStyle = { pointerEvents: 'none' };
 
-/**
- * Every explanation answers the same four questions, in the same order, so
- * that reading one teaches you how to read the other.
- */
-type Explained = {
-  lead: string;
-  whyItMatters: string;
-  whatItDoes: string;
-  whatItCantHide: string;
-  ifTurnedOff: string;
-};
 
 type ExplanationProps = {
   open: boolean;
@@ -87,10 +94,12 @@ function Explanation({ open, onOpenChange, icon, title, explained }: Explanation
       icon={icon}
       title={title}
       lead={explained.lead}>
-      <InfoPoint title="Why it matters">{explained.whyItMatters}</InfoPoint>
-      <InfoPoint title="What it does">{explained.whatItDoes}</InfoPoint>
-      <InfoPoint title="What it can't hide">{explained.whatItCantHide}</InfoPoint>
-      <InfoPoint title="If turned off">{explained.ifTurnedOff}</InfoPoint>
+      <InfoPoint title={EXPLANATION_HEADINGS.sentence.whyItMatters}>{explained.whyItMatters}</InfoPoint>
+      <InfoPoint title={EXPLANATION_HEADINGS.sentence.whatItDoes}>{explained.whatItDoes}</InfoPoint>
+      <InfoPoint title={EXPLANATION_HEADINGS.sentence.whatItCantHide}>
+        {explained.whatItCantHide}
+      </InfoPoint>
+      <InfoPoint title={EXPLANATION_HEADINGS.sentence.ifTurnedOff}>{explained.ifTurnedOff}</InfoPoint>
     </InfoDialog>
   );
 }
@@ -169,7 +178,9 @@ function PrivacyToggle({
           touches through to it apart from the switch. Wrapping the box in a Pressable
           instead would put the switch's button inside another button, which is
           invalid HTML on the web and breaks hydration. */}
-      <View className="rounded-lg border border-border">
+      {/* bg-card: in Basic the same colour as the page, so nothing changes; in
+          the other skins the box takes their card colour, like their cards. */}
+      <View className="rounded-lg border border-border bg-card">
         <Pressable
           onPress={() => setExplaining(true)}
           accessibilityRole="button"
@@ -289,22 +300,8 @@ export function LocationSetting() {
         icon={LocateFixed}
         title="Use my location"
         enabled={usingDevice}
-        summary={
-          usingDevice
-            ? 'The map follows you as you move.'
-            : `Map opens at ${place?.label ?? 'a city you choose'}.`
-        }
-        explained={{
-          lead: 'The map can follow you without LavenderBook learning exactly where you are.',
-          whyItMatters:
-            'Where you go says a lot about who you are. Your exact position stays on your phone and is only used to move the map.',
-          whatItDoes:
-            "The map follows you as you walk. To load nearby places, your phone sends only the rough block you're in, and never with your account attached.",
-          whatItCantHide:
-            'Google, which draws the map, sees the area the map is showing, like any map app. Your internet connection is still visible to us.',
-          ifTurnedOff:
-            "The map opens in a general area based on your phone's time zone, or a city you choose. Everything else works the same, including posting reviews.",
-        }}
+        summary={locationSummary(usingDevice, place?.label)}
+        explained={LOCATION_EXPLAINED}
         extra={
           usingDevice && !blocked ? null : (
             <View className="gap-3" style={PASS_THROUGH}>
@@ -341,7 +338,7 @@ export function LocationSetting() {
           const result = await chooseDeviceLocation();
           setBlocked(result === 'blocked');
           if (result === 'denied') {
-            throw new Error("Location wasn't allowed. Try again, or keep using a place.");
+            throw new Error(LOCATION_DENIED);
           }
         }}
       />
@@ -368,23 +365,9 @@ export function LeaveNowSetting() {
       icon={DoorOpen}
       title="Leave now button"
       enabled={leaveButton}
-      summary={
-        leaveButton
-          ? 'A button on every screen that leaves the site at once.'
-          : 'Hidden. On a computer, Shift 3 times still leaves.'
-      }
-      offWarning="Off: there's no one-tap way out if someone comes near."
-      explained={{
-        lead: 'One tap takes you off LavenderBook and onto an everyday website.',
-        whyItMatters:
-          'If someone comes near while LavenderBook is open, there may be no time to close it. In some places, being seen using it is dangerous.',
-        whatItDoes:
-          "Signs you out, clears LavenderBook's data from this browser and swaps the page for an everyday website in your language. On a computer, pressing Shift 3 times does the same.",
-        whatItCantHide:
-          "Your browser's history still shows the visit. Delete it in your browser's settings, or use a private window.",
-        ifTurnedOff:
-          'The button disappears from every screen. On a computer, pressing Shift 3 times still leaves.',
-      }}
+      summary={leaveNowSummary(leaveButton)}
+      offWarning={LEAVE_NOW_OFF_WARNING}
+      explained={LEAVE_NOW_EXPLAINED}
       onChange={setLeaveNowButton}
     />
   );
@@ -424,27 +407,10 @@ export function PrivacySettings({ onReviewsChanged }: PrivacySettingsProps) {
         icon={VenetianMask}
         title="Per-place names"
         enabled={profile.per_place_names}
-        summary={
-          profile.per_place_names
-            ? 'Each review gets its own random name.'
-            : `New reviews show ${name}.`
-        }
-        offWarning="Off: reviews you post now all share one name, so they can be linked to each other."
-        explained={{
-          lead: "Each review you post gets its own name, so your reviews can't be linked together.",
-          whyItMatters:
-            "If all your reviews share one name, anyone can see every place you've been. A few places can be enough to work out who you are.",
-          whatItDoes: `Each review shows a new random name instead of ${name}. Editing a review keeps its name.`,
-          whatItCantHide:
-            'What you write, and when, can still give you away, so leave out personal details. Moderators can still see which account posted a review.',
-          ifTurnedOff: `New reviews will show ${name}. Reviews you've already posted keep their own names.`,
-        }}
-        confirmOff={{
-          title: 'Turn off per-place names?',
-          body: `Reviews you post from now on will all show ${name}, so anyone can tell they came from the same person. Reviews you have already posted keep their own names.`,
-          keep: 'Keep them on',
-          confirm: 'Turn off',
-        }}
+        summary={namesSummary(profile.per_place_names, name)}
+        offWarning={NAMES_OFF_WARNING}
+        explained={namesExplained(name)}
+        confirmOff={namesConfirmOff(name)}
         onChange={async (next) => {
           await setPerPlaceNames(next);
           if (next) onReviewsChanged?.();
@@ -455,29 +421,10 @@ export function PrivacySettings({ onReviewsChanged }: PrivacySettingsProps) {
         icon={CalendarOff}
         title="Hide exact dates"
         enabled={profile.hide_dates}
-        summary={
-          profile.hide_dates
-            ? 'Reviews show a rough time, like "a few weeks ago".'
-            : 'New reviews show the day you post them.'
-        }
-        offWarning="Off: the day you post can be matched against other records of who was there."
-        explained={{
-          lead: 'Your reviews show roughly when you posted them, never the exact day.',
-          whyItMatters:
-            'Apps, advertisers and phone companies keep records of where phones were and when. The exact day of a review can be matched against them to work out who was there.',
-          whatItDoes:
-            'Readers see a rough time, like "a few weeks ago", instead of the date, and never the time of day. Each review keeps the setting it was posted with.',
-          whatItCantHide:
-            "Anyone watching closely can still notice when a new review appears, so it's safer to post after you've left. Moderators can still see exact times.",
-          ifTurnedOff:
-            "New reviews will show the day you post them. Reviews you've already posted keep showing a rough time.",
-        }}
-        confirmOff={{
-          title: 'Show dates on new reviews?',
-          body: "Reviews you post from now on will show the day you posted them, and that day can be matched against other records of who was there. Reviews you've already posted keep showing a rough time.",
-          keep: 'Keep them hidden',
-          confirm: 'Show dates',
-        }}
+        summary={datesSummary(profile.hide_dates)}
+        offWarning={DATES_OFF_WARNING}
+        explained={DATES_EXPLAINED}
+        confirmOff={DATES_CONFIRM_OFF}
         // No onReviewsChanged: unlike names, this never changes a review already
         // posted, so the list below is still right. Hiding older dates all at
         // once would show, live, that those reviews came from one person.

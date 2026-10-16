@@ -20,7 +20,7 @@ import { cn } from '@/lib/utils';
 /** Enough to scan, few enough that every keystroke is instant. */
 const MAX_RESULTS = 40;
 
-type City = SavedCity & {
+export type City = SavedCity & {
   /** Name only, folded for matching. */
   nameKey: string;
   /** Name, region and country, folded, so "london ontario" finds the right one. */
@@ -43,7 +43,7 @@ let citiesPromise: Promise<City[]> | null = null;
  * the first time a picker opens rather than at startup. Searching it never
  * leaves the device: typing a city name tells nobody where you are.
  */
-function loadCities(): Promise<City[]> {
+export function loadCities(): Promise<City[]> {
   citiesPromise ??= import('@/data/geonames/cities.json').then((module) =>
     (module.default as unknown as [string, string, string, number, number][]).map(
       ([name, region, country, latitude, longitude]) => ({
@@ -60,7 +60,7 @@ function loadCities(): Promise<City[]> {
   return citiesPromise;
 }
 
-function search(cities: City[], query: string, preferCountry: string | null): City[] {
+export function searchCities(cities: City[], query: string, preferCountry: string | null): City[] {
   const q = fold(query.trim());
   if (!q) {
     // Nothing typed: the biggest cities in the country the phone points at.
@@ -109,7 +109,7 @@ export function CityPicker({ open, onOpenChange, onChosen }: CityPickerProps) {
   }, [open, cities]);
 
   const results = React.useMemo(
-    () => (cities ? search(cities, query, area?.countryCode ?? null) : []),
+    () => (cities ? searchCities(cities, query, area?.countryCode ?? null) : []),
     [cities, query, area?.countryCode]
   );
 

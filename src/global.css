@@ -38,6 +38,47 @@
        because primary here is near-black in light and near-white in dark -
        there is no blue in the palette to borrow. */
     --admin: 221 83% 53%;
+    /* A switch that is on. Basic's switch uses primary and never reads this;
+       the Chenfeng skin sets it to the system green (src/lib/theme.ts). */
+    --switch-on: 0 0% 9%;
+    /* Chenfeng's colours (src/lib/theme.ts), on colours Basic already has, so
+       a component can use them in any skin and look as it did. The -a beside a
+       colour is its alpha: Chenfeng's are translucent, Basic's never are. */
+    --grouped: 0 0% 100%;
+    --segment-thumb: 0 0% 100%;
+    --system-purple: 0 0% 9%;
+    --system-indigo: 0 0% 9%;
+    --system-gray: 0 0% 45.1%;
+    --label-secondary: 0 0% 45.1%;
+    --label-secondary-a: 1;
+    --label-tertiary: 0 0% 45.1%;
+    --label-tertiary-a: 1;
+    --separator: 0 0% 89.8%;
+    --separator-a: 1;
+    --fill: 0 0% 96.1%;
+    --fill-a: 1;
+    --fill-secondary: 0 0% 96.1%;
+    --fill-secondary-a: 1;
+    --fill-tertiary: 0 0% 96.1%;
+    --fill-tertiary-a: 1;
+    --fill-quaternary: 0 0% 96.1%;
+    --fill-quaternary-a: 1;
+    --tint-fill: 0 0% 96.1%;
+    --tint-fill-a: 1;
+    /* Material's roles (src/lib/theme.ts, roleFallbacks), on colours Basic
+       already has. Only Material reads them. */
+    --primary-container: 0 0% 96.1%;
+    --on-primary-container: 0 0% 9%;
+    --tertiary: 0 0% 9%;
+    --tertiary-container: 0 0% 96.1%;
+    --on-tertiary-container: 0 0% 9%;
+    --error-container: 0 0% 96.1%;
+    --on-error-container: 0 84.2% 60.2%;
+    --surface-container-lowest: 0 0% 100%;
+    --inverse-surface: 0 0% 3.9%;
+    --inverse-on-surface: 0 0% 100%;
+    --inverse-primary: 0 0% 98%;
+    --m3-secondary: 0 0% 45.1%;
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
@@ -67,6 +108,32 @@
     --ring: 300 0% 45%;
     --star: 38 95% 58%;
     --admin: 213 94% 68%;
+    --switch-on: 0 0% 98%;
+    --grouped: 0 0% 3.9%;
+    --segment-thumb: 0 0% 3.9%;
+    --system-purple: 0 0% 98%;
+    --system-indigo: 0 0% 98%;
+    --system-gray: 0 0% 63.9%;
+    --label-secondary: 0 0% 63.9%;
+    --label-tertiary: 0 0% 63.9%;
+    --separator: 0 0% 14.9%;
+    --fill: 0 0% 14.9%;
+    --fill-secondary: 0 0% 14.9%;
+    --fill-tertiary: 0 0% 14.9%;
+    --fill-quaternary: 0 0% 14.9%;
+    --tint-fill: 0 0% 14.9%;
+    --primary-container: 0 0% 14.9%;
+    --on-primary-container: 0 0% 98%;
+    --tertiary: 0 0% 98%;
+    --tertiary-container: 0 0% 14.9%;
+    --on-tertiary-container: 0 0% 98%;
+    --error-container: 0 0% 14.9%;
+    --on-error-container: 0 70.9% 59.4%;
+    --surface-container-lowest: 0 0% 3.9%;
+    --inverse-surface: 0 0% 98%;
+    --inverse-on-surface: 0 0% 3.9%;
+    --inverse-primary: 0 0% 9%;
+    --m3-secondary: 0 0% 63.9%;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;

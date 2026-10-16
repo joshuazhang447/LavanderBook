@@ -1,7 +1,18 @@
 import * as React from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
+import {
+  ChenfengLocationChoiceScreen,
+  ChenfengLocationSheet,
+} from '@/components/chenfeng/location-choice';
+import {
+  ChenfengLocateButton,
+  ChenfengMapControls,
+  ChenfengSearch,
+} from '@/components/chenfeng/map-chrome';
+import { ChenfengVenueList } from '@/components/chenfeng/venue-list';
 import { LocationChoiceDialog, LocationChoiceScreen } from '@/components/location-choice';
+import { useTabBarOverlap } from '@/components/tab-bar';
 import { VenueList } from '@/components/venue-list';
 import { clearMapFocus, focusMapOn, useMapFocus } from '@/lib/map-focus';
 import type { MapViewMode } from '@/components/map-controls';
@@ -12,6 +23,7 @@ import { Text } from '@/components/ui/text';
 import { VenueMap } from '@/components/venue-map';
 import { VenueSheet } from '@/components/venue-sheet';
 import { useMapLocation } from '@/lib/map-location';
+import { useSkin } from '@/lib/skin';
 import {
   AREA_RADIUS_METERS,
   METERS_PER_DEGREE_LAT,
@@ -76,6 +88,12 @@ export default function MapScreen() {
   // The near me / area / city choice, opened from the locate button while the
   // map is not following anyone.
   const [choosingLocation, setChoosingLocation] = React.useState(false);
+  // Chenfeng: the list's filter is typed into the tab bar's search field, so
+  // it lives here rather than in the list. The other skins' list has its own.
+  const [listQuery, setListQuery] = React.useState('');
+  const chenfeng = useSkin().skin === 'chenfeng';
+  // Non-zero only under a tab bar floating over the map.
+  const tabBarOverlap = useTabBarOverlap();
 
   // Set by Locate on a review over in the account tab.
   const focus = useMapFocus();
@@ -218,7 +236,9 @@ export default function MapScreen() {
 
   // First visit, before any choice: near me, an area, or a city. No OS prompt
   // has been shown yet, and none will be unless they pick "Near me".
-  if (mapLocation.mode === null) return <LocationChoiceScreen />;
+  if (mapLocation.mode === null) {
+    return chenfeng ? <ChenfengLocationChoiceScreen /> : <LocationChoiceScreen />;
+  }
 
   // The map reads its centre once, on mount, so wait for the position rather
   // than mounting somewhere arbitrary and jumping afterwards.
@@ -233,7 +253,35 @@ export default function MapScreen() {
 
   // Not following, no saved city, and the phone's time zone points nowhere the
   // data knows (UTC, say): there is nowhere sensible to open, so ask.
-  if (!start) return <LocationChoiceScreen />;
+  if (!start) return chenfeng ? <ChenfengLocationChoiceScreen /> : <LocationChoiceScreen />;
+
+  const recenter = () => {
+    // Not following anyone: offer the choice rather than doing nothing.
+    if (!onDevice) {
+      setChoosingLocation(true);
+      return;
+    }
+    setFollowPref(true);
+    // Always re-issue the camera move. Pressing while already following
+    // used to be a no-op, because the target value had not changed.
+    setRecenterToken((token) => token + 1);
+    // Clear the venue target, or `following` stays false and the button
+    // would light up without the map actually tracking anyone.
+    clearMapFocus();
+  };
+
+  const pickPlace = (place: PlaceResult) => {
+    setSearchResult(place);
+    // The same path Locate uses from the account tab: it moves the
+    // camera and suspends following, both of which are wanted here.
+    focusMapOn({ latitude: place.latitude, longitude: place.longitude });
+  };
+
+  const locateVenue = (venue: NearbyVenue) => {
+    focusMapOn({ latitude: venue.lat, longitude: venue.lng });
+    // A mode of this same screen, so a local switch - not switchTab.
+    setMode('map');
+  };
 
   return (
     <View className="flex-1 bg-background">
@@ -275,6 +323,21 @@ export default function MapScreen() {
             clearMapFocus();
             setRegion(next);
           }}
+          bottomInset={tabBarOverlap}
+        />
+      ) : chenfeng ? (
+        <ChenfengVenueList
+          venues={venues}
+          origin={
+            following
+              ? (followPosition ?? (location.status === 'granted' ? location : fetchRegion))
+              : fetchRegion
+          }
+          query={listQuery}
+          onSelectVenue={setViewingVenue}
+          onLocateVenue={locateVenue}
+          refreshing={refreshing}
+          onRefresh={refresh}
         />
       ) : (
         <VenueList
@@ -288,61 +351,68 @@ export default function MapScreen() {
               : fetchRegion
           }
           onSelectVenue={setViewingVenue}
-          onLocateVenue={(venue) => {
-            focusMapOn({ latitude: venue.lat, longitude: venue.lng });
-            // A mode of this same screen, so a local switch - not switchTab.
-            setMode('map');
-          }}
+          onLocateVenue={locateVenue}
         />
       )}
 
-      <MapControls
-        mode={mode}
-        onChangeMode={setMode}
-        refreshing={refreshing}
-        onRefresh={refresh}
-        searchOpen={searchOpen}>
-        {/* In the controls row, expanding in place. Map only: List has its own
-            search box, over reviewed venues, and two search affordances on one
-            screen would be a coin toss which one you get. */}
-        {mode === 'map' ? (
-          <MapSearch
-            origin={fetchRegion}
-            onPick={(place) => {
-              setSearchResult(place);
-              // The same path Locate uses from the account tab: it moves the
-              // camera and suspends following, both of which are wanted here.
-              focusMapOn({ latitude: place.latitude, longitude: place.longitude });
-            }}
-            onClear={() => setSearchResult(null)}
-            open={searchOpen}
-            onOpenChange={setSearchOpen}
+      {chenfeng ? (
+        <>
+          <ChenfengMapControls
+            mode={mode}
+            onChangeMode={setMode}
+            refreshing={refreshing}
+            onRefresh={refresh}
           />
-        ) : null}
-      </MapControls>
+          {mode === 'map' ? (
+            <ChenfengLocateButton
+              following={following}
+              usingLocation={onDevice}
+              onPress={recenter}
+            />
+          ) : null}
+          {/* Search is the tab bar's button; it opens here, over the map. */}
+          <ChenfengSearch
+            mode={mode}
+            origin={fetchRegion}
+            onPickPlace={pickPlace}
+            onClearPlace={() => setSearchResult(null)}
+            listQuery={listQuery}
+            onListQuery={setListQuery}
+          />
+        </>
+      ) : (
+        <>
+          <MapControls
+            mode={mode}
+            onChangeMode={setMode}
+            refreshing={refreshing}
+            onRefresh={refresh}
+            searchOpen={searchOpen}>
+            {/* In the controls row, expanding in place. Map only: List has its own
+                search box, over reviewed venues, and two search affordances on one
+                screen would be a coin toss which one you get. */}
+            {mode === 'map' ? (
+              <MapSearch
+                origin={fetchRegion}
+                onPick={pickPlace}
+                onClear={() => setSearchResult(null)}
+                open={searchOpen}
+                onOpenChange={setSearchOpen}
+              />
+            ) : null}
+          </MapControls>
 
-      {mode === 'map' ? (
-        <RecenterButton
-          following={following}
-          usingLocation={onDevice}
-          onPress={() => {
-            // Not following anyone: offer the choice rather than doing nothing.
-            if (!onDevice) {
-              setChoosingLocation(true);
-              return;
-            }
-            setFollowPref(true);
-            // Always re-issue the camera move. Pressing while already following
-            // used to be a no-op, because the target value had not changed.
-            setRecenterToken((token) => token + 1);
-            // Clear the venue target, or `following` stays false and the button
-            // would light up without the map actually tracking anyone.
-            clearMapFocus();
-          }}
-        />
+          {mode === 'map' ? (
+            <RecenterButton following={following} usingLocation={onDevice} onPress={recenter} />
+          ) : null}
+
+          <LocationChoiceDialog open={choosingLocation} onOpenChange={setChoosingLocation} />
+        </>
+      )}
+
+      {chenfeng && choosingLocation ? (
+        <ChenfengLocationSheet onClose={() => setChoosingLocation(false)} />
       ) : null}
-
-      <LocationChoiceDialog open={choosingLocation} onOpenChange={setChoosingLocation} />
 
       {viewingVenue ? (
         <VenueSheet

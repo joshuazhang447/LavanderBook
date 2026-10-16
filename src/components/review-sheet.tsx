@@ -1,57 +1,25 @@
-import {
-  Calendar,
-  CalendarOff,
-  CircleUser,
-  EyeOff,
-  Info,
-  Trash2,
-  VenetianMask,
-  X,
-  type LucideIcon,
-} from 'lucide-react-native';
+import { EyeOff, Info, Trash2, X } from 'lucide-react-native';
 import * as React from 'react';
-import { ActivityIndicator, Platform, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
+import { ActivityIndicator, Platform, Pressable, ScrollView, View } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 
-import { Portal } from '@rn-primitives/portal';
-
+import { ChenfengReviewSheet } from '@/components/chenfeng/review-sheet';
 import { DirectionsButton } from '@/components/directions-button';
 import { InfoBullets, InfoDialog, InfoPoint } from '@/components/info-dialog';
 import { QuestionField, type AnswerValue } from '@/components/question-field';
 import { StarRating, STAR_HINT } from '@/components/star-rating';
 import { TagPill } from '@/components/tag-pill';
+import { BottomSheet } from '@/components/ui/bottom-sheet';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/lib/auth';
-import type { Database } from '@/lib/database.types';
-import {
-  answerProblem,
-  fetchMyAnswers,
-  fetchQuestionnaire,
-  isAnswered,
-  submitReview,
-  toRpcAnswer,
-  type AnswerMap,
-  type Questionnaire,
-} from '@/lib/questionnaire';
-import { postedLabel } from '@/lib/review-dates';
-import { supabase } from '@/lib/supabase';
+import type { AnswerMap, Questionnaire } from '@/lib/questionnaire';
+import { BATHROOM_OPTIONS, MAX_BODY, useReviewForm, WHAT_NOT_TO_WRITE } from '@/lib/review-form';
+import { useSkin } from '@/lib/skin';
 import { cn } from '@/lib/utils';
 import type { SelectedPoi } from '@/lib/venues';
-
-type Answer = Database['public']['Enums']['answer'];
-
-/** Mirrors the reviews_body_length check constraint. */
-const MAX_BODY = 2000;
-
-const BATHROOM_OPTIONS: { value: Answer; label: string }[] = [
-  { value: 'yes', label: 'Yes' },
-  { value: 'no', label: 'No' },
-  { value: 'unsure', label: 'Not sure' },
-];
 
 /**
  * Fades the delete button in on native, and does nothing on the web.
@@ -68,11 +36,6 @@ const BATHROOM_OPTIONS: { value: Answer; label: string }[] = [
 function DeleteButtonEntrance({ children }: React.PropsWithChildren) {
   if (Platform.OS === 'web') return <View>{children}</View>;
   return <Animated.View entering={FadeIn.duration(200)}>{children}</Animated.View>;
-}
-
-/** PostgREST errors carry the SQLSTATE; the sheet reacts to one of them. */
-function hasCode(error: unknown, code: string): boolean {
-  return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === code;
 }
 
 type TagQuestionsProps = {
@@ -163,7 +126,7 @@ function TagQuestions({ questionnaire, answers, problems, disabled, onChange }: 
   );
 }
 
-type ReviewSheetProps = {
+export type ReviewSheetProps = {
   poi: SelectedPoi;
   /** Known when opened from the reviews list; looked up by place id from the map. */
   venueId?: string;
@@ -171,487 +134,228 @@ type ReviewSheetProps = {
   onSaved: () => void;
 };
 
-/** What an existing review shows readers. Null fields: there is no review yet. */
-type Shown = { alias: string | null; hideDate: boolean; posted: string | null };
-
-/**
- * The name and the date this review is, or will be, shown with - said at the
- * point of posting, because that is when it matters and, for a new review, the
- * only time either is decided.
- */
-function postingAs(
-  profile: { display_name: string; per_place_names: boolean; hide_dates: boolean },
-  existing: Shown | null
-): { icon: LucideIcon; text: string }[] {
-  const name = existing
-    ? existing.alias
-      ? { icon: VenetianMask, text: `Shown as ${existing.alias}, a name only this review uses.` }
-      : { icon: CircleUser, text: `Shown as ${profile.display_name}, your account name.` }
-    : profile.per_place_names
-      ? { icon: VenetianMask, text: 'Posts under a new random name, used for this place only.' }
-      : {
-          icon: CircleUser,
-          text: `Posts as ${profile.display_name}. Per-place names are off in My Account.`,
-        };
-
-  const date = existing
-    ? existing.hideDate
-      ? {
-          icon: CalendarOff,
-          text: existing.posted
-            ? `Dated "${existing.posted}" - readers never see the day.`
-            : 'Readers never see the day it was posted.',
-        }
-      : {
-          icon: Calendar,
-          text: existing.posted
-            ? `Readers see the day it was posted, ${existing.posted}.`
-            : 'Readers see the day it was posted.',
-        }
-    : profile.hide_dates
-      ? { icon: CalendarOff, text: 'Readers see only a rough time, like "recently" - never the day.' }
-      : {
-          icon: Calendar,
-          text: 'Readers see the day you post it. Hidden dates are off in My Account.',
-        };
-
-  return [name, date];
+export function ReviewSheet(props: ReviewSheetProps) {
+  const { skin } = useSkin();
+  // Chenfeng's form is a full-height sheet of grouped sections with Post in
+  // its toolbar (its own file); Basic and Material keep this one. Both run on
+  // useReviewForm, so what is checked and saved is the same.
+  return skin === 'chenfeng' ? <ChenfengReviewSheet {...props} /> : <BasicReviewSheet {...props} />;
 }
 
-export function ReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: ReviewSheetProps) {
-  const { session, profile, signInWithGoogle } = useAuth();
-
-  const [stars, setStars] = React.useState<number | null>(null);
-  const [bathroom, setBathroom] = React.useState<Answer | null>(null);
-  const [body, setBody] = React.useState('');
-  const [loading, setLoading] = React.useState(true);
-  const [busy, setBusy] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [venueId, setVenueId] = React.useState<string | null>(knownVenueId ?? null);
-  const [isExisting, setIsExisting] = React.useState(false);
-  /** What the existing review shows readers; null when there is no review yet. */
-  const [shown, setShown] = React.useState<Shown | null>(null);
+function BasicReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: ReviewSheetProps) {
+  const { session, signInWithGoogle } = useAuth();
+  const {
+    stars,
+    setStars,
+    bathroom,
+    setBathroom,
+    body,
+    setBody,
+    loading,
+    busy,
+    error,
+    isExisting,
+    questionnaire,
+    answers,
+    setAnswers,
+    problems,
+    tooLong,
+    canSubmit,
+    identity,
+    blockingHint,
+    remove,
+    submit,
+  } = useReviewForm({ poi, venueId: knownVenueId, onSaved });
   const [confirmingDelete, setConfirmingDelete] = React.useState(false);
   /** The "what not to write" explanation behind the free-text field's (i). */
   const [explainingBody, setExplainingBody] = React.useState(false);
-  const [questionnaire, setQuestionnaire] = React.useState<Questionnaire>([]);
-  const [answers, setAnswers] = React.useState<AnswerMap>({});
   const scrollRef = React.useRef<ScrollView>(null);
-  const { height: windowHeight } = useWindowDimensions();
-  // The card needs a definite height for the ScrollView inside it to flex into;
-  // maxHeight alone is only a cap. 60% leaves room for the keyboard to lift the
-  // whole card without pushing its top off screen.
-  const sheetHeight = Math.round(windowHeight * 0.6);
-
-  const userId = session?.user.id ?? null;
-
-  // Pull back an existing review so the sheet edits it rather than colliding
-  // with the one-review-per-venue constraint.
-  React.useEffect(() => {
-    let active = true;
-
-    (async () => {
-      if (!userId) {
-        if (active) setLoading(false);
-        return;
-      }
-
-      let resolvedVenueId = knownVenueId ?? null;
-
-      if (!resolvedVenueId && poi.placeId) {
-        const { data: venue } = await supabase
-          .from('venues')
-          .select('id')
-          .eq('google_place_id', poi.placeId)
-          .maybeSingle();
-        if (!active) return;
-        resolvedVenueId = venue?.id ?? null;
-      }
-
-      if (resolvedVenueId) {
-        setVenueId(resolvedVenueId);
-
-        // The review and the venue's questions arrive together, behind the one
-        // spinner: prefilled answers have to be there at first paint, and a
-        // section appearing under a thumb already heading for Post is worse
-        // than a slightly longer wait.
-        const [{ data: review }, tags] = await Promise.all([
-          supabase.rpc('my_reviews').eq('venue_id', resolvedVenueId).maybeSingle(),
-          // An untagged venue has no questions. A failed fetch looks the same,
-          // and the review still posts - stars and the bathroom answer are
-          // worth more than a blocked form.
-          fetchQuestionnaire(resolvedVenueId).catch((): Questionnaire => []),
-        ]);
-        if (!active) return;
-        setQuestionnaire(tags);
-
-        if (review) {
-          setStars(review.stars);
-          setBathroom(review.trans_bathroom);
-          setBody(review.body ?? '');
-          setIsExisting(true);
-          setShown({
-            // The generator cannot see that a RETURNS TABLE column is nullable.
-            alias: (review.alias as string | null) ?? null,
-            hideDate: review.hide_date,
-            posted: postedLabel(review.posted_period, review.posted_on as string | null),
-          });
-
-          const byId = new Map(tags.flatMap((tag) => tag.questions).map((q) => [q.id, q] as const));
-          const mine = await fetchMyAnswers(review.id, byId).catch((): AnswerMap => ({}));
-          if (!active) return;
-          setAnswers(mine);
-        }
-      }
-
-      setLoading(false);
-    })();
-
-    return () => {
-      active = false;
-    };
-  }, [userId, poi.placeId, knownVenueId]);
-
-  const tooLong = body.length > MAX_BODY;
-
-  const questions = questionnaire.flatMap((tag) => tag.questions);
-  const missingRequired = questions.filter(
-    (question) => question.required && !isAnswered(question.kind, answers[question.id] ?? null)
-  );
-  const problems = new Map<string, string>();
-  for (const question of questions) {
-    const problem = answerProblem(question, answers[question.id] ?? null);
-    if (problem) problems.set(question.id, problem);
-  }
-
-  const canSubmit =
-    stars !== null &&
-    bathroom !== null &&
-    !tooLong &&
-    missingRequired.length === 0 &&
-    problems.size === 0 &&
-    !busy;
-
-  const identity = profile ? postingAs(profile, isExisting ? shown : null) : [];
-
-  // One sentence about whatever is in the way, or nothing.
-  const basicsMissing = stars === null || bathroom === null;
-  const blockingHint =
-    basicsMissing && missingRequired.length > 0
-      ? 'Pick a rating, answer the bathroom question and the questions marked * to post.'
-      : basicsMissing
-        ? 'Pick a rating and answer the bathroom question to post.'
-        : missingRequired.length > 0
-          ? 'Answer the questions marked * to post.'
-          : problems.size > 0
-            ? 'Fix the highlighted answer to post.'
-            : null;
-
-  async function remove() {
-    if (!venueId || !userId) return;
-
-    setError(null);
-    setBusy(true);
-    try {
-      const { error: deleteError } = await supabase.rpc('delete_my_review', {
-        p_venue_id: venueId,
-      });
-      if (deleteError) throw deleteError;
-      onSaved();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not delete your review.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function submit() {
-    // Guard again here, not just on the button: state could change between render
-    // and press, and the checks below are what the database will enforce anyway.
-    if (stars === null || bathroom === null || tooLong || !userId) return;
-    if (missingRequired.length > 0 || problems.size > 0) return;
-
-    setError(null);
-    setBusy(true);
-    // Reuse the venue if somebody already added it; only insert when new.
-    let targetVenueId: string | undefined = venueId ?? undefined;
-    try {
-
-      if (!targetVenueId && poi.placeId) {
-        const { data: existing } = await supabase
-          .from('venues')
-          .select('id')
-          .eq('google_place_id', poi.placeId)
-          .maybeSingle();
-        targetVenueId = existing?.id;
-      }
-
-      if (!targetVenueId) {
-        const { data: created, error: venueError } = await supabase
-          .from('venues')
-          .insert({
-            google_place_id: poi.placeId ?? null,
-            name: poi.name,
-            lat: poi.latitude,
-            lng: poi.longitude,
-            last_synced_at: new Date().toISOString(),
-          })
-          .select('id')
-          .single();
-        if (venueError) throw venueError;
-        targetVenueId = created.id;
-      }
-
-      // Review and answers land together or not at all; the server validates
-      // every answer against the question's own kind and settings.
-      await submitReview({
-        venueId: targetVenueId,
-        stars,
-        bathroom,
-        body: body.trim() === '' ? null : body.trim(),
-        answers: questions.flatMap((question) => {
-          const value = toRpcAnswer(question, answers[question.id] ?? null);
-          return value === null ? [] : [{ question_id: question.id, value }];
-        }),
-      });
-
-      onSaved();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not save your review.');
-      // A required question added since the form opened. The error names it;
-      // fetching again puts it on the form, marked, under that error.
-      if (hasCode(e, '23514') && targetVenueId) {
-        fetchQuestionnaire(targetVenueId)
-          .then(setQuestionnaire)
-          .catch(() => {});
-      }
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
-    // Rendered through the portal host at the app root. Positioned absolutely
-    // inside the list, it would anchor to the padded content column instead of
-    // the screen and land in the middle of the page.
-    <Portal name="review-sheet">
-      <View className="absolute inset-0 justify-end">
-        <Animated.View
-          entering={FadeIn.duration(180)}
-          exiting={FadeOut.duration(160)}
-          className="absolute inset-0">
+    // Opens most of the way up - 60% leaves room for the keyboard to lift it
+    // without pushing its top off screen - and its handle and top row drag it
+    // to full height.
+    <BottomSheet
+      name="review-sheet"
+      onClose={onClose}
+      accessibilityLabel={poi.name}
+      partial={0.6}
+      keyboardAvoiding
+      header={
+        <View className="flex-row items-start gap-3 px-5 pb-2 pt-2">
+          <View className="flex-1 gap-0.5">
+            <Text className="text-xl font-semibold text-foreground">{poi.name}</Text>
+            <Text className="text-xs text-muted-foreground">
+              {poi.latitude.toFixed(4)}, {poi.longitude.toFixed(4)}
+            </Text>
+          </View>
+          <DirectionsButton
+            name={poi.name}
+            latitude={poi.latitude}
+            longitude={poi.longitude}
+            placeId={poi.placeId}
+          />
           <Pressable
+            onPress={onClose}
             accessibilityRole="button"
             accessibilityLabel="Close"
-            onPress={onClose}
-            className="flex-1 bg-black/50"
-          />
-        </Animated.View>
-        <KeyboardAvoidingView behavior="padding">
-          <Animated.View
-            // A plain timed slide. A spring overshoots the resting position and
-            // reads as the sheet bouncing.
-            entering={SlideInDown.duration(260)}
-            exiting={SlideOutDown.duration(200)}
-            // overflow-hidden matters: without it the form paints outside the
-            // card's max height and spills over the map behind.
-            // Unconditional. When this depended on `loading`, the card rendered
-            // short while the existing-review lookup was in flight, the entering
-            // animation captured that height, and the sheet opened as a sliver -
-            // intermittently, because sometimes the lookup won the race.
-            style={{ height: sheetHeight }}
-            className="overflow-hidden rounded-t-3xl border-t border-border bg-background">
-            <View className="flex-row items-start gap-3 px-5 pb-2 pt-5">
-              <View className="flex-1 gap-0.5">
-                <Text className="text-xl font-semibold text-foreground">{poi.name}</Text>
-                <Text className="text-xs text-muted-foreground">
-                  {poi.latitude.toFixed(4)}, {poi.longitude.toFixed(4)}
-                </Text>
-              </View>
-              <DirectionsButton
-                name={poi.name}
-                latitude={poi.latitude}
-                longitude={poi.longitude}
-                placeId={poi.placeId}
-              />
-              <Pressable
-                onPress={onClose}
-                accessibilityRole="button"
-                accessibilityLabel="Close"
-                className="rounded-full p-2 active:bg-accent">
-                <Icon as={X} className="size-5 text-muted-foreground" />
-              </Pressable>
+            className="rounded-full p-2 active:bg-accent">
+            <Icon as={X} className="size-5 text-muted-foreground" />
+          </Pressable>
+        </View>
+      }>
+      {loading ? (
+        <View className="flex-1 items-center justify-center gap-2 p-8">
+          <ActivityIndicator />
+        </View>
+      ) : !session ? (
+        <View className="flex-1 justify-center gap-4 p-5">
+          <Text className="text-sm text-muted-foreground">
+            Sign in to review this place. You post under an anonymous handle, never your real
+            name.
+          </Text>
+          <Button onPress={() => signInWithGoogle().catch(() => {})}>
+            <Text>Continue with Google</Text>
+          </Button>
+        </View>
+      ) : (
+        <ScrollView
+          ref={scrollRef}
+          className="flex-1"
+          keyboardShouldPersistTaps="handled">
+          <View className="gap-6 p-5">
+            <View className="gap-2">
+              <Text className="font-medium text-foreground">
+                How LGBTQ+ friendly is this place?
+              </Text>
+              <StarRating value={stars} onChange={setStars} />
+              <Text className="text-xs text-muted-foreground">
+                {stars ? STAR_HINT[stars] : '1 is hostile, 5 is actively welcoming'}
+              </Text>
             </View>
 
-            {loading ? (
-              <View className="flex-1 items-center justify-center gap-2 p-8">
-                <ActivityIndicator />
-              </View>
-            ) : !session ? (
-              <View className="flex-1 justify-center gap-4 p-5">
-                <Text className="text-sm text-muted-foreground">
-                  Sign in to review this place. You post under an anonymous handle, never your real
-                  name.
-                </Text>
-                <Button onPress={() => signInWithGoogle().catch(() => {})}>
-                  <Text>Continue with Google</Text>
-                </Button>
-              </View>
-            ) : (
-              <ScrollView
-                ref={scrollRef}
-                className="flex-1"
-                keyboardShouldPersistTaps="handled">
-                <View className="gap-6 p-5">
-                  <View className="gap-2">
-                    <Text className="font-medium text-foreground">
-                      How LGBTQ+ friendly is this place?
-                    </Text>
-                    <StarRating value={stars} onChange={setStars} />
-                    <Text className="text-xs text-muted-foreground">
-                      {stars ? STAR_HINT[stars] : '1 is hostile, 5 is actively welcoming'}
-                    </Text>
-                  </View>
-
-                  <View className="gap-2">
-                    <Text className="font-medium text-foreground">
-                      Is there a bathroom trans people can use safely?
-                    </Text>
-                    <View className="flex-row gap-2">
-                      {BATHROOM_OPTIONS.map((option) => (
-                        <Button
-                          key={option.value}
-                          size="sm"
-                          variant={bathroom === option.value ? 'default' : 'outline'}
-                          onPress={() => setBathroom(option.value)}
-                          className="flex-1">
-                          <Text>{option.label}</Text>
-                        </Button>
-                      ))}
-                    </View>
-                    <Text className="text-xs text-muted-foreground">
-                      Pick &quot;Not sure&quot; if you did not check - a guess helps nobody.
-                    </Text>
-                  </View>
-
-                  {questionnaire.length > 0 ? (
-                    <TagQuestions
-                      questionnaire={questionnaire}
-                      answers={answers}
-                      problems={problems}
-                      disabled={busy}
-                      onChange={(questionId, value) =>
-                        setAnswers((current) => ({ ...current, [questionId]: value }))
-                      }
-                    />
-                  ) : null}
-
-                  <View className="gap-2">
-                    {/* The label and its (i) together open the explanation, so
-                        the target is the whole label rather than a 16-pixel
-                        icon. */}
-                    <Pressable
-                      onPress={() => setExplainingBody(true)}
-                      accessibilityRole="button"
-                      accessibilityLabel="What not to write, and why"
-                      hitSlop={6}
-                      className={cn(
-                        'flex-row items-center gap-1.5 self-start',
-                        Platform.select({ web: 'cursor-pointer hover:opacity-80' })
-                      )}>
-                      <Text className="font-medium text-foreground">What happened? (optional)</Text>
-                      <Icon as={Info} className="size-4 text-muted-foreground" />
-                    </Pressable>
-                    {/* The free text is the one part of a review that no switch
-                        can protect: a per-place name and a rough date hide who
-                        and when, and a sentence can give both back. So the
-                        warning sits where the writing starts. */}
-                    <Textarea
-                      value={body}
-                      onChangeText={setBody}
-                      onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })}
-                      maxLength={MAX_BODY}
-                      placeholder="Anything worth knowing before someone else walks in. Leave out names, dates, times and anything else that could identify you."
-                      numberOfLines={4}
-                    />
-                    <InfoDialog
-                      open={explainingBody}
-                      onOpenChange={setExplainingBody}
-                      icon={EyeOff}
-                      title="Keep yourself out of it"
-                      lead="Reviews are public. Write about the place, not about you.">
-                      <InfoPoint title="Why it matters">
-                        Anyone can read reviews, including people you would rather not be found by.
-                        Small details add up: a name, a time and a place together can be enough to
-                        work out who wrote it. Your random name and rough date can&apos;t hide what
-                        you write yourself.
-                      </InfoPoint>
-                      <InfoPoint title="Leave out">
-                        <InfoBullets
-                          items={[
-                            "Names: yours, your friends', or staff you spoke to",
-                            'When you went: the day, the time, or "last Friday night"',
-                            'What you looked like or wore, and who you were with',
-                            'Where you live, work or study, and how old you are',
-                            'Anything only you, or a few people, would know',
-                          ]}
-                        />
-                      </InfoPoint>
-                      <InfoPoint title="Write about the place">
-                        How you were treated, whether you felt safe, whether there were any LGBTQ+
-                        employees, and anything someone like you should know before going.
-                      </InfoPoint>
-                    </InfoDialog>
-                    <Text
-                      className={
-                        tooLong ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'
-                      }>
-                      {body.length} / {MAX_BODY}
-                    </Text>
-                  </View>
-
-                  {identity.length > 0 ? (
-                    <View className="gap-1.5">
-                      {identity.map((line) => (
-                        <View key={line.text} className="flex-row items-center gap-2">
-                          <Icon as={line.icon} className="size-4 text-muted-foreground" />
-                          <Text className="flex-1 text-xs text-muted-foreground">{line.text}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  ) : null}
-
-                  {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
-
-                  <Button disabled={!canSubmit} onPress={submit}>
-                    <Text>{busy ? 'Saving...' : isExisting ? 'Save changes' : 'Post review'}</Text>
+            <View className="gap-2">
+              <Text className="font-medium text-foreground">
+                Is there a bathroom trans people can use safely?
+              </Text>
+              <View className="flex-row gap-2">
+                {BATHROOM_OPTIONS.map((option) => (
+                  <Button
+                    key={option.value}
+                    size="sm"
+                    variant={bathroom === option.value ? 'default' : 'outline'}
+                    onPress={() => setBathroom(option.value)}
+                    className="flex-1">
+                    <Text>{option.label}</Text>
                   </Button>
+                ))}
+              </View>
+              <Text className="text-xs text-muted-foreground">
+                Pick &quot;Not sure&quot; if you did not check - a guess helps nobody.
+              </Text>
+            </View>
 
-                  {isExisting ? (
-                    <DeleteButtonEntrance>
-                      <Button
-                        variant={confirmingDelete ? 'destructive' : 'outline'}
-                        disabled={busy}
-                        // Two taps, because a delete here is unrecoverable and the
-                        // button sits right under the one people mean to press.
-                        onPress={() => (confirmingDelete ? remove() : setConfirmingDelete(true))}>
-                        <Icon as={Trash2} className="size-4" />
-                        <Text>{confirmingDelete ? 'Tap again to delete' : 'Delete review'}</Text>
-                      </Button>
-                    </DeleteButtonEntrance>
-                  ) : null}
+            {questionnaire.length > 0 ? (
+              <TagQuestions
+                questionnaire={questionnaire}
+                answers={answers}
+                problems={problems}
+                disabled={busy}
+                onChange={(questionId, value) =>
+                  setAnswers((current) => ({ ...current, [questionId]: value }))
+                }
+              />
+            ) : null}
 
-                  {blockingHint ? (
-                    <Text className="-mt-3 text-center text-xs text-muted-foreground">
-                      {blockingHint}
-                    </Text>
-                  ) : null}
-                </View>
-              </ScrollView>
-            )}
-          </Animated.View>
-        </KeyboardAvoidingView>
-      </View>
-    </Portal>
+            <View className="gap-2">
+              {/* The label and its (i) together open the explanation, so
+                  the target is the whole label rather than a 16-pixel
+                  icon. */}
+              <Pressable
+                onPress={() => setExplainingBody(true)}
+                accessibilityRole="button"
+                accessibilityLabel="What not to write, and why"
+                hitSlop={6}
+                className={cn(
+                  'flex-row items-center gap-1.5 self-start',
+                  Platform.select({ web: 'cursor-pointer hover:opacity-80' })
+                )}>
+                <Text className="font-medium text-foreground">What happened? (optional)</Text>
+                <Icon as={Info} className="size-4 text-muted-foreground" />
+              </Pressable>
+              {/* The free text is the one part of a review that no switch
+                  can protect: a per-place name and a rough date hide who
+                  and when, and a sentence can give both back. So the
+                  warning sits where the writing starts. */}
+              <Textarea
+                value={body}
+                onChangeText={setBody}
+                onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })}
+                maxLength={MAX_BODY}
+                placeholder="Anything worth knowing before someone else walks in. Leave out names, dates, times and anything else that could identify you."
+                numberOfLines={4}
+              />
+              <InfoDialog
+                open={explainingBody}
+                onOpenChange={setExplainingBody}
+                icon={EyeOff}
+                title={WHAT_NOT_TO_WRITE.title}
+                lead={WHAT_NOT_TO_WRITE.lead}>
+                <InfoPoint title="Why it matters">{WHAT_NOT_TO_WRITE.whyItMatters}</InfoPoint>
+                <InfoPoint title="Leave out">
+                  <InfoBullets items={WHAT_NOT_TO_WRITE.leaveOut} />
+                </InfoPoint>
+                <InfoPoint title="Write about the place">
+                  {WHAT_NOT_TO_WRITE.writeAbout}
+                </InfoPoint>
+              </InfoDialog>
+              <Text
+                className={
+                  tooLong ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'
+                }>
+                {body.length} / {MAX_BODY}
+              </Text>
+            </View>
+
+            {identity.length > 0 ? (
+              <View className="gap-1.5">
+                {identity.map((line) => (
+                  <View key={line.text} className="flex-row items-center gap-2">
+                    <Icon as={line.icon} className="size-4 text-muted-foreground" />
+                    <Text className="flex-1 text-xs text-muted-foreground">{line.text}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
+            {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
+
+            <Button disabled={!canSubmit} onPress={submit}>
+              <Text>{busy ? 'Saving...' : isExisting ? 'Save changes' : 'Post review'}</Text>
+            </Button>
+
+            {isExisting ? (
+              <DeleteButtonEntrance>
+                <Button
+                  variant={confirmingDelete ? 'destructive' : 'outline'}
+                  disabled={busy}
+                  // Two taps, because a delete here is unrecoverable and the
+                  // button sits right under the one people mean to press.
+                  onPress={() => (confirmingDelete ? remove() : setConfirmingDelete(true))}>
+                  <Icon as={Trash2} className="size-4" />
+                  <Text>{confirmingDelete ? 'Tap again to delete' : 'Delete review'}</Text>
+                </Button>
+              </DeleteButtonEntrance>
+            ) : null}
+
+            {blockingHint ? (
+              <Text className="-mt-3 text-center text-xs text-muted-foreground">
+                {blockingHint}
+              </Text>
+            ) : null}
+          </View>
+        </ScrollView>
+      )}
+    </BottomSheet>
   );
 }

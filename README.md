@@ -36,6 +36,14 @@ The same codebase runs on Android, iOS and the web.
 - **Live updates.** A review posted by someone else appears on an open map without a
   refresh.
 - **Directions**, handed off to the device's usual maps application.
+- **Three looks, on every device.** *Basic* is the plain look. *Material* follows Android's
+  Material 3 Expressive. *Chenfeng* is drawn like a native iPhone app, with Liquid Glass,
+  large titles and sheets. The phone's own look is the default — Material on Android,
+  Chenfeng on iPhone, Basic on the website — and any of the three can be picked in the
+  account tab. The choice is saved on the device, not on the account, and it changes only
+  how the app looks: the safety notice and "Leave now" stay the same in every look.
+- **Sheets you can drag.** A place's card and the review form open part of the way up and
+  can be dragged to full screen, or down to close.
 
 ### For the organisation
 
@@ -305,7 +313,9 @@ src/
     admin.web.tsx         The administration panel (web only)
   components/
     admin/                Panel sections: users, reviews, tags, questions, places
-    ui/                   Shared interface components
+    chenfeng/             The Chenfeng look's own screens and controls
+    material/             The Material look's own pieces
+    ui/                   Shared interface components, drawn per look
   lib/                    Data access, authentication, helpers
 supabase/
   migrations/             Database schema, in order
@@ -333,8 +343,10 @@ app.config.js             Injects the Android Maps key from the environment
 - NativeWind 4
 - Tailwind CSS 3
 - react-native-reusables
-- Lucide
-- React Native Reanimated
+- Lucide, SF Symbols (expo-symbols) and Material Symbols
+- React Native Reanimated and Gesture Handler
+- expo-glass-effect, @expo/ui and expo-haptics
+- Inter and Roboto (Google Fonts)
 
 **Maps and places**
 
