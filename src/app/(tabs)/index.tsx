@@ -33,7 +33,7 @@ import {
   type Coords,
 } from '@/lib/use-location';
 import type { MapRegion, NearbyVenue } from '@/lib/use-nearby-venues';
-import { useNearbyVenues } from '@/lib/use-nearby-venues';
+import { isMapped, useNearbyVenues } from '@/lib/use-nearby-venues';
 import type { PlaceResult } from '@/lib/place-search';
 import { poiFromPlace } from '@/lib/place-search';
 import type { SelectedPoi } from '@/lib/venues';
@@ -278,6 +278,9 @@ export default function MapScreen() {
   };
 
   const locateVenue = (venue: NearbyVenue) => {
+    // The lists hide Locate for these; this is the backstop, because a null
+    // centre would reach the map's initialRegion.
+    if (!isMapped(venue)) return;
     focusMapOn({ latitude: venue.lat, longitude: venue.lng });
     // A mode of this same screen, so a local switch - not switchTab.
     setMode('map');

@@ -6,6 +6,16 @@ import { publicSupabase, supabase } from '@/lib/supabase';
 
 export type NearbyVenue = Database['public']['Functions']['venues_near']['Returns'][number];
 
+/**
+ * Whether a venue has a place on the map. Online organisations do not: they
+ * reach the app only through venues_search with p_include_online, and Locate
+ * and Directions have nowhere to go for them. The generated types say number;
+ * a search result can still carry null.
+ */
+export function isMapped(venue: Pick<NearbyVenue, 'lat' | 'lng'>): boolean {
+  return venue.lat != null && venue.lng != null;
+}
+
 /** The slice of map currently on screen, as react-native-maps reports it. */
 export type MapRegion = {
   latitude: number;

@@ -21,7 +21,7 @@ import { Text } from '@/components/ui/text';
 import { formatDistance, useVenueRows } from '@/components/venue-list';
 import { lightImpact } from '@/lib/haptics';
 import type { Coords } from '@/lib/use-location';
-import type { NearbyVenue } from '@/lib/use-nearby-venues';
+import { isMapped, type NearbyVenue } from '@/lib/use-nearby-venues';
 import { venueTags } from '@/lib/venue-tags';
 
 type ChenfengVenueListProps = {
@@ -81,17 +81,13 @@ export function ChenfengVenueList({
           </View>
         ) : rows && rows.length > 0 ? (
           <Section plain>
-            {rows.map(({ venue, distance }) => (
-              <SwipeRow
-                key={venue.id}
-                actions={[
-                  { label: 'Show on Map', icon: MapIcon, tone: 'tint', onPress: () => onLocateVenue(venue) },
-                ]}>
+            {rows.map(({ venue, distance }) => {
+              const row = (
                 <VenueRow
                   venue={venue}
                   distance={distance}
                   onPress={() => onSelectVenue(venue)}
-                  onLocate={() => onLocateVenue(venue)}
+                  onLocate={isMapped(venue) ? () => onLocateVenue(venue) : undefined}
                   onLongPress={async (target) => {
                     const anchor = await measureAnchor(target);
                     if (!anchor) return;
@@ -99,8 +95,21 @@ export function ChenfengVenueList({
                     setMenu({ venue, anchor });
                   }}
                 />
-              </SwipeRow>
-            ))}
+              );
+              // An online organisation has no place on the map, so no swipe
+              // action to show it there.
+              return isMapped(venue) ? (
+                <SwipeRow
+                  key={venue.id}
+                  actions={[
+                    { label: 'Show on Map', icon: MapIcon, tone: 'tint', onPress: () => onLocateVenue(venue) },
+                  ]}>
+                  {row}
+                </SwipeRow>
+              ) : (
+                <React.Fragment key={venue.id}>{row}</React.Fragment>
+              );
+            })}
           </Section>
         ) : searching ? (
           // Reviewed places only, and free; finding one nobody has reviewed is
@@ -144,7 +153,9 @@ export function ChenfengVenueList({
             ? [
                 [
                   { label: 'Open', onPress: () => onSelectVenue(menu.venue) },
-                  { label: 'Show on Map', icon: MapIcon, onPress: () => onLocateVenue(menu.venue) },
+                  ...(isMapped(menu.venue)
+                    ? [{ label: 'Show on Map', icon: MapIcon, onPress: () => onLocateVenue(menu.venue) }]
+                    : []),
                 ],
               ]
             : []
@@ -164,7 +175,8 @@ function VenueRow({
   venue: NearbyVenue;
   distance: number | null;
   onPress: () => void;
-  onLocate: () => void;
+  /** Absent for a venue with no coordinates. */
+  onLocate?: () => void;
   onLongPress: (target: View | null) => void;
 }) {
   const ref = React.useRef<View>(null);
@@ -193,9 +205,9 @@ function VenueRow({
             ? `${venue.name}, listed, not yet reviewed${away ? `, ${away}` : ''}`
             : `${venue.name}, ${average.toFixed(1)} out of 5, ${count}${away ? `, ${away}` : ''}`
         }
-        accessibilityActions={[{ name: 'map', label: 'Show on Map' }]}
+        accessibilityActions={onLocate ? [{ name: 'map', label: 'Show on Map' }] : undefined}
         onAccessibilityAction={(event) => {
-          if (event.nativeEvent.actionName === 'map') onLocate();
+          if (event.nativeEvent.actionName === 'map') onLocate?.();
         }}>
         <Text textStyle="headline" numberOfLines={1} className="text-foreground">
           {venue.name}

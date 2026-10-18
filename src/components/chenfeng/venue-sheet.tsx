@@ -5,6 +5,7 @@ import { ActivityIndicator, Pressable, View } from 'react-native';
 import { AnswerSummaryCard } from '@/components/answer-summary';
 import { ChenfengReportSheet } from '@/components/chenfeng/report-sheet';
 import { openDirections } from '@/components/directions-button';
+import { LinkedText } from '@/components/linked-text';
 import { StarRating } from '@/components/star-rating';
 import { TagPill } from '@/components/tag-pill';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,7 @@ import { lightImpact } from '@/lib/haptics';
 import { MASK_TEXT, moderationStatus, REPORT_TEXT, spokenMasked, STATUS_TEXT } from '@/lib/moderation-text';
 import type { AnswerSummaryRow } from '@/lib/questionnaire';
 import { postedLabel } from '@/lib/review-dates';
+import { isMapped } from '@/lib/use-nearby-venues';
 import { cn } from '@/lib/utils';
 import { useVenueDetails, type Note, type VenueReview } from '@/lib/venue-details';
 
@@ -59,12 +61,16 @@ export function ChenfengVenueSheet({ venue, onClose, onWriteReview }: VenueSheet
             <PlaceCard
               details={details}
               name={venue.name}
-              onDirections={() =>
-                openDirections({
-                  latitude: venue.lat,
-                  longitude: venue.lng,
-                  placeId: venue.google_place_id,
-                })
+              // An online organisation has nowhere to route to.
+              onDirections={
+                isMapped(venue)
+                  ? () =>
+                      openDirections({
+                        latitude: venue.lat,
+                        longitude: venue.lng,
+                        placeId: venue.google_place_id,
+                      })
+                  : undefined
               }
               onWriteReview={onWriteReview}
               onMoreDetails={() => setPushed(true)}
@@ -114,7 +120,8 @@ function PlaceCard({
 }: {
   details: Details;
   name: string;
-  onDirections: () => void;
+  /** Absent for a venue with no coordinates; the button goes with it. */
+  onDirections?: () => void;
   onWriteReview: () => void;
   onMoreDetails: () => void;
   onReport: (review: VenueReview) => void;
@@ -185,10 +192,12 @@ function PlaceCard({
       {/* Side by side while both labels fit; a long one ("Answer 2 New
           Questions") stacks them, full width, rather than cutting it short. */}
       <View className={cn('gap-3 px-4 pb-6 pt-4', stacked ? 'flex-col' : 'flex-row')}>
-        <Button size="lg" className={cn('px-4', !stacked && 'flex-1')} onPress={onDirections}>
-          <Icon as={Route} size={19} filled weight="semibold" className="text-primary-foreground" />
-          <Text>Directions</Text>
-        </Button>
+        {onDirections ? (
+          <Button size="lg" className={cn('px-4', !stacked && 'flex-1')} onPress={onDirections}>
+            <Icon as={Route} size={19} filled weight="semibold" className="text-primary-foreground" />
+            <Text>Directions</Text>
+          </Button>
+        ) : null}
         <Button
           size="lg"
           variant="secondary"
@@ -426,7 +435,14 @@ function DetailsPage({
           {notes.length > 0 ? (
             <Section header="What LavenderBook Checked" footer="Written by LavenderBook, not by visitors.">
               {notes.map((note) => (
-                <Row key={note.id} title={note.body} />
+                <Row
+                  key={note.id}
+                  title={
+                    <Text textStyle="body" className="text-foreground">
+                      <LinkedText text={note.body} linkClassName="text-primary" />
+                    </Text>
+                  }
+                />
               ))}
             </Section>
           ) : null}
