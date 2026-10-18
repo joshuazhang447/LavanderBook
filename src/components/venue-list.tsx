@@ -15,7 +15,7 @@ import { useIsWideViewport } from '@/components/tab-bar';
 import { snapToGrid } from '@/lib/location-privacy';
 import { publicSupabase } from '@/lib/supabase';
 import { distanceMeters, type Coords } from '@/lib/use-location';
-import type { NearbyVenue } from '@/lib/use-nearby-venues';
+import { isMapped, type NearbyVenue } from '@/lib/use-nearby-venues';
 import { venueTags } from '@/lib/venue-tags';
 
 /** Long enough that typing a word is one query, short enough to feel immediate. */
@@ -95,14 +95,17 @@ function VenueRow({ venue, distance, index, onSelect, onLocate }: VenueRowProps)
         </View>
       </Pressable>
 
-      <Pressable
-        onPress={() => onLocate(venue)}
-        accessibilityRole="button"
-        accessibilityLabel={`Show ${venue.name} on the map`}
-        className="mr-4 flex-row items-center gap-1 rounded-full border border-border px-3 py-1.5 active:bg-accent">
-        <Icon as={MapPin} className="size-3.5 text-muted-foreground" />
-        <Text className="text-xs font-medium text-foreground">Locate</Text>
-      </Pressable>
+      {/* An online organisation has no place on the map to locate. */}
+      {isMapped(venue) ? (
+        <Pressable
+          onPress={() => onLocate(venue)}
+          accessibilityRole="button"
+          accessibilityLabel={`Show ${venue.name} on the map`}
+          className="mr-4 flex-row items-center gap-1 rounded-full border border-border px-3 py-1.5 active:bg-accent">
+          <Icon as={MapPin} className="size-3.5 text-muted-foreground" />
+          <Text className="text-xs font-medium text-foreground">Locate</Text>
+        </Pressable>
+      ) : null}
     </Animated.View>
   );
 }
@@ -154,6 +157,9 @@ export function useVenueRows(venues: NearbyVenue[], origin: Coords | null, query
           p_query: trimmed,
           p_lat: near.latitude,
           p_lng: near.longitude,
+          // Venues without coordinates too. Apps up to 1.2.0 never ask for
+          // them, because their Locate and Directions cannot handle one.
+          p_include_online: true,
         })
         .then(({ data }) => {
           if (active) setResults((data as NearbyVenue[] | null) ?? []);

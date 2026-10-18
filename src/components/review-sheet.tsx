@@ -188,16 +188,21 @@ function BasicReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: Revi
         <View className="flex-row items-start gap-3 px-5 pb-2 pt-2">
           <View className="flex-1 gap-0.5">
             <Text className="text-xl font-semibold text-foreground">{poi.name}</Text>
-            <Text className="text-xs text-muted-foreground">
-              {poi.latitude.toFixed(4)}, {poi.longitude.toFixed(4)}
-            </Text>
+            {/* An online organisation has no coordinates to show or route to. */}
+            {poi.latitude !== null && poi.longitude !== null ? (
+              <Text className="text-xs text-muted-foreground">
+                {poi.latitude.toFixed(4)}, {poi.longitude.toFixed(4)}
+              </Text>
+            ) : null}
           </View>
-          <DirectionsButton
-            name={poi.name}
-            latitude={poi.latitude}
-            longitude={poi.longitude}
-            placeId={poi.placeId}
-          />
+          {poi.latitude !== null && poi.longitude !== null ? (
+            <DirectionsButton
+              name={poi.name}
+              latitude={poi.latitude}
+              longitude={poi.longitude}
+              placeId={poi.placeId}
+            />
+          ) : null}
           <Pressable
             onPress={onClose}
             accessibilityRole="button"

@@ -11,6 +11,7 @@ import Animated, {
 import { AnswerSummaryCard } from '@/components/answer-summary';
 import { ChenfengVenueSheet } from '@/components/chenfeng/venue-sheet';
 import { DirectionsButton } from '@/components/directions-button';
+import { LinkedText } from '@/components/linked-text';
 import { ReportReviewPage } from '@/components/report-review';
 import { StarRating } from '@/components/star-rating';
 import { TagPill } from '@/components/tag-pill';
@@ -24,7 +25,7 @@ import { MASK_TEXT, moderationStatus, REPORT_TEXT, spokenMasked, STATUS_TEXT } f
 import type { AnswerSummaryRow } from '@/lib/questionnaire';
 import { postedLabel } from '@/lib/review-dates';
 import { useSkin } from '@/lib/skin';
-import type { NearbyVenue } from '@/lib/use-nearby-venues';
+import { isMapped, type NearbyVenue } from '@/lib/use-nearby-venues';
 import { useVenueDetails, type Note, type VenueReview } from '@/lib/venue-details';
 
 function ReviewRow({ review, onReport }: { review: VenueReview; onReport: () => void }) {
@@ -167,7 +168,9 @@ function TagPage({ notes, summary, reviewCount, onBack }: TagPageProps) {
             {notes.map((note) => (
               <View key={note.id} className="flex-row gap-2">
                 <Text className="text-sm leading-5 text-muted-foreground">{'\u2022'}</Text>
-                <Text className="flex-1 text-sm leading-5 text-foreground">{note.body}</Text>
+                <Text className="flex-1 text-sm leading-5 text-foreground">
+                  <LinkedText text={note.body} />
+                </Text>
               </View>
             ))}
           </View>
@@ -329,12 +332,15 @@ function BasicVenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
               </Pressable>
             ) : null}
           </View>
-          <DirectionsButton
-            name={venue.name}
-            latitude={venue.lat}
-            longitude={venue.lng}
-            placeId={venue.google_place_id}
-          />
+          {/* An online organisation has nowhere to route to. */}
+          {isMapped(venue) ? (
+            <DirectionsButton
+              name={venue.name}
+              latitude={venue.lat}
+              longitude={venue.lng}
+              placeId={venue.google_place_id}
+            />
+          ) : null}
           <Pressable
             onPress={onClose}
             accessibilityRole="button"

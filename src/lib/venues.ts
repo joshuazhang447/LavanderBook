@@ -9,6 +9,10 @@ export type SelectedPoi = {
   /** Absent on Apple Maps, which has no Google place IDs. */
   placeId?: string;
   name: string;
-  latitude: number;
-  longitude: number;
+  /**
+   * Null for an online organisation reviewed from its sheet: it has no place
+   * on the map. Never null for anything tapped on the map itself.
+   */
+  latitude: number | null;
+  longitude: number | null;
 };

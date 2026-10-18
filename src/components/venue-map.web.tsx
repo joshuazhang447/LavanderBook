@@ -61,7 +61,10 @@ function zoomForRadius(latitude: number, radiusMeters: number): number {
 // ---------------------------------------------------------------------------
 
 const BOX_WIDTH = 168;
+/** Two lines: the name and its chip, then "Listed by LavenderBook". */
 const BOX_HEIGHT = 44;
+/** Three: the name and its chip, the rating, the latest quote. */
+const REVIEWED_BOX_HEIGHT = 58;
 const SNIPPET_CHARS = 40;
 /** Clearance above the point, so the box does not sit on Google's own label. */
 const LIFT = 35;
@@ -93,7 +96,6 @@ const boxStyle: React.CSSProperties = {
   position: 'relative',
   boxSizing: 'border-box',
   width: BOX_WIDTH,
-  height: BOX_HEIGHT,
   display: 'flex',
   flexDirection: 'column',
   justifyContent: 'center',
@@ -133,10 +135,8 @@ const snippetStyle: React.CSSProperties = {
 // its light-mode colours - same as the native marker.
 const chipStyle: React.CSSProperties = {
   ...lineStyle,
-  // Shrinks below its own words and ellipsises; the rating does not. Five stars
-  // plus "5.0" is the widest the left side ever gets, and when that and a long
-  // tag cannot both fit, a clipped rating ("*****  ...") is the worse loss: the
-  // number is the thing someone is reading. The full label is in the sheet.
+  // Shrinks below its own words and ellipsises, down to 84px, so a long tag
+  // cannot take the whole line from the name. The full label is in the sheet.
   flexShrink: 1,
   minWidth: 0,
   maxWidth: 84,
@@ -222,23 +222,20 @@ function VenueBox({ venue, onSelect, onDismiss }: VenueBoxProps) {
         onKeyDown={(event) => {
           if (event.key === 'Enter' || event.key === ' ') onSelect(venue);
         }}
-        style={{ ...boxStyle, opacity: shown ? 1 : 0, transition: `opacity ${ENTER_MS}ms ease-out` }}>
+        style={{
+          ...boxStyle,
+          height: unreviewed ? BOX_HEIGHT : REVIEWED_BOX_HEIGHT,
+          opacity: shown ? 1 : 0,
+          transition: `opacity ${ENTER_MS}ms ease-out`,
+        }}>
+        {/* The name always comes first: a box of stars alone could be any of
+            the places around it. It shrinks; the chip beside it does not get
+            pushed out, because the tag is often why the place is on the map.
+            One chip even when a place carries several; the sheet lists them. */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          {/* Unreviewed: the name, where the rating would be. A rating never
-              shrinks; a name does, because the chip beside it is the reason the
-              place is on the map at all and must not be pushed out. */}
-          {unreviewed ? (
-            <div style={{ ...starsStyle, color: '#0a0a0a', flexGrow: 1, flexShrink: 1, minWidth: 0 }}>
-              {venue.name}
-            </div>
-          ) : (
-            <div style={{ ...starsStyle, flexGrow: 1, flexShrink: 0 }}>
-              {starGlyphs(average)} <span style={{ color: '#0a0a0a' }}>{average.toFixed(1)}</span>
-            </div>
-          )}
-          {/* One chip, even when a place carries several: 168px of box cannot
-              hold a second without crowding out the rating it sits beside. The
-              sheet lists them all. */}
+          <div style={{ ...starsStyle, color: '#0a0a0a', flexGrow: 1, flexShrink: 1, minWidth: 0 }}>
+            {venue.name}
+          </div>
           {tag ? (
             <span
               style={{ ...chipStyle, background: tagColors.background, color: tagColors.foreground }}>
@@ -246,6 +243,11 @@ function VenueBox({ venue, onSelect, onDismiss }: VenueBoxProps) {
             </span>
           ) : null}
         </div>
+        {unreviewed ? null : (
+          <div style={starsStyle}>
+            {starGlyphs(average)} <span style={{ color: '#0a0a0a' }}>{average.toFixed(1)}</span>
+          </div>
+        )}
         <div style={snippetStyle}>{summarise(venue)}</div>
 
         <button

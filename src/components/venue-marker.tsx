@@ -8,7 +8,10 @@ import type { NearbyVenue } from '@/lib/use-nearby-venues';
 import { venueTags } from '@/lib/venue-tags';
 
 const BOX_WIDTH = 168;
+/** Two lines: the name and its chip, then "Listed by LavenderBook". */
 const BOX_HEIGHT = 44;
+/** Three: the name and its chip, the rating, the latest quote. */
+const REVIEWED_BOX_HEIGHT = 58;
 const SNIPPET_CHARS = 40;
 /** Clearance above the point, so the box does not sit on Google's own label. */
 const LIFT = 35;
@@ -21,20 +24,37 @@ const CLOSE_SIZE = 26;
  */
 const ENTER_MS = 160;
 
+/** A reviewed box is a line taller, so everything anchored to it moves with it. */
+function boxHeight(venue: NearbyVenue): number {
+  return venue.review_count > 0 ? REVIEWED_BOX_HEIGHT : BOX_HEIGHT;
+}
+
 // Android takes `anchor` as a fraction of the marker view; iOS takes
 // `centerOffset` in points from the view's centre. Both are derived from the
 // same LIFT so the platforms agree.
-const BOX_ANCHOR = { x: 0.5, y: 1 + LIFT / BOX_HEIGHT };
-const BOX_OFFSET = { x: 0, y: -(BOX_HEIGHT / 2 + LIFT) };
+function boxPlacement(height: number) {
+  return Platform.select({
+    android: { anchor: { x: 0.5, y: 1 + LIFT / height } },
+    ios: { centerOffset: { x: 0, y: -(height / 2 + LIFT) } },
+    default: {},
+  });
+}
 
 // The close button is a separate marker: a marker view is rasterised to a
 // bitmap on Android, so a nested Pressable inside the box would never receive
 // its own tap. Positioned on the box's top-right corner.
-const CLOSE_ANCHOR = {
-  x: (CLOSE_SIZE / 2 - BOX_WIDTH / 2) / CLOSE_SIZE,
-  y: (CLOSE_SIZE / 2 + BOX_HEIGHT + LIFT) / CLOSE_SIZE,
-};
-const CLOSE_OFFSET = { x: BOX_WIDTH / 2, y: -(BOX_HEIGHT + LIFT) };
+function closePlacement(height: number) {
+  return Platform.select({
+    android: {
+      anchor: {
+        x: (CLOSE_SIZE / 2 - BOX_WIDTH / 2) / CLOSE_SIZE,
+        y: (CLOSE_SIZE / 2 + height + LIFT) / CLOSE_SIZE,
+      },
+    },
+    ios: { centerOffset: { x: BOX_WIDTH / 2, y: -(height + LIFT) } },
+    default: {},
+  });
+}
 
 /**
  * Star glyphs rather than the Lucide icons used elsewhere in the app.
@@ -114,6 +134,7 @@ function VenueMarkerImpl({ venue, onPress }: VenueMarkerProps) {
   }, [venue.avg_stars, venue.review_count, venue.latest_review_body, venue.tags, venue.name]);
 
   const zIndex = Math.round(-venue.lat * 1000);
+  const reviewed = venue.review_count > 0;
   // The box is white on every theme, so the chip always takes its light colours.
   const tag = venueTags(venue)[0] ?? null;
   const tagColors = deriveTagColors(tag?.color ?? '#e5e5e5', tag?.textColor).light;
@@ -128,40 +149,22 @@ function VenueMarkerImpl({ venue, onPress }: VenueMarkerProps) {
       zIndex={zIndex}
       // anchor is Google-only and centerOffset Apple-only, and this map sets no
       // provider - so Android gets Google Maps and iOS gets Apple Maps.
-      {...Platform.select({
-        android: { anchor: BOX_ANCHOR },
-        ios: { centerOffset: BOX_OFFSET },
-        default: {},
-      })}>
+      {...boxPlacement(boxHeight(venue))}>
       {/*
         Fixed pixel size via style, not className: NativeWind resolves classes on
         a later pass that can land after Android has taken its snapshot.
       */}
-      <Animated.View entering={FadeIn.duration(ENTER_MS)} style={styles.box}>
-        {/*
-          No star row at all when nobody has reviewed it.
-
-          `avg_stars ?? 0` would draw an unreviewed venue as "0.0" with no stars,
-          and a rating of zero out of five is very close to the worst thing this
-          app can say about a place - especially one we listed ourselves because
-          it is a shelter. An absent rating has to look absent.
-        */}
+      <Animated.View
+        entering={FadeIn.duration(ENTER_MS)}
+        style={[styles.box, { height: boxHeight(venue) }]}>
+        {/* The name always comes first: a box of stars alone could be any of
+            the places around it. It may shrink - the chip beside it may not be
+            pushed out, because the tag is often why the place is here. One chip
+            even when a place carries several; the sheet lists them all. */}
         <View style={styles.line}>
-          {venue.review_count > 0 ? (
-            <Text style={styles.stars} numberOfLines={1}>
-              {starGlyphs(Number(venue.avg_stars ?? 0))}{' '}
-              <Text style={styles.average}>{Number(venue.avg_stars ?? 0).toFixed(1)}</Text>
-            </Text>
-          ) : (
-            // Unreviewed: the name, where the rating would be. Unlike a rating
-            // it may shrink - the chip beside it is why the place is here.
-            <Text style={styles.name} numberOfLines={1}>
-              {venue.name}
-            </Text>
-          )}
-          {/* One chip, even when a place carries several: 168px of box cannot
-              hold a second without crowding out the rating beside it. The sheet
-              lists them all. */}
+          <Text style={styles.name} numberOfLines={1}>
+            {venue.name}
+          </Text>
           {tag ? (
             <View style={[styles.chip, { backgroundColor: tagColors.background }]}>
               <Text style={[styles.chipLabel, { color: tagColors.foreground }]} numberOfLines={1}>
@@ -170,6 +173,20 @@ function VenueMarkerImpl({ venue, onPress }: VenueMarkerProps) {
             </View>
           ) : null}
         </View>
+        {/*
+          No star row at all when nobody has reviewed it.
+
+          `avg_stars ?? 0` would draw an unreviewed venue as "0.0" with no stars,
+          and a rating of zero out of five is very close to the worst thing this
+          app can say about a place - especially one we listed ourselves because
+          it is a shelter. An absent rating has to look absent.
+        */}
+        {reviewed ? (
+          <Text style={styles.stars} numberOfLines={1}>
+            {starGlyphs(Number(venue.avg_stars ?? 0))}{' '}
+            <Text style={styles.average}>{Number(venue.avg_stars ?? 0).toFixed(1)}</Text>
+          </Text>
+        ) : null}
         <Text style={styles.snippet} numberOfLines={1}>
           {summarise(venue)}
         </Text>
@@ -199,11 +216,7 @@ function VenueCloseMarkerImpl({ venue, onDismiss }: VenueCloseMarkerProps) {
       onPress={() => onDismiss(venue.id)}
       tracksViewChanges={tracksViewChanges}
       zIndex={Math.round(-venue.lat * 1000) + 1}
-      {...Platform.select({
-        android: { anchor: CLOSE_ANCHOR },
-        ios: { centerOffset: CLOSE_OFFSET },
-        default: {},
-      })}>
+      {...closePlacement(boxHeight(venue))}>
       <Animated.View entering={FadeIn.duration(ENTER_MS)} style={styles.close}>
         <Text style={styles.closeGlyph}>x</Text>
       </Animated.View>
@@ -227,7 +240,12 @@ export const VenueMarker = React.memo(
 
 export const VenueCloseMarker = React.memo(
   VenueCloseMarkerImpl,
-  (a, b) => a.venue.id === b.venue.id && a.onDismiss === b.onDismiss
+  (a, b) =>
+    a.venue.id === b.venue.id &&
+    a.onDismiss === b.onDismiss &&
+    // A first review makes the box a line taller, and the button has to follow
+    // its corner up.
+    boxHeight(a.venue) === boxHeight(b.venue)
 );
 
 // StyleSheet rather than NativeWind for the same snapshot-timing reason as above.
@@ -235,7 +253,6 @@ export const VenueCloseMarker = React.memo(
 const styles = StyleSheet.create({
   box: {
     width: BOX_WIDTH,
-    height: BOX_HEIGHT,
     justifyContent: 'center',
     paddingHorizontal: 10,
     borderRadius: 10,
@@ -256,10 +273,6 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   stars: {
-    // Never shrinks, so the rating cannot be ellipsised away; the chip below
-    // gives up its width instead. See the note in venue-map.web.tsx.
-    flexGrow: 1,
-    flexShrink: 0,
     fontSize: 13,
     lineHeight: 16,
     color: '#f59e0b',

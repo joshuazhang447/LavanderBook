@@ -1219,6 +1219,7 @@ export type Database = {
       }
       venues_search: {
         Args: {
+          p_include_online?: boolean
           p_lat: number
           p_limit?: number
           p_lng: number
