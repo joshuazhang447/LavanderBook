@@ -18,8 +18,36 @@ export const METERS_PER_DEGREE_LAT = 111320;
  */
 export const AREA_RADIUS_METERS = 1500;
 
+/**
+ * How much wider than a move's own view the map may be before the move zooms
+ * in to it - Locate, a search result, the locate button. Someone who zoomed
+ * out a step to see the next street keeps their zoom; someone looking at the
+ * whole country is brought down to the street. Never the other way: a move
+ * does not zoom out of a closer view.
+ */
+export const ZOOM_IN_SLACK = 1.5;
 
 export type Coords = { latitude: number; longitude: number };
+
+/**
+ * A region `radiusMeters` from `center` to its edges, square on the ground.
+ *
+ * A degree of longitude shrinks towards the poles, so equal deltas in degrees
+ * draw a box narrower than it is tall - at Ottawa about 0.7 of it - and a map
+ * fitting that box showed less ground across a phone than the website shows
+ * for the same radius. Widening the longitude by 1 / cos(latitude) makes the
+ * phone frame the same ground as zoomForRadius does on the website.
+ */
+export function regionAround(center: Coords, radiusMeters: number) {
+  const latitudeDelta = (radiusMeters * 2) / METERS_PER_DEGREE_LAT;
+  const cos = Math.max(Math.cos((center.latitude * Math.PI) / 180), 0.01);
+  return {
+    latitude: center.latitude,
+    longitude: center.longitude,
+    latitudeDelta,
+    longitudeDelta: latitudeDelta / cos,
+  };
+}
 
 /** Metres between two points, Haversine - the same formula venues_near uses. */
 export function distanceMeters(a: Coords, b: Coords): number {

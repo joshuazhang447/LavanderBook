@@ -29,7 +29,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Glass, GlassButton, SEE_THROUGH_GLASS } from '@/components/glass';
+import { Glass, GlassBackdrop, GlassButton, useSeeThroughGlass } from '@/components/glass';
 import { useLeaveNowReserve } from '@/components/leave-now';
 import { useElevatedSurface } from '@/components/skin-provider';
 import { useIsWideViewport } from '@/components/tab-bar';
@@ -73,7 +73,13 @@ type SheetApi = {
   expand: () => void;
   detent: Detent;
   scrollY: SharedValue<number>;
-  scrollGesture: NativeGesture;
+  /**
+   * Each SheetScrollView's own native gesture, so the sheet's drag runs beside
+   * it. Returns the unregister. One per scroll view, never one shared: a
+   * gesture may sit in one GestureDetector only, and two scroll views are
+   * mounted at once while a pushed page slides in or out over the place card.
+   */
+  registerScroll: (gesture: NativeGesture) => () => void;
   /** False at medium: dragging the content moves the sheet instead. */
   scrollEnabled: boolean;
 };
@@ -244,13 +250,17 @@ export function Sheet({
     return () => window.removeEventListener('keydown', onKey);
   }, [id, requestDismiss]);
 
-  const scrollGesture = React.useMemo(() => Gesture.Native(), []);
+  const [scrollGestures, setScrollGestures] = React.useState<NativeGesture[]>([]);
+  const registerScroll = React.useCallback((gesture: NativeGesture) => {
+    setScrollGestures((list) => [...list, gesture]);
+    return () => setScrollGestures((list) => list.filter((g) => g !== gesture));
+  }, []);
 
   const pan = Gesture.Pan()
     .enabled(!isWide)
     .activeOffsetY([-8, 8])
     .failOffsetX([-24, 24])
-    .simultaneousWithExternalGesture(scrollGesture)
+    .simultaneousWithExternalGesture(...scrollGestures)
     .onStart(() => {
       startTop.set(top.get());
       // At full height with its list scrolled down, the drag is the list's.
@@ -370,26 +380,30 @@ export function Sheet({
       expand,
       detent,
       scrollY,
-      scrollGesture,
+      registerScroll,
       scrollEnabled: detent === 'large' || !hasMedium || isWide,
     }),
-    [detent, dismiss, expand, hasMedium, isWide, requestDismiss, scrollGesture, scrollY]
+    [detent, dismiss, expand, hasMedium, isWide, registerScroll, requestDismiss, scrollY]
   );
 
   const wideWidth = Math.min(width - 64, 540);
   const wideHeight = Math.min(height - 96, hasLarge ? 720 : 440);
   const resizable = hasMedium && hasLarge && !isWide;
 
-  const body = (
+  // Glass at medium where it can show the map behind: the website, iOS 26,
+  // and Android 12 or later, which blurs the screens (see GlassBackdrop).
+  // Decided inside the portal, by SeeThrough: the backdrop a sheet blurs is
+  // the host's, and this component itself renders far from it.
+  const body = (seeThrough: boolean) => (
     <>
       {/* The material: glass at medium, opaque from large up - and opaque
           throughout where glass cannot blur the map behind it, whose labels
           would read through the sheet's own text. */}
-      {!isWide && !hasLarge && SEE_THROUGH_GLASS ? null : (
+      {!isWide && !hasLarge && seeThrough ? null : (
         <Animated.View
           pointerEvents="none"
           className={cn('absolute inset-0', grouped ? 'bg-grouped' : 'bg-background')}
-          style={hasMedium && !isWide && SEE_THROUGH_GLASS ? opaque : undefined}
+          style={hasMedium && !isWide && seeThrough ? opaque : undefined}
         />
       )}
       <View style={{ height: isWide ? wideHeight : innerHeight }}>
@@ -402,8 +416,12 @@ export function Sheet({
               <View className="h-1 w-[60px] rounded-full bg-label-tertiary" />
             </View>
           ) : null}
-          {toolbar}
-          <View className="flex-1">{children}</View>
+          {/* The sheet's own buttons float over the sheet, not over the map:
+              with nothing of the sheet's to sample, they are drawn. */}
+          <GlassBackdrop target={null}>
+            {toolbar}
+            <View className="flex-1">{children}</View>
+          </GlassBackdrop>
         </Animated.View>
       </View>
     </>
@@ -446,16 +464,27 @@ export function Sheet({
                 elevated.style,
                 frame,
               ]}>
-              {hasMedium && !isWide && SEE_THROUGH_GLASS ? (
-                <Glass radius={0} className="absolute inset-0" pointerEvents="none" />
-              ) : null}
-              {body}
+              <SeeThrough>
+                {(seeThrough) => (
+                  <>
+                    {hasMedium && !isWide && seeThrough ? (
+                      <Glass radius={0} className="absolute inset-0" pointerEvents="none" />
+                    ) : null}
+                    {body(seeThrough)}
+                  </>
+                )}
+              </SeeThrough>
             </Animated.View>
           </GestureDetector>
         </View>
       </SheetContext.Provider>
     </Portal>
   );
+}
+
+/** useSeeThroughGlass where this renders - inside the portal, under the host's backdrop. */
+function SeeThrough({ children }: { children: (seeThrough: boolean) => React.ReactNode }) {
+  return children(useSeeThroughGlass());
 }
 
 /**
@@ -469,15 +498,19 @@ export function SheetScrollView({
   ...props
 }: ScrollViewProps & { contentContainerClassName?: string; className?: string }) {
   const sheet = useSheet();
-  // Only the shared value goes into the worklet: `sheet` holds the scroll
-  // gesture, which cannot be copied to the UI thread on a phone.
-  const { scrollY } = sheet;
+  // Only the shared value goes into the worklet: `sheet` holds functions,
+  // which cannot be copied to the UI thread on a phone.
+  const { scrollY, registerScroll } = sheet;
   const onScroll = useAnimatedScrollHandler((event) => {
     scrollY.set(event.contentOffset.y);
   });
 
+  // This scroll view's own; see SheetApi.registerScroll.
+  const native = React.useMemo(() => Gesture.Native(), []);
+  React.useEffect(() => registerScroll(native), [registerScroll, native]);
+
   return (
-    <GestureDetector gesture={sheet.scrollGesture}>
+    <GestureDetector gesture={native}>
       <Animated.ScrollView
         {...props}
         onScroll={onScroll}
@@ -657,10 +690,21 @@ export function SheetPush({ base, pushed, onPopped, popToken = 0 }: SheetPushPro
   const { width } = useWindowDimensions();
   const { reduceMotion } = useDisplaySettings();
   const [page, setPage] = React.useState<React.ReactNode | null>(pushed);
+  // From a pop until the parent lets go of `pushed`. On a phone the parent's
+  // update can land a render after this one's - the pop ends in an animation
+  // callback, outside React's batching - and until it does, `pushed` is still
+  // the page just popped. Taking it back from that render left it mounted off
+  // screen with the base page's touches switched off: every button on the
+  // place card dead after one trip to More Details.
+  const [releasing, setReleasing] = React.useState(false);
   const offset = useSharedValue(pushed ? 0 : 1);
 
   // A page arrives, or the one showing re-renders.
-  if (pushed && pushed !== page) setPage(pushed);
+  if (releasing) {
+    if (!pushed) setReleasing(false);
+  } else if (pushed && pushed !== page) {
+    setPage(pushed);
+  }
 
   const hasPushed = !!pushed;
   React.useEffect(() => {
@@ -670,6 +714,7 @@ export function SheetPush({ base, pushed, onPopped, popToken = 0 }: SheetPushPro
   }, [hasPushed, offset, reduceMotion]);
 
   const popped = React.useCallback(() => {
+    setReleasing(true);
     setPage(null);
     onPopped();
   }, [onPopped]);

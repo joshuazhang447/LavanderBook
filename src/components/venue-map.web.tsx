@@ -14,7 +14,7 @@ import { lookupPlace } from '@/lib/place-search';
 import { useSkin } from '@/lib/skin';
 import { supabase } from '@/lib/supabase';
 import { deriveTagColors } from '@/lib/tag-colors';
-import { VIEW_RADIUS_METERS } from '@/lib/use-location';
+import { VIEW_RADIUS_METERS, ZOOM_IN_SLACK } from '@/lib/use-location';
 import type { Coords } from '@/lib/use-location';
 import type { MapRegion, NearbyVenue } from '@/lib/use-nearby-venues';
 import { venueTags } from '@/lib/venue-tags';
@@ -365,10 +365,127 @@ function SearchPin({ place, onSelect }: SearchPinProps) {
  */
 const PROGRAMMATIC_SETTLE_MS = 650;
 
+/** Smaller changes of span are latitude drift or rounding, not a zoom. */
+const SPAN_CHANGE = 0.1;
+
+/**
+ * A fly's curve and pace: how far out it pulls on a long trip, and roughly how
+ * many screens a second it covers - Mapbox's defaults, from van Wijk and Nuij,
+ * "Smooth and efficient zooming and panning" (2003). From the whole world down
+ * to a street would take seven seconds at that pace, so the time is clamped:
+ * long enough to see where you went, short enough not to wait for it.
+ */
+const FLY_CURVE = 1.42;
+const FLY_SPEED = 1.2;
+const FLY_MIN_MS = 500;
+const FLY_MAX_MS = 1500;
+
+/** Web Mercator, as a share of the world: x east from the antimeridian, y down from the top. */
+function project(latitude: number, longitude: number): { x: number; y: number } {
+  const sin = Math.min(Math.max(Math.sin((latitude * Math.PI) / 180), -0.9999), 0.9999);
+  return { x: (longitude + 180) / 360, y: 0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI) };
+}
+
+function unproject(x: number, y: number): google.maps.LatLngLiteral {
+  const wrapped = x - Math.floor(x);
+  return {
+    lat: (Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180) / Math.PI,
+    lng: wrapped * 360 - 180,
+  };
+}
+
+function easeInOut(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+}
+
+/**
+ * Flies the camera to `target` at `zoom`: out and back in along one curve on a
+ * long trip, straight down on a short one. Google's map animates a pan only
+ * within a screen and never animates a zoom set from code, so this steps the
+ * camera itself, a frame at a time. Returns a cancel.
+ */
+function flyTo(
+  map: google.maps.Map,
+  target: Coords,
+  zoom: number,
+  onDone: () => void
+): () => void {
+  const center = map.getCenter();
+  const fromZoom = map.getZoom();
+  const to = { lat: target.latitude, lng: target.longitude };
+  if (!center || fromZoom === undefined) {
+    map.moveCamera({ center: to, zoom });
+    onDone();
+    return () => {};
+  }
+
+  // All in world units: w is the visible width, u the distance travelled.
+  const box = map.getDiv();
+  const screen = Math.max(box.clientWidth, box.clientHeight, 1);
+  const p0 = project(center.lat(), center.lng());
+  const p1 = project(target.latitude, target.longitude);
+  // The short way round the antimeridian.
+  let dx = p1.x - p0.x;
+  if (dx > 0.5) dx -= 1;
+  else if (dx < -0.5) dx += 1;
+  const dy = p1.y - p0.y;
+  const u1 = Math.hypot(dx, dy);
+  const w0 = screen / (256 * 2 ** fromZoom);
+  const w1 = screen / (256 * 2 ** zoom);
+  const rho = FLY_CURVE;
+  const rho2 = rho * rho;
+
+  const r = (end: 0 | 1) => {
+    const b =
+      (w1 * w1 - w0 * w0 + (end ? -1 : 1) * rho2 * rho2 * u1 * u1) /
+      (2 * (end ? w1 : w0) * rho2 * u1);
+    return Math.log(Math.sqrt(b * b + 1) - b);
+  };
+
+  const r0 = u1 > 0 ? r(0) : 0;
+  let length = u1 > 0 ? (r(1) - r0) / rho : NaN;
+  let width: (s: number) => number;
+  let along: (s: number) => number;
+  if (Number.isFinite(length) && length > 0) {
+    width = (s) => (w0 * Math.cosh(r0)) / Math.cosh(rho * s + r0);
+    along = (s) => (w0 * (Math.cosh(r0) * Math.tanh(rho * s + r0) - Math.sinh(r0))) / rho2 / u1;
+  } else {
+    // Nowhere to go but down: the zoom alone.
+    length = Math.abs(Math.log(w1 / w0)) / rho;
+    const sign = w1 < w0 ? -1 : 1;
+    width = (s) => w0 * Math.exp(sign * rho * s);
+    along = () => 1;
+  }
+
+  const duration = Math.min(FLY_MAX_MS, Math.max(FLY_MIN_MS, (1000 * length) / FLY_SPEED));
+  const start = performance.now();
+  let frame = requestAnimationFrame(function step(now) {
+    const t = Math.min(1, (now - start) / duration);
+    if (t >= 1) {
+      map.moveCamera({ center: to, zoom });
+      onDone();
+      return;
+    }
+    const s = easeInOut(t) * length;
+    const f = along(s);
+    map.moveCamera({
+      center: unproject(p0.x + dx * f, p0.y + dy * f),
+      zoom: Math.log2(screen / (256 * width(s))),
+    });
+    frame = requestAnimationFrame(step);
+  });
+
+  return () => cancelAnimationFrame(frame);
+}
+
 type CameraProps = {
   followCenter: Coords | null;
   focusToken: number;
+  /** See VenueMapProps.focusRadiusMeters. */
+  focusRadiusMeters: number;
   programmaticRef: React.RefObject<boolean>;
+  /** True while a fly is stepping the camera, when its idles mean nothing yet. */
+  flyingRef: React.RefObject<boolean>;
 };
 
 /**
@@ -427,24 +544,86 @@ function SizeNudge() {
  * panTo on an uncontrolled map, never a controlled `center` prop: a controlled
  * centre that is not updated on every camera event locks the map, and panTo
  * preserves whatever zoom the user chose, which is exactly what the native side
- * gets from animateCamera with a partial camera.
+ * gets from animateCamera with a partial camera. An explicit move from further
+ * out than its own view flies there instead, zooming in on the way.
  */
-function Camera({ followCenter, focusToken, programmaticRef }: CameraProps) {
+function Camera({
+  followCenter,
+  focusToken,
+  focusRadiusMeters,
+  programmaticRef,
+  flyingRef,
+}: CameraProps) {
   const map = useMap();
+  // The token the last move was issued for. A new one is an explicit move -
+  // Locate, a search result, the locate button - and may zoom; a GPS fix under
+  // the same token is a follow step and never does.
+  const issuedTokenRef = React.useRef(focusToken);
+  const cancelFlightRef = React.useRef<(() => void) | null>(null);
+  const settleTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Taking hold of the map ends a fly where it is: the pan after it is theirs.
+  React.useEffect(() => {
+    if (!map) return;
+    const box = map.getDiv();
+    const takeOver = () => {
+      if (!cancelFlightRef.current) return;
+      cancelFlightRef.current();
+      cancelFlightRef.current = null;
+      flyingRef.current = false;
+      programmaticRef.current = false;
+    };
+    box.addEventListener('pointerdown', takeOver);
+    box.addEventListener('wheel', takeOver, { passive: true });
+    return () => {
+      box.removeEventListener('pointerdown', takeOver);
+      box.removeEventListener('wheel', takeOver);
+      cancelFlightRef.current?.();
+      cancelFlightRef.current = null;
+      if (settleTimer.current) clearTimeout(settleTimer.current);
+    };
+  }, [map, programmaticRef, flyingRef]);
 
   React.useEffect(() => {
     if (!map || !followCenter) return;
 
-    programmaticRef.current = true;
-    map.panTo({ lat: followCenter.latitude, lng: followCenter.longitude });
+    // Only marked issued here, past the guard: a locate press before the first
+    // fix arrives still zooms when that fix does.
+    const explicit = focusToken !== issuedTokenRef.current;
+    issuedTokenRef.current = focusToken;
+    // A fix arriving mid-fly would stop it half way down; the next one after
+    // it lands catches up.
+    if (!explicit && flyingRef.current) return;
 
-    const timer = setTimeout(() => {
-      programmaticRef.current = false;
-    }, PROGRAMMATIC_SETTLE_MS);
-    return () => clearTimeout(timer);
+    const settle = () => {
+      if (settleTimer.current) clearTimeout(settleTimer.current);
+      settleTimer.current = setTimeout(() => {
+        programmaticRef.current = false;
+      }, PROGRAMMATIC_SETTLE_MS);
+    };
+
+    programmaticRef.current = true;
+    const zoom = map.getZoom();
+    const wanted = zoomForRadius(followCenter.latitude, focusRadiusMeters);
+    if (explicit && zoom !== undefined && zoom < wanted - Math.log2(ZOOM_IN_SLACK)) {
+      cancelFlightRef.current?.();
+      flyingRef.current = true;
+      cancelFlightRef.current = flyTo(map, followCenter, wanted, () => {
+        cancelFlightRef.current = null;
+        flyingRef.current = false;
+        settle();
+      });
+      return;
+    }
+
+    cancelFlightRef.current?.();
+    cancelFlightRef.current = null;
+    flyingRef.current = false;
+    map.panTo({ lat: followCenter.latitude, lng: followCenter.longitude });
+    settle();
     // focusToken re-runs the move even when the target has not changed, so
     // pressing recentre while already centred still does something.
-  }, [map, followCenter, focusToken, programmaticRef]);
+  }, [map, followCenter, focusToken, focusRadiusMeters, programmaticRef, flyingRef]);
 
   return null;
 }
@@ -487,8 +666,12 @@ type VenueMapProps = {
   /** Where the camera should sit while following. Null pauses following. */
   followCenter: Coords | null;
   focusToken: number;
+  /** See the native VenueMap: the least ground an explicit move shows. */
+  focusRadiusMeters?: number;
   /** Fires only for a pan or zoom the user performed, never our own moves. */
   onUserPannedTo: (region: MapRegion) => void;
+  /** The visible span whenever it changes by more than a little, whatever changed it. */
+  onSpanChanged?: (region: MapRegion) => void;
   /**
    * Unused here: Google's credits on the website cannot be moved, so the tab
    * bar sits above them instead (tab-bar.tsx).
@@ -520,9 +703,14 @@ export function VenueMap({
   onSelectSearchResult,
   followCenter,
   focusToken,
+  focusRadiusMeters = VIEW_RADIUS_METERS,
   onUserPannedTo,
+  onSpanChanged,
 }: VenueMapProps) {
   const programmaticRef = React.useRef(false);
+  const flyingRef = React.useRef(false);
+  // The span last handed to onSpanChanged.
+  const reportedSpanRef = React.useRef<number | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
   const noticeTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -606,6 +794,10 @@ export function VenueMap({
           mapId={mapId}
           defaultCenter={{ lat: center.latitude, lng: center.longitude }}
           defaultZoom={zoomForRadius(center.latitude, initialRadiusMeters)}
+          // A raster map rounds every zoom to a whole level unless told not to:
+          // the opening 16.8 drew as 17, a sixth less ground than the phone
+          // shows for the same radius, and a fly stepped rather than glided.
+          isFractionalZoomEnabled
           gestureHandling="greedy"
           clickableIcons
           // Unlike native - where a POI tap goes to onPoiClick and never to
@@ -627,9 +819,21 @@ export function VenueMap({
           // be a query per frame. This is the analogue of native's
           // onRegionChangeComplete. Its own detail is empty, so read the map.
           onIdle={(event) => {
-            if (programmaticRef.current) return;
             const region = regionOf(event.map);
-            if (region) onUserPannedTo(region);
+            if (!region) return;
+            // Every cause but a fly still under way: what loads follows the
+            // zoom even when it was ours, or a locate press from the whole
+            // world would land on a street and load nothing.
+            const reported = reportedSpanRef.current;
+            if (
+              !flyingRef.current &&
+              (reported === null || Math.abs(region.latitudeDelta / reported - 1) > SPAN_CHANGE)
+            ) {
+              reportedSpanRef.current = region.latitudeDelta;
+              onSpanChanged?.(region);
+            }
+            if (programmaticRef.current) return;
+            onUserPannedTo(region);
           }}
           // Strip Google's default chrome - this is our UI, not theirs.
           mapTypeControl={false}
@@ -642,7 +846,9 @@ export function VenueMap({
           <Camera
             followCenter={followCenter}
             focusToken={focusToken}
+            focusRadiusMeters={focusRadiusMeters}
             programmaticRef={programmaticRef}
+            flyingRef={flyingRef}
           />
 
           {venues.map((venue) => (

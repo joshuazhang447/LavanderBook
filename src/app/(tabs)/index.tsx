@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import {
   ChenfengLocationChoiceScreen,
@@ -11,6 +11,7 @@ import {
   ChenfengSearch,
 } from '@/components/chenfeng/map-chrome';
 import { ChenfengVenueList } from '@/components/chenfeng/venue-list';
+import { BackdropView, GlassBackdrop, useBackdrop } from '@/components/glass';
 import { LocationChoiceDialog, LocationChoiceScreen } from '@/components/location-choice';
 import { useTabBarOverlap } from '@/components/tab-bar';
 import { VenueList } from '@/components/venue-list';
@@ -26,7 +27,7 @@ import { useMapLocation } from '@/lib/map-location';
 import { useSkin } from '@/lib/skin';
 import {
   AREA_RADIUS_METERS,
-  METERS_PER_DEGREE_LAT,
+  regionAround,
   useCurrentLocation,
   useFollowPosition,
   VIEW_RADIUS_METERS,
@@ -73,6 +74,12 @@ export default function MapScreen() {
   // arrived at from the reviews list - see `following` below.
   const [followPref, setFollowPref] = React.useState(true);
   const [region, setRegion] = React.useState<MapRegion | null>(null);
+  // The map's zoom since the last pan, whatever changed it: a pinch while
+  // following (not a pan, so `region` keeps the old span) or a locate press
+  // zooming in. Null: `region`'s own span is current.
+  const [span, setSpan] = React.useState<Pick<MapRegion, 'latitudeDelta' | 'longitudeDelta'> | null>(
+    null
+  );
   const [savedCount, setSavedCount] = React.useState(0);
   // Bumped to re-run the camera move even when the target has not changed.
   const [recenterToken, setRecenterToken] = React.useState(0);
@@ -92,6 +99,8 @@ export default function MapScreen() {
   // it lives here rather than in the list. The other skins' list has its own.
   const [listQuery, setListQuery] = React.useState('');
   const chenfeng = useSkin().skin === 'chenfeng';
+  // The map or the list, behind Chenfeng's floating controls.
+  const content = useBackdrop();
   // Non-zero only under a tab bar floating over the map.
   const tabBarOverlap = useTabBarOverlap();
 
@@ -173,6 +182,7 @@ export default function MapScreen() {
   if (appliedStartKey !== startKey) {
     setAppliedStartKey(startKey);
     setRegion(null);
+    setSpan(null);
     setFollowPref(true);
   }
 
@@ -180,28 +190,23 @@ export default function MapScreen() {
   // the region from the opening view or nothing loads until the user pans.
   const initialRegion = React.useMemo<MapRegion | null>(() => {
     if (!start) return null;
-    const delta = (start.radius * 2) / METERS_PER_DEGREE_LAT;
-    return {
-      latitude: start.latitude,
-      longitude: start.longitude,
-      latitudeDelta: delta,
-      longitudeDelta: delta,
-    };
+    return regionAround(start, start.radius);
   }, [start]);
 
   const pannedRegion = region ?? initialRegion;
 
   const fetchRegion = React.useMemo<MapRegion | null>(() => {
-    const centre = goTo ?? (following ? followAnchor : null);
-    if (!centre || !pannedRegion) return pannedRegion;
-    // Keep whatever zoom the user chose; only the centre moves.
+    if (!pannedRegion) return null;
+    const centre = goTo ?? (following ? followAnchor : null) ?? pannedRegion;
+    // Whatever zoom the map is at; only the centre moves.
+    const zoom = span ?? pannedRegion;
     return {
       latitude: centre.latitude,
       longitude: centre.longitude,
-      latitudeDelta: pannedRegion.latitudeDelta,
-      longitudeDelta: pannedRegion.longitudeDelta,
+      latitudeDelta: zoom.latitudeDelta,
+      longitudeDelta: zoom.longitudeDelta,
     };
-  }, [goTo, following, followAnchor, pannedRegion]);
+  }, [goTo, following, followAnchor, pannedRegion, span]);
 
   const { venues: allVenues } = useNearbyVenues(fetchRegion, String(savedCount));
   const venues = React.useMemo(
@@ -273,8 +278,12 @@ export default function MapScreen() {
   const pickPlace = (place: PlaceResult) => {
     setSearchResult(place);
     // The same path Locate uses from the account tab: it moves the
-    // camera and suspends following, both of which are wanted here.
-    focusMapOn({ latitude: place.latitude, longitude: place.longitude });
+    // camera and suspends following, both of which are wanted here. A
+    // city or a region is framed as one, not as a doorstep in its middle.
+    focusMapOn(
+      { latitude: place.latitude, longitude: place.longitude },
+      place.reviewable === false ? AREA_RADIUS_METERS : VIEW_RADIUS_METERS
+    );
   };
 
   const locateVenue = (venue: NearbyVenue) => {
@@ -288,6 +297,9 @@ export default function MapScreen() {
 
   return (
     <View className="flex-1 bg-background">
+      {/* What Chenfeng's floating controls blur on Android: the map, or the
+          list. No view at all on the website or iOS - see BackdropView. */}
+      <BackdropView backdropRef={content.ref} style={StyleSheet.absoluteFill}>
       {mode === 'map' ? (
         <VenueMap
           // Remounted when the map should open somewhere else; see startKey.
@@ -296,12 +308,18 @@ export default function MapScreen() {
           // opening on the user and animating across: an animate issued the
           // instant the map mounts can be dropped before it is ready.
           center={goTo ?? start}
-          initialRadiusMeters={goTo ? VIEW_RADIUS_METERS : start.radius}
+          initialRadiusMeters={focus ? focus.radius : start.radius}
           showsUser={onDevice}
           venues={venues}
           followCenter={goTo ?? (following ? followPosition : null)}
-          // Either a new Locate request or a recentre press re-issues the move.
+          // Either a new Locate request or a recentre press re-issues the move,
+          // zooming in to this much ground if the map is further out: the
+          // place's own, or the view the map opens on you with.
           focusToken={(focus?.token ?? 0) + recenterToken}
+          focusRadiusMeters={focus ? focus.radius : VIEW_RADIUS_METERS}
+          onSpanChanged={(next) =>
+            setSpan({ latitudeDelta: next.latitudeDelta, longitudeDelta: next.longitudeDelta })
+          }
           onSelectPoi={(poi) => {
             setSelectedVenueId(undefined);
             setSelected(poi);
@@ -325,6 +343,8 @@ export default function MapScreen() {
             // venues load however far the user pans.
             clearMapFocus();
             setRegion(next);
+            // The pan's own span is the newest.
+            setSpan(null);
           }}
           bottomInset={tabBarOverlap}
         />
@@ -357,9 +377,10 @@ export default function MapScreen() {
           onLocateVenue={locateVenue}
         />
       )}
+      </BackdropView>
 
       {chenfeng ? (
-        <>
+        <GlassBackdrop target={content.target}>
           <ChenfengMapControls
             mode={mode}
             onChangeMode={setMode}
@@ -382,7 +403,7 @@ export default function MapScreen() {
             listQuery={listQuery}
             onListQuery={setListQuery}
           />
-        </>
+        </GlassBackdrop>
       ) : (
         <>
           <MapControls

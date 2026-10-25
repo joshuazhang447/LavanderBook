@@ -1,3 +1,4 @@
+import { chenfengPlaceholder } from '@/components/ui/input';
 import { useSkin } from '@/lib/skin';
 import { useFieldText } from '@/lib/use-field-text';
 import { cn } from '@/lib/utils';
@@ -47,7 +48,8 @@ function Textarea({
           props.editable === false && 'text-label-tertiary',
           className
         )}
-        placeholderClassName={cn('text-label-tertiary', placeholderClassName)}
+        placeholderClassName={placeholderClassName}
+        placeholderTextColor={chenfengPlaceholder(colorScheme)}
         multiline={multiline}
         numberOfLines={numberOfLines}
         textAlignVertical="top"

@@ -1,11 +1,13 @@
 import { TabList, TabSlot, TabTrigger, Tabs } from 'expo-router/ui';
 import { Platform } from 'react-native';
 
+import { BackdropView, GlassBackdrop, useBackdrop } from '@/components/glass';
 import { LeaveNowHeaderSpace } from '@/components/leave-now';
 import { BottomTabBar, TopTabBar, useIsWideViewport } from '@/components/tab-bar';
 
 export default function TabsLayout() {
   const { isWide, isNarrow } = useIsWideViewport();
+  const screens = useBackdrop();
 
   return (
     <Tabs>
@@ -46,11 +48,17 @@ export default function TabsLayout() {
         and a ScrollView inside can never scroll - it is handed the full content
         height and has nothing left to scroll. Shrinking keeps it window-sized.
       */}
-      <TabSlot
-        detachInactiveScreens={Platform.OS === 'web'}
-        style={{ flexShrink: 1 }}
-      />
-      {isNarrow ? <BottomTabBar /> : null}
+      {/* What the tab bar's glass blurs on Android: the screen under it. No
+          view at all on the website or iOS - see BackdropView. */}
+      <BackdropView backdropRef={screens.ref} style={{ flex: 1 }}>
+        <TabSlot
+          detachInactiveScreens={Platform.OS === 'web'}
+          style={{ flexShrink: 1 }}
+        />
+      </BackdropView>
+      <GlassBackdrop target={screens.target}>
+        {isNarrow ? <BottomTabBar /> : null}
+      </GlassBackdrop>
     </Tabs>
   );
 }
