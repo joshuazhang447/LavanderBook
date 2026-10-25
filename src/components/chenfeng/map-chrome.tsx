@@ -1,7 +1,14 @@
 import { useFocusEffect } from 'expo-router';
 import { CircleX, MapPin, Navigation, NavigationOff, RotateCw, Search, X } from 'lucide-react-native';
 import * as React from 'react';
-import { ActivityIndicator, Platform, Pressable, ScrollView, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Platform,
+  Pressable,
+  ScrollView,
+  View,
+  type TextInput,
+} from 'react-native';
 import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
 import Animated, {
   cancelAnimation,
@@ -270,6 +277,7 @@ function SearchField({
   const insets = useSafeAreaInsets();
   const tabBarOverlap = useTabBarOverlap();
   const keyboard = useReanimatedKeyboardAnimation();
+  const fieldRef = React.useRef<TextInput>(null);
   // Where the tab bar's middle was: the field takes its place.
   const rest = tabBarOverlap > 0 ? tabBarOverlap - 62 + 9 : insets.bottom + 24;
 
@@ -286,6 +294,7 @@ function SearchField({
         <View className="h-full flex-row items-center pl-3 pr-1.5">
           <Icon as={Search} size={17} className="text-label-secondary" />
           <Input
+            ref={fieldRef}
             value={value}
             onChangeText={onChangeText}
             placeholder={placeholder}
@@ -301,7 +310,14 @@ function SearchField({
             <ActivityIndicator size="small" className="mr-1.5" />
           ) : value.length > 0 ? (
             <Pressable
-              onPress={onClear}
+              onPress={() => {
+                onClear();
+                // Ready for the next search, as on the phone. There the emptied
+                // field remounts and its autoFocus brings the keyboard back; on
+                // the website it stays mounted, and the click had taken focus.
+                // A frame later, so a phone focuses the remounted field.
+                requestAnimationFrame(() => fieldRef.current?.focus());
+              }}
               accessibilityRole="button"
               accessibilityLabel="Clear search"
               hitSlop={8}
