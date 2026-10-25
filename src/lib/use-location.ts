@@ -18,6 +18,14 @@ export const METERS_PER_DEGREE_LAT = 111320;
  */
 export const AREA_RADIUS_METERS = 1500;
 
+/**
+ * How much wider than a move's own view the map may be before the move zooms
+ * in to it - Locate, a search result, the locate button. Someone who zoomed
+ * out a step to see the next street keeps their zoom; someone looking at the
+ * whole country is brought down to the street. Never the other way: a move
+ * does not zoom out of a closer view.
+ */
+export const ZOOM_IN_SLACK = 1.5;
 
 export type Coords = { latitude: number; longitude: number };
 

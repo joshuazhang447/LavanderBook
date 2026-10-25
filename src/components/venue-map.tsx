@@ -6,18 +6,38 @@ import { SearchMarker } from '@/components/search-marker';
 import { VenueCloseMarker, VenueMarker } from '@/components/venue-marker';
 import type { PlaceResult } from '@/lib/place-search';
 import type { Coords } from '@/lib/use-location';
-import { distanceMeters, VIEW_RADIUS_METERS } from '@/lib/use-location';
+import {
+  distanceMeters,
+  METERS_PER_DEGREE_LAT,
+  VIEW_RADIUS_METERS,
+  ZOOM_IN_SLACK,
+} from '@/lib/use-location';
 import type { MapRegion, NearbyVenue } from '@/lib/use-nearby-venues';
 import type { SelectedPoi } from '@/lib/venues';
 
 /** Long enough to read as movement, short enough that follow steps do not queue. */
 const FOLLOW_ANIMATION_MS = 400;
 /**
+ * A move that zooms as well - in from the whole country, say - travels much
+ * further than a follow step, and at follow speed it reads as a cut.
+ */
+const ZOOM_ANIMATION_MS = 1000;
+/**
  * Apple Maps fires onRegionChangeComplete several times per move, so the
  * programmatic flag clears on a trailing timer rather than the first callback -
  * clearing early would let our own animation look like a user pan.
  */
-const PROGRAMMATIC_SETTLE_MS = FOLLOW_ANIMATION_MS + 250;
+const SETTLE_MS = 250;
+/** Smaller changes of span are latitude drift or rounding, not a zoom. */
+const SPAN_CHANGE = 0.1;
+
+/** The shorter side of what is on screen, in metres. */
+function shortestSideMeters(region: MapRegion): number {
+  return Math.min(
+    region.latitudeDelta * METERS_PER_DEGREE_LAT,
+    region.longitudeDelta * METERS_PER_DEGREE_LAT * Math.cos((region.latitude * Math.PI) / 180)
+  );
+}
 
 type VenueMapProps = {
   center: Coords;
@@ -42,11 +62,24 @@ type VenueMapProps = {
   followCenter: Coords | null;
   /**
    * Bumped to re-run the camera move even when followCenter is unchanged.
-   * Without it, pressing recentre while already centred does nothing.
+   * Without it, pressing recentre while already centred does nothing. A move
+   * issued for a new token is an explicit one - Locate, a search result, the
+   * locate button - and may zoom in; a GPS fix under the same token never does.
    */
   focusToken: number;
+  /**
+   * How much ground an explicit move shows at least, in metres: further out
+   * than this (and ZOOM_IN_SLACK), it zooms in to it. It never zooms out.
+   */
+  focusRadiusMeters?: number;
   /** Fires only for a pan or zoom the user performed, never our own camera moves. */
   onUserPannedTo: (region: MapRegion) => void;
+  /**
+   * The visible span, whenever it changes by more than a little, whatever
+   * changed it - a pinch, or a move zooming in. Neither need be a pan: a pinch
+   * centred on the user while following never reaches onUserPannedTo.
+   */
+  onSpanChanged?: (region: MapRegion) => void;
   /**
    * How much of the map's bottom edge something floats over - Chenfeng's tab
    * bar. The map's own legal label and logo move up out from under it, as
@@ -75,7 +108,9 @@ export function VenueMap({
   onSelectSearchResult,
   followCenter,
   focusToken,
+  focusRadiusMeters = VIEW_RADIUS_METERS,
   onUserPannedTo,
+  onSpanChanged,
   bottomInset = 0,
 }: VenueMapProps) {
   const mapRef = React.useRef<MapView>(null);
@@ -92,23 +127,59 @@ export function VenueMap({
     longitudeDelta: initialDelta,
   });
 
+  // The span last handed to onSpanChanged.
+  const reportedSpanRef = React.useRef({
+    latitudeDelta: initialDelta,
+    longitudeDelta: initialDelta,
+  });
+  // The token the last move was issued for; see focusToken.
+  const issuedTokenRef = React.useRef(focusToken);
+  // Until when a zooming move is still in flight. Follow steps wait it out: a
+  // new camera move cancels the one in flight, and would strand the zoom half
+  // way down.
+  const zoomingUntilRef = React.useRef(0);
+
   React.useEffect(() => {
     // Waiting on onMapReady rather than firing at mount: a camera move issued
     // before the native view exists goes nowhere, with no error.
     if (!followCenter || !ready) return;
+
+    // Only marked issued here, past the guard: a locate press before the first
+    // fix arrives still zooms when that fix does.
+    const explicit = focusToken !== issuedTokenRef.current;
+    issuedTokenRef.current = focusToken;
+    if (!explicit && Date.now() < zoomingUntilRef.current) return;
+
+    const zoomIn =
+      explicit &&
+      shortestSideMeters({ ...followCenter, ...deltasRef.current }) >
+        focusRadiusMeters * 2 * ZOOM_IN_SLACK;
+    const duration = zoomIn ? ZOOM_ANIMATION_MS : FOLLOW_ANIMATION_MS;
 
     followedRef.current = followCenter;
     programmaticRef.current = true;
     if (programmaticTimer.current) clearTimeout(programmaticTimer.current);
     programmaticTimer.current = setTimeout(() => {
       programmaticRef.current = false;
-    }, PROGRAMMATIC_SETTLE_MS);
+    }, duration + SETTLE_MS);
+
+    if (zoomIn) {
+      zoomingUntilRef.current = Date.now() + duration;
+      // A region, not a camera: the same framing the map opens on, and Apple
+      // Maps ignores a camera's zoom.
+      const delta = (focusRadiusMeters * 2) / METERS_PER_DEGREE_LAT;
+      mapRef.current?.animateToRegion(
+        { ...followCenter, latitudeDelta: delta, longitudeDelta: delta },
+        duration
+      );
+      return;
+    }
 
     // animateCamera, not animateToRegion: a Partial<Camera> of just the centre
     // preserves the user's zoom, where animateToRegion forces a span and on
     // Android fits to bounds, so the zoom drifts on every step.
-    mapRef.current?.animateCamera({ center: followCenter }, { duration: FOLLOW_ANIMATION_MS });
-  }, [followCenter, focusToken, ready]);
+    mapRef.current?.animateCamera({ center: followCenter }, { duration });
+  }, [followCenter, focusToken, focusRadiusMeters, ready]);
 
   React.useEffect(
     () => () => {
@@ -138,6 +209,16 @@ export function VenueMap({
           latitudeDelta: region.latitudeDelta,
           longitudeDelta: region.longitudeDelta,
         };
+
+        // Every cause, ahead of the guards below: what loads has to follow the
+        // zoom even when it was ours, or a locate press from the whole country
+        // would land on a street and load nothing.
+        if (
+          Math.abs(region.latitudeDelta / reportedSpanRef.current.latitudeDelta - 1) > SPAN_CHANGE
+        ) {
+          reportedSpanRef.current = deltasRef.current;
+          onSpanChanged?.(region);
+        }
 
         // 1. Exact, but Google-only: Apple sends no isGesture at all.
         if (details?.isGesture === false) return;
