@@ -26,7 +26,7 @@ import { useMapLocation } from '@/lib/map-location';
 import { useSkin } from '@/lib/skin';
 import {
   AREA_RADIUS_METERS,
-  METERS_PER_DEGREE_LAT,
+  regionAround,
   useCurrentLocation,
   useFollowPosition,
   VIEW_RADIUS_METERS,
@@ -187,13 +187,7 @@ export default function MapScreen() {
   // the region from the opening view or nothing loads until the user pans.
   const initialRegion = React.useMemo<MapRegion | null>(() => {
     if (!start) return null;
-    const delta = (start.radius * 2) / METERS_PER_DEGREE_LAT;
-    return {
-      latitude: start.latitude,
-      longitude: start.longitude,
-      latitudeDelta: delta,
-      longitudeDelta: delta,
-    };
+    return regionAround(start, start.radius);
   }, [start]);
 
   const pannedRegion = region ?? initialRegion;

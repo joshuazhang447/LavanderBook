@@ -29,6 +29,26 @@ export const ZOOM_IN_SLACK = 1.5;
 
 export type Coords = { latitude: number; longitude: number };
 
+/**
+ * A region `radiusMeters` from `center` to its edges, square on the ground.
+ *
+ * A degree of longitude shrinks towards the poles, so equal deltas in degrees
+ * draw a box narrower than it is tall - at Ottawa about 0.7 of it - and a map
+ * fitting that box showed less ground across a phone than the website shows
+ * for the same radius. Widening the longitude by 1 / cos(latitude) makes the
+ * phone frame the same ground as zoomForRadius does on the website.
+ */
+export function regionAround(center: Coords, radiusMeters: number) {
+  const latitudeDelta = (radiusMeters * 2) / METERS_PER_DEGREE_LAT;
+  const cos = Math.max(Math.cos((center.latitude * Math.PI) / 180), 0.01);
+  return {
+    latitude: center.latitude,
+    longitude: center.longitude,
+    latitudeDelta,
+    longitudeDelta: latitudeDelta / cos,
+  };
+}
+
 /** Metres between two points, Haversine - the same formula venues_near uses. */
 export function distanceMeters(a: Coords, b: Coords): number {
   const toRad = (deg: number) => (deg * Math.PI) / 180;

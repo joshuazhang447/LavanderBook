@@ -794,6 +794,10 @@ export function VenueMap({
           mapId={mapId}
           defaultCenter={{ lat: center.latitude, lng: center.longitude }}
           defaultZoom={zoomForRadius(center.latitude, initialRadiusMeters)}
+          // A raster map rounds every zoom to a whole level unless told not to:
+          // the opening 16.8 drew as 17, a sixth less ground than the phone
+          // shows for the same radius, and a fly stepped rather than glided.
+          isFractionalZoomEnabled
           gestureHandling="greedy"
           clickableIcons
           // Unlike native - where a POI tap goes to onPoiClick and never to

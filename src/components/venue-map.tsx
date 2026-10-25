@@ -9,6 +9,7 @@ import type { Coords } from '@/lib/use-location';
 import {
   distanceMeters,
   METERS_PER_DEGREE_LAT,
+  regionAround,
   VIEW_RADIUS_METERS,
   ZOOM_IN_SLACK,
 } from '@/lib/use-location';
@@ -121,16 +122,16 @@ export function VenueMap({
   const followedRef = React.useRef<Coords | null>(null);
   // Kept current even for programmatic moves, so a follow-driven refetch can
   // reuse whatever zoom the user chose.
-  const initialDelta = (initialRadiusMeters * 2) / 111320;
+  const initialRegion = regionAround(center, initialRadiusMeters);
   const deltasRef = React.useRef({
-    latitudeDelta: initialDelta,
-    longitudeDelta: initialDelta,
+    latitudeDelta: initialRegion.latitudeDelta,
+    longitudeDelta: initialRegion.longitudeDelta,
   });
 
   // The span last handed to onSpanChanged.
   const reportedSpanRef = React.useRef({
-    latitudeDelta: initialDelta,
-    longitudeDelta: initialDelta,
+    latitudeDelta: initialRegion.latitudeDelta,
+    longitudeDelta: initialRegion.longitudeDelta,
   });
   // The token the last move was issued for; see focusToken.
   const issuedTokenRef = React.useRef(focusToken);
@@ -167,11 +168,7 @@ export function VenueMap({
       zoomingUntilRef.current = Date.now() + duration;
       // A region, not a camera: the same framing the map opens on, and Apple
       // Maps ignores a camera's zoom.
-      const delta = (focusRadiusMeters * 2) / METERS_PER_DEGREE_LAT;
-      mapRef.current?.animateToRegion(
-        { ...followCenter, latitudeDelta: delta, longitudeDelta: delta },
-        duration
-      );
+      mapRef.current?.animateToRegion(regionAround(followCenter, focusRadiusMeters), duration);
       return;
     }
 
@@ -192,12 +189,7 @@ export function VenueMap({
     <MapView
       ref={mapRef}
       style={StyleSheet.absoluteFill}
-      initialRegion={{
-        latitude: center.latitude,
-        longitude: center.longitude,
-        latitudeDelta: initialDelta,
-        longitudeDelta: initialDelta,
-      }}
+      initialRegion={initialRegion}
       // Complete, not onRegionChange: the latter fires continuously through the
       // whole gesture and would fire a query per frame.
       //
