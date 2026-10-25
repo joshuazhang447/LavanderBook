@@ -657,10 +657,21 @@ export function SheetPush({ base, pushed, onPopped, popToken = 0 }: SheetPushPro
   const { width } = useWindowDimensions();
   const { reduceMotion } = useDisplaySettings();
   const [page, setPage] = React.useState<React.ReactNode | null>(pushed);
+  // From a pop until the parent lets go of `pushed`. On a phone the parent's
+  // update can land a render after this one's - the pop ends in an animation
+  // callback, outside React's batching - and until it does, `pushed` is still
+  // the page just popped. Taking it back from that render left it mounted off
+  // screen with the base page's touches switched off: every button on the
+  // place card dead after one trip to More Details.
+  const [releasing, setReleasing] = React.useState(false);
   const offset = useSharedValue(pushed ? 0 : 1);
 
   // A page arrives, or the one showing re-renders.
-  if (pushed && pushed !== page) setPage(pushed);
+  if (releasing) {
+    if (!pushed) setReleasing(false);
+  } else if (pushed && pushed !== page) {
+    setPage(pushed);
+  }
 
   const hasPushed = !!pushed;
   React.useEffect(() => {
@@ -670,6 +681,7 @@ export function SheetPush({ base, pushed, onPopped, popToken = 0 }: SheetPushPro
   }, [hasPushed, offset, reduceMotion]);
 
   const popped = React.useCallback(() => {
+    setReleasing(true);
     setPage(null);
     onPopped();
   }, [onPopped]);
