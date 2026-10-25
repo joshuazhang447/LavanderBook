@@ -73,7 +73,13 @@ type SheetApi = {
   expand: () => void;
   detent: Detent;
   scrollY: SharedValue<number>;
-  scrollGesture: NativeGesture;
+  /**
+   * Each SheetScrollView's own native gesture, so the sheet's drag runs beside
+   * it. Returns the unregister. One per scroll view, never one shared: a
+   * gesture may sit in one GestureDetector only, and two scroll views are
+   * mounted at once while a pushed page slides in or out over the place card.
+   */
+  registerScroll: (gesture: NativeGesture) => () => void;
   /** False at medium: dragging the content moves the sheet instead. */
   scrollEnabled: boolean;
 };
@@ -244,13 +250,17 @@ export function Sheet({
     return () => window.removeEventListener('keydown', onKey);
   }, [id, requestDismiss]);
 
-  const scrollGesture = React.useMemo(() => Gesture.Native(), []);
+  const [scrollGestures, setScrollGestures] = React.useState<NativeGesture[]>([]);
+  const registerScroll = React.useCallback((gesture: NativeGesture) => {
+    setScrollGestures((list) => [...list, gesture]);
+    return () => setScrollGestures((list) => list.filter((g) => g !== gesture));
+  }, []);
 
   const pan = Gesture.Pan()
     .enabled(!isWide)
     .activeOffsetY([-8, 8])
     .failOffsetX([-24, 24])
-    .simultaneousWithExternalGesture(scrollGesture)
+    .simultaneousWithExternalGesture(...scrollGestures)
     .onStart(() => {
       startTop.set(top.get());
       // At full height with its list scrolled down, the drag is the list's.
@@ -370,10 +380,10 @@ export function Sheet({
       expand,
       detent,
       scrollY,
-      scrollGesture,
+      registerScroll,
       scrollEnabled: detent === 'large' || !hasMedium || isWide,
     }),
-    [detent, dismiss, expand, hasMedium, isWide, requestDismiss, scrollGesture, scrollY]
+    [detent, dismiss, expand, hasMedium, isWide, registerScroll, requestDismiss, scrollY]
   );
 
   const wideWidth = Math.min(width - 64, 540);
@@ -469,15 +479,19 @@ export function SheetScrollView({
   ...props
 }: ScrollViewProps & { contentContainerClassName?: string; className?: string }) {
   const sheet = useSheet();
-  // Only the shared value goes into the worklet: `sheet` holds the scroll
-  // gesture, which cannot be copied to the UI thread on a phone.
-  const { scrollY } = sheet;
+  // Only the shared value goes into the worklet: `sheet` holds functions,
+  // which cannot be copied to the UI thread on a phone.
+  const { scrollY, registerScroll } = sheet;
   const onScroll = useAnimatedScrollHandler((event) => {
     scrollY.set(event.contentOffset.y);
   });
 
+  // This scroll view's own; see SheetApi.registerScroll.
+  const native = React.useMemo(() => Gesture.Native(), []);
+  React.useEffect(() => registerScroll(native), [registerScroll, native]);
+
   return (
-    <GestureDetector gesture={sheet.scrollGesture}>
+    <GestureDetector gesture={native}>
       <Animated.ScrollView
         {...props}
         onScroll={onScroll}
