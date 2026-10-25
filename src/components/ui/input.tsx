@@ -1,4 +1,5 @@
 import { useSkin } from '@/lib/skin';
+import { skinColor } from '@/lib/theme';
 import { useFieldText } from '@/lib/use-field-text';
 import { cn } from '@/lib/utils';
 import { useColorScheme } from 'nativewind';
@@ -19,6 +20,18 @@ const CHENFENG_INPUT = {
   field: 'h-11 rounded-full bg-fill-tertiary px-4',
   row: 'min-h-[52px] bg-transparent px-4 py-[15px]',
 } as const;
+
+/**
+ * Chenfeng's placeholder, as a colour rather than a class, on every platform.
+ *
+ * label-tertiary is translucent, its alpha in a variable of its own. As a
+ * class it reached Android as one colour with the alpha dropped - solid dark
+ * grey - and the website's text area not at all, which drew the stylesheet's
+ * default blue-grey. A colour worked out here is the same everywhere.
+ */
+export function chenfengPlaceholder(scheme: string | undefined): string {
+  return skinColor('chenfeng', scheme === 'dark' ? 'dark' : 'light', 'label-tertiary');
+}
 
 function Input({
   className,
@@ -46,11 +59,11 @@ function Input({
           CHENFENG_INPUT[look],
           props.editable === false && 'text-label-tertiary',
           Platform.select({
-            web: 'outline-none placeholder:text-label-tertiary selection:bg-primary/30',
-            native: 'placeholder:text-label-tertiary',
+            web: 'outline-none selection:bg-primary/30',
           }),
           className
         )}
+        placeholderTextColor={chenfengPlaceholder(colorScheme)}
         {...props}
         {...field.props}
       />
