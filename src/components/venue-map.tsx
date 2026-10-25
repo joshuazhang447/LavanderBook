@@ -166,8 +166,14 @@ export function VenueMap({
       showsMyLocationButton={false}
       showsCompass={false}
       toolbarEnabled={false}
-      // Google routes POI taps to onPoiClick only, so this fires just for bare map.
-      onPress={onDismiss}
+      // Google routes POI taps to onPoiClick only, so this fires for bare map -
+      // and for every marker. A marker's press is a bubbling event, so it
+      // reaches the map's own onPress too, as 'marker-press'. Dismissing on it
+      // closed the review form the search pin had just opened, in the same tick.
+      onPress={(event) => {
+        if (event.nativeEvent.action === 'marker-press') return;
+        onDismiss();
+      }}
       onPoiClick={(event) => {
         const { placeId, name, coordinate } = event.nativeEvent;
         onSelectPoi({
