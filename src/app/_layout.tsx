@@ -11,6 +11,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
+import { BackdropView, GlassBackdrop, useBackdrop } from '@/components/glass';
 import { BehindSafetyNotice, SafetyLayer } from '@/components/safety-notice';
 import { SkinProvider, Unskinned } from '@/components/skin-provider';
 import { ConfirmHost } from '@/components/ui/confirm';
@@ -24,6 +25,7 @@ export default function RootLayout() {
   const colorScheme = useColorScheme() === 'dark' ? 'dark' : 'light';
   // Basic on the admin panel whatever is chosen.
   const skin = useAppSkin();
+  const screens = useBackdrop();
 
   return (
     // Gestures - Chenfeng's sheets, switches and swipe actions - need this
@@ -38,11 +40,17 @@ export default function RootLayout() {
             <BehindSafetyNotice>
               {/* Around the portal host too, so sheets and dialogs are skinned. */}
               <SkinProvider skin={skin}>
-                <Stack screenOptions={{ headerShown: false }} />
-                {/* Chenfeng's drawn alerts and action sheets; renders through
-                    the host below, and nothing in any other skin. */}
-                <ConfirmHost />
-                <PortalHost />
+                {/* What a sheet's glass blurs on Android: the screens. Nothing
+                    on the website or iOS, where it adds no view. */}
+                <BackdropView backdropRef={screens.ref} style={{ flex: 1 }}>
+                  <Stack screenOptions={{ headerShown: false }} />
+                </BackdropView>
+                <GlassBackdrop target={screens.target}>
+                  {/* Chenfeng's drawn alerts and action sheets; renders through
+                      the host below, and nothing in any other skin. */}
+                  <ConfirmHost />
+                  <PortalHost />
+                </GlassBackdrop>
               </SkinProvider>
             </BehindSafetyNotice>
             {/* After the portal host, so no sheet or dialog covers "Leave now" or

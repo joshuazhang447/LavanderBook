@@ -1,19 +1,23 @@
+import { requireOptionalNativeModule } from 'expo';
+import type * as ExpoBlur from 'expo-blur';
 import {
   GlassContainer,
   GlassView,
   isGlassEffectAPIAvailable,
   isLiquidGlassAvailable,
 } from 'expo-glass-effect';
-import { cssInterop } from 'nativewind';
+import { cssInterop, useColorScheme } from 'nativewind';
 import * as React from 'react';
 import {
   Platform,
   Pressable,
+  StyleSheet,
   View,
   type GestureResponderEvent,
   type LayoutChangeEvent,
   type PressableProps,
   type StyleProp,
+  type ViewProps,
   type ViewStyle,
 } from 'react-native';
 import Animated, {
@@ -25,6 +29,7 @@ import Animated, {
 
 import { useDisplaySettings } from '@/lib/accessibility';
 import { spring } from '@/lib/motion';
+import { useSkin } from '@/lib/skin';
 import { cn } from '@/lib/utils';
 
 /**
@@ -51,11 +56,91 @@ function hasLiquidGlass(): boolean {
 export const LIQUID_GLASS = hasLiquidGlass();
 
 /**
+ * expo-blur, on Android 12 or later, in a build that has it. From Android 12 a
+ * blur can sample a TextureView - which is what Google Maps draws into in this
+ * build - so glass over the map can be frosted as it is on the website. Older
+ * Android keeps the nearly opaque body. Loaded only once the module is known
+ * to be there: its views are looked up on import, and a build made before it
+ * was added has none (AGENTS.md, Skins rule 5).
+ */
+const NATIVE_BLUR: typeof ExpoBlur | null = (() => {
+  if (Platform.OS !== 'android' || (Platform.Version as number) < 31) return null;
+  try {
+    if (!requireOptionalNativeModule('ExpoBlur')) return null;
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require('expo-blur') as typeof ExpoBlur;
+  } catch {
+    return null;
+  }
+})();
+
+/**
  * Glass that shows what is behind it blurred: the real thing, or the website's
  * backdrop blur. Elsewhere it is drawn nearly opaque, and anything that relies
  * on seeing through it - a clear track, a sheet's body - needs a backing.
+ * Android's blur needs a backdrop to sample, so there see useSeeThroughGlass.
  */
 export const SEE_THROUGH_GLASS = Platform.OS === 'web' || LIQUID_GLASS;
+
+/**
+ * On Android, a blur samples one view it is pointed at - a backdrop - and
+ * never itself or anything above it. Each layer of glass gets the backdrop of
+ * the content it floats over from the nearest GlassBackdrop: the map for the
+ * map's controls, the screens for the tab bar, the whole app for a sheet. Null
+ * means there is nothing to sample - a popover, a sheet's own toolbar - and
+ * the glass is drawn as it is without a blur.
+ */
+type Backdrop = React.RefObject<View | null>;
+const BackdropContext = React.createContext<Backdrop | null>(null);
+
+/** A backdrop: `ref` goes on its BackdropView, `target` to a GlassBackdrop. */
+export function useBackdrop() {
+  const [target, setTarget] = React.useState<Backdrop | null>(null);
+  const ref = React.useCallback((node: View | null) => {
+    // A new object for every node: expo-blur only looks again when the ref
+    // object itself changes, not when the view inside it does.
+    setTarget(node ? { current: node } : null);
+  }, []);
+  return { ref, target };
+}
+
+/**
+ * Content glass floats over, which glass outside it can blur. A BlurTargetView
+ * in Chenfeng where Android can blur, and nothing at all otherwise - not even
+ * a view, so Basic and Material, the website and iOS run exactly as before.
+ * Changing skin to or from Chenfeng therefore remounts what it wraps, the
+ * screens included, once.
+ */
+export function BackdropView({
+  backdropRef,
+  children,
+  ...props
+}: ViewProps & { backdropRef: (node: View | null) => void }) {
+  const chenfeng = useSkin().skin === 'chenfeng';
+  if (!NATIVE_BLUR || !chenfeng) return <>{children}</>;
+  const { BlurTargetView } = NATIVE_BLUR;
+  return (
+    // Typed as taking a ref object; it hands any ref to its native view, and
+    // a callback is what tells useBackdrop when that view changes.
+    <BlurTargetView ref={backdropRef as unknown as React.RefObject<View | null>} {...props}>
+      {children}
+    </BlurTargetView>
+  );
+}
+
+/** The backdrop glass inside blurs; null for none. */
+export function GlassBackdrop({
+  target,
+  children,
+}: React.PropsWithChildren<{ target: Backdrop | null }>) {
+  return <BackdropContext.Provider value={target}>{children}</BackdropContext.Provider>;
+}
+
+/** Whether glass here shows what is behind it: SEE_THROUGH_GLASS, or a blur on Android. */
+export function useSeeThroughGlass(): boolean {
+  const backdrop = React.useContext(BackdropContext);
+  return SEE_THROUGH_GLASS || (!!NATIVE_BLUR && !!backdrop);
+}
 
 cssInterop(GlassView, { className: 'style' });
 cssInterop(GlassContainer, { className: 'style' });
@@ -103,6 +188,36 @@ function glassShadow(overMap: boolean): ViewStyle | undefined {
   };
 }
 
+/**
+ * Android's frosted glass: the website's recipe (guideline section 17.3) on a
+ * real blur. expo-blur's tint lays the first coat - white at 44% in light, a
+ * near-black at 55% in dark, at full intensity - and the body over it brings
+ * light up to the website's 62%; dark is already its 55%. The radius is the
+ * intensity over the reduction, measured against the website's 16px.
+ *
+ * The website also saturates what is behind its glass to 180%, which is what
+ * keeps it tinted rather than grey under that much white. expo-blur cannot,
+ * so the blur is saturated after the fact with React Native's own `filter`
+ * (Android's colour matrix). The same thing: a saturation matrix leaves
+ * white and grey as they are, so saturating the blur with its white tint on
+ * it equals saturating what is behind and laying the white on top.
+ */
+const BLUR = {
+  intensity: 100,
+  reduction: 4,
+  saturate: [{ saturate: 3 }],
+  tint: { light: 'default', dark: 'systemUltraThinMaterialDark' },
+  body: 'bg-card/[0.32] dark:bg-transparent',
+  rim: {
+    light: 'inset 0px 0px 0px 0.5px rgba(255, 255, 255, 0.55), inset 0px 1px 0px rgba(255, 255, 255, 0.7)',
+    dark: 'inset 0px 0px 0px 0.5px rgba(255, 255, 255, 0.16), inset 0px 1px 0px rgba(255, 255, 255, 0.14)',
+  },
+  shadow: {
+    light: '0px 0px 0px 0.5px rgba(0, 0, 0, 0.06), 0px 8px 24px rgba(0, 0, 0, 0.12), 0px 1px 3px rgba(0, 0, 0, 0.08)',
+    dark: '0px 8px 24px rgba(0, 0, 0, 0.35), 0px 1px 3px rgba(0, 0, 0, 0.3)',
+  },
+} as const;
+
 type GlassProps = {
   /** The glass's corner radius: half the height for a capsule or a circle. */
   radius: number;
@@ -134,6 +249,44 @@ export function Glass({
   children,
 }: GlassProps) {
   const { reduceTransparency, highContrast } = useDisplaySettings();
+  const backdrop = React.useContext(BackdropContext);
+  const { colorScheme } = useColorScheme();
+
+  if (NATIVE_BLUR && backdrop && !reduceTransparency && !highContrast) {
+    const scheme = colorScheme === 'dark' ? 'dark' : 'light';
+    const { BlurView } = NATIVE_BLUR;
+    return (
+      <View
+        pointerEvents={pointerEvents}
+        className={className}
+        style={[{ borderRadius: radius, boxShadow: BLUR.shadow[scheme] }, style]}>
+        {/* The blur ignores borderRadius: the clip gives it the glass's shape. */}
+        <View
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: 'hidden' }]}>
+          <View style={[StyleSheet.absoluteFill, { filter: BLUR.saturate }]}>
+            <BlurView
+              blurTarget={backdrop}
+              blurMethod="dimezisBlurViewSdk31Plus"
+              intensity={BLUR.intensity}
+              blurReductionFactor={BLUR.reduction}
+              tint={BLUR.tint[scheme]}
+              style={StyleSheet.absoluteFill}
+            />
+          </View>
+          <View
+            className={tint ? undefined : BLUR.body}
+            style={[
+              StyleSheet.absoluteFill,
+              { borderRadius: radius, boxShadow: BLUR.rim[scheme] },
+              tint ? { backgroundColor: tint } : null,
+            ]}
+          />
+        </View>
+        {children}
+      </View>
+    );
+  }
 
   if (LIQUID_GLASS) {
     return (

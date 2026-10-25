@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import {
   ChenfengLocationChoiceScreen,
@@ -11,6 +11,7 @@ import {
   ChenfengSearch,
 } from '@/components/chenfeng/map-chrome';
 import { ChenfengVenueList } from '@/components/chenfeng/venue-list';
+import { BackdropView, GlassBackdrop, useBackdrop } from '@/components/glass';
 import { LocationChoiceDialog, LocationChoiceScreen } from '@/components/location-choice';
 import { useTabBarOverlap } from '@/components/tab-bar';
 import { VenueList } from '@/components/venue-list';
@@ -98,6 +99,8 @@ export default function MapScreen() {
   // it lives here rather than in the list. The other skins' list has its own.
   const [listQuery, setListQuery] = React.useState('');
   const chenfeng = useSkin().skin === 'chenfeng';
+  // The map or the list, behind Chenfeng's floating controls.
+  const content = useBackdrop();
   // Non-zero only under a tab bar floating over the map.
   const tabBarOverlap = useTabBarOverlap();
 
@@ -294,6 +297,9 @@ export default function MapScreen() {
 
   return (
     <View className="flex-1 bg-background">
+      {/* What Chenfeng's floating controls blur on Android: the map, or the
+          list. No view at all on the website or iOS - see BackdropView. */}
+      <BackdropView backdropRef={content.ref} style={StyleSheet.absoluteFill}>
       {mode === 'map' ? (
         <VenueMap
           // Remounted when the map should open somewhere else; see startKey.
@@ -371,9 +377,10 @@ export default function MapScreen() {
           onLocateVenue={locateVenue}
         />
       )}
+      </BackdropView>
 
       {chenfeng ? (
-        <>
+        <GlassBackdrop target={content.target}>
           <ChenfengMapControls
             mode={mode}
             onChangeMode={setMode}
@@ -396,7 +403,7 @@ export default function MapScreen() {
             listQuery={listQuery}
             onListQuery={setListQuery}
           />
-        </>
+        </GlassBackdrop>
       ) : (
         <>
           <MapControls

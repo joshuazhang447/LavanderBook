@@ -6,6 +6,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  StyleSheet,
   View,
   type TextInput,
 } from 'react-native';
@@ -19,7 +20,14 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Glass, GlassButton, GlassGroup } from '@/components/glass';
+import {
+  BackdropView,
+  Glass,
+  GlassBackdrop,
+  GlassButton,
+  GlassGroup,
+  useBackdrop,
+} from '@/components/glass';
 import { useLeaveNowReserve } from '@/components/leave-now';
 import type { MapViewMode } from '@/components/map-controls';
 import { usePlaceSearch } from '@/components/map-search';
@@ -215,6 +223,9 @@ type SearchProps = {
 export function ChenfengSearch({ mode, origin, onPickPlace, onClearPlace, listQuery, onListQuery }: SearchProps) {
   const open = useMapSearchOpen();
   const places = usePlaceSearch(origin, open && mode === 'map');
+  // The results page, which covers the map while searching places: the field
+  // floats over it, so it is what the field's glass blurs - not the map.
+  const resultsPage = useBackdrop();
 
   // Leaving the tab closes it: the tab bar stands aside while it is open.
   useFocusEffect(React.useCallback(() => () => closeMapSearch(), []));
@@ -234,27 +245,31 @@ export function ChenfengSearch({ mode, origin, onPickPlace, onClearPlace, listQu
 
   return (
     <>
-      <PlaceResults
-        query={places.trimmed}
-        results={places.results}
-        error={places.error}
-        onPick={(place) => {
-          places.setResults(null);
-          closeMapSearch();
-          onPickPlace(place);
-        }}
-      />
-      <SearchField
-        value={places.query}
-        onChangeText={places.change}
-        placeholder="Search Places"
-        busy={places.busy}
-        onSubmit={places.submit}
-        onClear={() => {
-          places.reset();
-          onClearPlace();
-        }}
-      />
+      <BackdropView backdropRef={resultsPage.ref} style={StyleSheet.absoluteFill}>
+        <PlaceResults
+          query={places.trimmed}
+          results={places.results}
+          error={places.error}
+          onPick={(place) => {
+            places.setResults(null);
+            closeMapSearch();
+            onPickPlace(place);
+          }}
+        />
+      </BackdropView>
+      <GlassBackdrop target={resultsPage.target}>
+        <SearchField
+          value={places.query}
+          onChangeText={places.change}
+          placeholder="Search Places"
+          busy={places.busy}
+          onSubmit={places.submit}
+          onClear={() => {
+            places.reset();
+            onClearPlace();
+          }}
+        />
+      </GlassBackdrop>
     </>
   );
 }

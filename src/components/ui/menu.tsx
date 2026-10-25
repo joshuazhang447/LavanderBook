@@ -18,7 +18,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Glass } from '@/components/glass';
+import { Glass, GlassBackdrop } from '@/components/glass';
 import { useElevatedSurface } from '@/components/skin-provider';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
@@ -81,13 +81,18 @@ export function Menu({ anchor, groups, onClose, accessibilityLabel, contextual }
   if (!anchor) return null;
   return (
     <Portal name="chenfeng-menu">
-      <OpenMenu
-        anchor={anchor}
-        groups={groups.filter((group) => group.length > 0)}
-        onClose={onClose}
-        accessibilityLabel={accessibilityLabel}
-        contextual={contextual}
-      />
+      {/* Drawn glass: a menu opens over whatever its row is on - a sheet as
+          often as the map - and Android can only blur the screens beneath
+          every sheet, which would show through the one it was opened from. */}
+      <GlassBackdrop target={null}>
+        <OpenMenu
+          anchor={anchor}
+          groups={groups.filter((group) => group.length > 0)}
+          onClose={onClose}
+          accessibilityLabel={accessibilityLabel}
+          contextual={contextual}
+        />
+      </GlassBackdrop>
     </Portal>
   );
 }

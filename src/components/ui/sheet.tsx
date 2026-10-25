@@ -29,7 +29,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Glass, GlassButton, SEE_THROUGH_GLASS } from '@/components/glass';
+import { Glass, GlassBackdrop, GlassButton, useSeeThroughGlass } from '@/components/glass';
 import { useLeaveNowReserve } from '@/components/leave-now';
 import { useElevatedSurface } from '@/components/skin-provider';
 import { useIsWideViewport } from '@/components/tab-bar';
@@ -390,16 +390,20 @@ export function Sheet({
   const wideHeight = Math.min(height - 96, hasLarge ? 720 : 440);
   const resizable = hasMedium && hasLarge && !isWide;
 
-  const body = (
+  // Glass at medium where it can show the map behind: the website, iOS 26,
+  // and Android 12 or later, which blurs the screens (see GlassBackdrop).
+  // Decided inside the portal, by SeeThrough: the backdrop a sheet blurs is
+  // the host's, and this component itself renders far from it.
+  const body = (seeThrough: boolean) => (
     <>
       {/* The material: glass at medium, opaque from large up - and opaque
           throughout where glass cannot blur the map behind it, whose labels
           would read through the sheet's own text. */}
-      {!isWide && !hasLarge && SEE_THROUGH_GLASS ? null : (
+      {!isWide && !hasLarge && seeThrough ? null : (
         <Animated.View
           pointerEvents="none"
           className={cn('absolute inset-0', grouped ? 'bg-grouped' : 'bg-background')}
-          style={hasMedium && !isWide && SEE_THROUGH_GLASS ? opaque : undefined}
+          style={hasMedium && !isWide && seeThrough ? opaque : undefined}
         />
       )}
       <View style={{ height: isWide ? wideHeight : innerHeight }}>
@@ -412,8 +416,12 @@ export function Sheet({
               <View className="h-1 w-[60px] rounded-full bg-label-tertiary" />
             </View>
           ) : null}
-          {toolbar}
-          <View className="flex-1">{children}</View>
+          {/* The sheet's own buttons float over the sheet, not over the map:
+              with nothing of the sheet's to sample, they are drawn. */}
+          <GlassBackdrop target={null}>
+            {toolbar}
+            <View className="flex-1">{children}</View>
+          </GlassBackdrop>
         </Animated.View>
       </View>
     </>
@@ -456,16 +464,27 @@ export function Sheet({
                 elevated.style,
                 frame,
               ]}>
-              {hasMedium && !isWide && SEE_THROUGH_GLASS ? (
-                <Glass radius={0} className="absolute inset-0" pointerEvents="none" />
-              ) : null}
-              {body}
+              <SeeThrough>
+                {(seeThrough) => (
+                  <>
+                    {hasMedium && !isWide && seeThrough ? (
+                      <Glass radius={0} className="absolute inset-0" pointerEvents="none" />
+                    ) : null}
+                    {body(seeThrough)}
+                  </>
+                )}
+              </SeeThrough>
             </Animated.View>
           </GestureDetector>
         </View>
       </SheetContext.Provider>
     </Portal>
   );
+}
+
+/** useSeeThroughGlass where this renders - inside the portal, under the host's backdrop. */
+function SeeThrough({ children }: { children: (seeThrough: boolean) => React.ReactNode }) {
+  return children(useSeeThroughGlass());
 }
 
 /**

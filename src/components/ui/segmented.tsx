@@ -4,7 +4,7 @@ import { Platform, Pressable, View, type LayoutChangeEvent } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
-import { SEE_THROUGH_GLASS } from '@/components/glass';
+import { useSeeThroughGlass } from '@/components/glass';
 import { Text } from '@/components/ui/text';
 import { useDisplaySettings } from '@/lib/accessibility';
 import { selectionTick } from '@/lib/haptics';
@@ -127,6 +127,8 @@ function DrawnSegmented<T extends string>({
     onChange(segment.value);
   }
 
+  const seeThrough = useSeeThroughGlass();
+
   const pan = Gesture.Pan()
     .enabled(!disabled && index >= 0 && segmentWidth > 0)
     .activeOffsetX([-8, 8])
@@ -163,9 +165,9 @@ function DrawnSegmented<T extends string>({
         style={{ height: trackHeight }}
         className={cn(
           'flex-row rounded-full',
-          // A clear track only on glass you can see through: on Android's
+          // A clear track only on glass you can see through: on drawn,
           // nearly opaque glass the white thumb would vanish into it.
-          onGlass && SEE_THROUGH_GLASS ? 'bg-transparent' : 'bg-fill-tertiary',
+          onGlass && seeThrough ? 'bg-transparent' : 'bg-fill-tertiary',
           disabled && 'opacity-50',
           className
         )}>
