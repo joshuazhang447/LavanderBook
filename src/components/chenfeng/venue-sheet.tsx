@@ -1,11 +1,22 @@
-import { Ellipsis, Eye, EyeOff, Flag, ListChecks, Route, SquarePen } from 'lucide-react-native';
+import {
+  Ellipsis,
+  Eye,
+  EyeOff,
+  Flag,
+  Globe,
+  ListChecks,
+  Mail,
+  Phone,
+  Route,
+  SquarePen,
+} from 'lucide-react-native';
 import * as React from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 
 import { AnswerSummaryCard } from '@/components/answer-summary';
 import { ChenfengReportSheet } from '@/components/chenfeng/report-sheet';
 import { openDirections } from '@/components/directions-button';
-import { LinkedText } from '@/components/linked-text';
+import { LinkedText, openLink } from '@/components/linked-text';
 import { StarRating } from '@/components/star-rating';
 import { TagPill } from '@/components/tag-pill';
 import { Button } from '@/components/ui/button';
@@ -22,7 +33,7 @@ import {
 } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import type { VenueSheetProps } from '@/components/venue-sheet';
-import { ABOUT_TEXT, DETAILS_TEXT, detailsTeaser } from '@/lib/directory-text';
+import { ABOUT_TEXT, DETAILS_TEXT, detailsTeaser, placeLinks } from '@/lib/directory-text';
 import { lightImpact } from '@/lib/haptics';
 import { MASK_TEXT, moderationStatus, REPORT_TEXT, spokenMasked, STATUS_TEXT } from '@/lib/moderation-text';
 import type { AnswerSummaryRow } from '@/lib/questionnaire';
@@ -30,6 +41,7 @@ import { postedLabel } from '@/lib/review-dates';
 import { isMapped } from '@/lib/use-nearby-venues';
 import { cn } from '@/lib/utils';
 import { useVenueDetails, type Note, type VenueReview } from '@/lib/venue-details';
+import type { VenueTag } from '@/lib/venue-tags';
 
 /**
  * Chenfeng's place card (guideline section 14.3): a sheet at medium height with
@@ -47,6 +59,8 @@ export function ChenfengVenueSheet({ venue, onClose, onWriteReview }: VenueSheet
   const [popToken, setPopToken] = React.useState(0);
   /** The review being reported, in a sheet of its own beside this one. */
   const [reporting, setReporting] = React.useState<VenueReview | null>(null);
+  /** The whole description, in a sheet of its own stacked on this one. */
+  const [about, setAbout] = React.useState(false);
 
   return (
     <>
@@ -75,6 +89,7 @@ export function ChenfengVenueSheet({ venue, onClose, onWriteReview }: VenueSheet
               }
               onWriteReview={onWriteReview}
               onMoreDetails={() => setPushed(true)}
+              onAbout={() => setAbout(true)}
               onReport={setReporting}
             />
           }
@@ -105,7 +120,103 @@ export function ChenfengVenueSheet({ venue, onClose, onWriteReview }: VenueSheet
           onSent={details.refetch}
         />
       ) : null}
+
+      {about && details.description ? (
+        <AboutSheet
+          name={venue.name}
+          tags={details.tags}
+          description={details.description}
+          notes={details.notes}
+          onClose={() => setAbout(false)}
+        />
+      ) : null}
     </>
+  );
+}
+
+const LINK_ICON = { web: Globe, email: Mail, phone: Phone } as const;
+
+/**
+ * Everything LavenderBook says about a place, in a sheet stacked on its card
+ * (the Learn More pattern): the whole description - the card shows two lines
+ * of it - then what we checked there, then every website, address and number
+ * in either as a row to press. Its footer says who wrote it.
+ */
+function AboutSheet({
+  name,
+  tags,
+  description,
+  notes,
+  onClose,
+}: {
+  name: string;
+  tags: VenueTag[];
+  description: string;
+  notes: Note[];
+  onClose: () => void;
+}) {
+  const links = placeLinks([description, ...notes.map((note) => note.body)]);
+
+  return (
+    <Sheet
+      name="chenfeng-about-sheet"
+      detents={['large']}
+      grouped
+      accessibilityLabel={name}
+      onClose={onClose}
+      toolbar={<SheetToolbar leading={<SheetCloseButton />} title={name} />}>
+      <SheetScrollView contentContainerClassName="pb-12 pt-3">
+        <List>
+          {tags.length > 0 ? (
+            <View className="flex-row flex-wrap gap-x-2 gap-y-1 px-4">
+              {tags.map((tag) => (
+                <TagPill key={tag.slug} tag={tag} />
+              ))}
+            </View>
+          ) : null}
+
+          <Section footer={ABOUT_TEXT.attribution}>
+            <Row
+              title={
+                <Text textStyle="body" className="text-foreground">
+                  <LinkedText text={description} linkClassName="text-primary" />
+                </Text>
+              }
+            />
+          </Section>
+
+          {notes.length > 0 ? (
+            <Section header={DETAILS_TEXT.titleTitle}>
+              {notes.map((note) => (
+                <Row
+                  key={note.id}
+                  title={
+                    <Text textStyle="body" className="text-foreground">
+                      <LinkedText text={note.body} linkClassName="text-primary" />
+                    </Text>
+                  }
+                />
+              ))}
+            </Section>
+          ) : null}
+
+          {links.length > 0 ? (
+            <Section header={ABOUT_TEXT.links}>
+              {links.map((link) => (
+                <Row
+                  key={link.href}
+                  icon={LINK_ICON[link.kind]}
+                  title={link.text}
+                  tone="tint"
+                  accessibilityRole="link"
+                  onPress={() => openLink(link.href)}
+                />
+              ))}
+            </Section>
+          ) : null}
+        </List>
+      </SheetScrollView>
+    </Sheet>
   );
 }
 
@@ -117,6 +228,7 @@ function PlaceCard({
   onDirections,
   onWriteReview,
   onMoreDetails,
+  onAbout,
   onReport,
 }: {
   details: Details;
@@ -125,6 +237,8 @@ function PlaceCard({
   onDirections?: () => void;
   onWriteReview: () => void;
   onMoreDetails: () => void;
+  /** Opens the whole description. */
+  onAbout: () => void;
   onReport: (review: VenueReview) => void;
 }) {
   const {
@@ -170,9 +284,13 @@ function PlaceCard({
           {/* No stars before anyone has rated it: an empty row reads as zero
               out of five, not as "not rated yet". */}
           {count === 0 ? (
-            <Text textStyle="subheadline" className="text-label-secondary">
-              Listed by LavenderBook · no reviews yet
-            </Text>
+            // With a description, that is what goes under the name: it says
+            // what the place is, and the list below says nobody has reviewed it.
+            description ? null : (
+              <Text textStyle="subheadline" className="text-label-secondary">
+                Listed by LavenderBook · no reviews yet
+              </Text>
+            )
           ) : (
             <View
               className="flex-row items-center gap-2"
@@ -199,6 +317,22 @@ function PlaceCard({
               ({bathroom.tally})
             </Text>
           ) : null}
+          {/* Two lines of what the place is, cut with an ellipsis, and "More"
+              in the tint: the whole of it opens in a sheet of its own. */}
+          {description ? (
+            <Pressable
+              onPress={onAbout}
+              accessibilityRole="button"
+              accessibilityLabel={`${description} ${ABOUT_TEXT.moreSpoken}`}
+              className="active:opacity-60">
+              <Text textStyle="subheadline" numberOfLines={2} className="text-foreground">
+                {description}
+              </Text>
+              <Text textStyle="subheadline" emphasized className="text-primary">
+                {ABOUT_TEXT.moreTitle}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
         <SheetCloseButton />
       </View>
@@ -223,21 +357,6 @@ function PlaceCard({
       </View>
 
       <List>
-        {/* What the place is, before what anyone thought of it: a section of
-            its own whose footer says who wrote it, so it is never read as one
-            of the reviews below. */}
-        {description ? (
-          <Section header={ABOUT_TEXT.headingTitle} footer={ABOUT_TEXT.attribution}>
-            <Row
-              title={
-                <Text textStyle="body" className="text-foreground">
-                  <LinkedText text={description} linkClassName="text-primary" />
-                </Text>
-              }
-            />
-          </Section>
-        ) : null}
-
         {/* The same way in as the tag's chevron, gated on the same thing, so
             the two can never disagree about whether there is a page. A bare
             "More Details" row was mostly passed over, so this one carries a

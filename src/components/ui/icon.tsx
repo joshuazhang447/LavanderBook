@@ -10,6 +10,7 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUp,
+  BookOpen,
   Calendar,
   CalendarClock,
   CalendarDays,
@@ -33,6 +34,7 @@ import {
   Eye,
   EyeOff,
   Flag,
+  Globe,
   Info,
   Languages,
   List,
@@ -41,6 +43,7 @@ import {
   LocateFixed,
   LocateOff,
   LogOut,
+  Mail,
   Map as MapIcon,
   MapPin,
   MapPinOff,
@@ -50,6 +53,7 @@ import {
   NavigationOff,
   Palette,
   Pencil,
+  Phone,
   Plus,
   RotateCw,
   Route,
@@ -171,6 +175,10 @@ const SF_SYMBOLS = new Map<LucideIcon, { name: string; fill?: string }>([
   [AlertTriangle, { name: 'exclamationmark.triangle', fill: 'exclamationmark.triangle.fill' }],
   [TriangleAlert, { name: 'exclamationmark.triangle', fill: 'exclamationmark.triangle.fill' }],
   [Plus, { name: 'plus' }],
+  [BookOpen, { name: 'book', fill: 'book.fill' }],
+  [Globe, { name: 'globe' }],
+  [Mail, { name: 'envelope', fill: 'envelope.fill' }],
+  [Phone, { name: 'phone', fill: 'phone.fill' }],
 ]);
 
 /**
@@ -241,6 +249,10 @@ const MATERIAL_ICONS = new Map<LucideIcon, MaterialSymbolName>([
   [LogOut, 'logout'],
   [MessageSquareText, 'chat'],
   [Tag, 'sell'],
+  [BookOpen, 'menu_book'],
+  [Globe, 'language'],
+  [Mail, 'mail'],
+  [Phone, 'call'],
 ]);
 
 /**

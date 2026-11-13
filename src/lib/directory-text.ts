@@ -1,12 +1,26 @@
+import { linkify } from '@/lib/linkify';
+
 /**
  * The words around what LavenderBook itself says about a place, for every
  * skin: Chenfeng's title case beside the sentence case the others use. Change
  * them here, never in one skin.
  */
 
+/**
+ * A place's description: a couple of lines of it under the name on the card,
+ * and the whole of it - with what else we know, and its links - in a window
+ * that opens from there.
+ */
 export const ABOUT_TEXT = {
-  heading: 'About this place',
-  headingTitle: 'About',
+  /** Under the cut-off description, saying there is more and that it opens. */
+  more: 'Read more',
+  moreTitle: 'More',
+  /** Read out after the description itself, for the whole pressable. */
+  moreSpoken: 'Opens the full description, what else LavenderBook knows, and links',
+  links: 'Links',
+  /** The window's way on to the answers reviewers gave. */
+  visitors: 'What visitors reported',
+  done: 'Done',
   /**
    * Who is speaking. A description is our own claim, as the notes are, and
    * must never read as something a visitor reported - the same line stands
@@ -14,6 +28,44 @@ export const ABOUT_TEXT = {
    */
   attribution: 'Written by LavenderBook, not by visitors.',
 } as const;
+
+export type PlaceLink = {
+  href: string;
+  /** As it was written: "kindspace.ca", "613-555-0100". */
+  text: string;
+  kind: 'web' | 'email' | 'phone';
+};
+
+/**
+ * Every website, email address and phone number written into a place's
+ * description and notes, once each, in the order they appear - for the list of
+ * links at the foot of the description's window. The same finder that makes
+ * them tappable in the text (linkify), so the two can never disagree about
+ * what counts as a link.
+ */
+export function placeLinks(texts: readonly (string | null | undefined)[]): PlaceLink[] {
+  const seen = new Set<string>();
+  const links: PlaceLink[] = [];
+
+  for (const text of texts) {
+    if (!text) continue;
+    for (const part of linkify(text)) {
+      if (part.kind !== 'link' || seen.has(part.href)) continue;
+      seen.add(part.href);
+      links.push({
+        href: part.href,
+        text: part.text,
+        kind: part.href.startsWith('mailto:')
+          ? 'email'
+          : part.href.startsWith('tel:')
+            ? 'phone'
+            : 'web',
+      });
+    }
+  }
+
+  return links;
+}
 
 /**
  * The way in to what is behind a place: what LavenderBook checked there and
