@@ -312,6 +312,29 @@ function BasicVenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
   const [reporting, setReporting] = React.useState<VenueReview | null>(null);
   /** The reviews page animates in only when it is being returned to. */
   const [returning, setReturning] = React.useState(false);
+  /**
+   * Set when the whole sheet is about to go: closed, or handed over to the
+   * review form. The pages below slide in and out as they are swapped, and
+   * Reanimated plays a view's exit when it unmounts for any reason - so
+   * closing the card from the details page sent that page sliding off
+   * sideways on its own while the sheet dropped. On the website it was worse:
+   * the page is re-attached outside the sheet to play its exit, so it hung
+   * over the header as it went.
+   *
+   * So leaving takes two steps. First the pages lose their exits; then, once
+   * that has rendered, the parent is told and unmounts the sheet, whose own
+   * slide down is the only thing left to play.
+   */
+  const [leaving, setLeaving] = React.useState<'close' | 'review' | null>(null);
+  const told = React.useRef(false);
+  React.useEffect(() => {
+    if (!leaving || told.current) return;
+    told.current = true;
+    if (leaving === 'close') onClose();
+    else onWriteReview();
+  }, [leaving, onClose, onWriteReview]);
+  const close = React.useCallback(() => setLeaving('close'), []);
+
   function openTagPage() {
     setReturning(true);
     setPage('tag');
@@ -326,7 +349,7 @@ function BasicVenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
     // Opens most of the way up; its handle and top row drag it to full height.
     <BottomSheet
       name="venue-sheet"
-      onClose={onClose}
+      onClose={close}
       accessibilityLabel={venue.name}
       partial={0.62}
       // For the report page's note: the keyboard lifts the sheet rather than
@@ -391,7 +414,7 @@ function BasicVenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
             />
           ) : null}
           <Pressable
-            onPress={onClose}
+            onPress={close}
             accessibilityRole="button"
             accessibilityLabel="Close"
             className="rounded-full p-2 active:bg-accent">
@@ -408,7 +431,7 @@ function BasicVenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
           <Animated.View
             key="reviews"
             entering={returning ? SlideInLeft.duration(220) : undefined}
-            exiting={SlideOutLeft.duration(180)}
+            exiting={leaving ? undefined : SlideOutLeft.duration(180)}
             className="absolute inset-0">
             <ScrollView className="flex-1" contentContainerClassName="px-5 pb-4">
               {/* What the place is, before what anyone thought of it - and
@@ -454,7 +477,7 @@ function BasicVenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
           <Animated.View
             key="report"
             entering={SlideInRight.duration(220)}
-            exiting={SlideOutRight.duration(180)}
+            exiting={leaving ? undefined : SlideOutRight.duration(180)}
             className="absolute inset-0">
             <ReportReviewPage
               key={reporting.id}
@@ -468,7 +491,7 @@ function BasicVenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
           <Animated.View
             key="tag"
             entering={SlideInRight.duration(220)}
-            exiting={SlideOutRight.duration(180)}
+            exiting={leaving ? undefined : SlideOutRight.duration(180)}
             className="absolute inset-0">
             <TagPage
               notes={notes}
@@ -487,7 +510,7 @@ function BasicVenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
         <View className="border-t border-border px-5 pb-6 pt-4">
           {/* "New" means asked since this author last saved - not merely
               unanswered, which would nag anyone who skipped an optional one. */}
-          <Button onPress={onWriteReview}>
+          <Button onPress={() => setLeaving('review')}>
             <Text>
               {nudge > 0
                 ? nudge === 1
