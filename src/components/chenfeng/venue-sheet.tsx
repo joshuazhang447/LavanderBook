@@ -1,4 +1,4 @@
-import { Ellipsis, Eye, EyeOff, Flag, Route, SquarePen } from 'lucide-react-native';
+import { Ellipsis, Eye, EyeOff, Flag, ListChecks, Route, SquarePen } from 'lucide-react-native';
 import * as React from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 
@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import type { VenueSheetProps } from '@/components/venue-sheet';
-import { ABOUT_TEXT } from '@/lib/directory-text';
+import { ABOUT_TEXT, DETAILS_TEXT, detailsTeaser } from '@/lib/directory-text';
 import { lightImpact } from '@/lib/haptics';
 import { MASK_TEXT, moderationStatus, REPORT_TEXT, spokenMasked, STATUS_TEXT } from '@/lib/moderation-text';
 import type { AnswerSummaryRow } from '@/lib/questionnaire';
@@ -127,8 +127,20 @@ function PlaceCard({
   onMoreDetails: () => void;
   onReport: (review: VenueReview) => void;
 }) {
-  const { reviews, description, average, count, bathroom, hasOwnReview, tags, nudge, hasTagPage } =
-    details;
+  const {
+    reviews,
+    description,
+    notes,
+    summary,
+    average,
+    count,
+    bathroom,
+    hasOwnReview,
+    tags,
+    nudge,
+    hasTagPage,
+  } = details;
+  const teaser = detailsTeaser(notes, summary[0]?.answeredReviews ?? 0);
   // "New" means asked since this author last saved - not merely unanswered,
   // which would nag anyone who skipped an optional one.
   const action =
@@ -227,15 +239,34 @@ function PlaceCard({
         ) : null}
 
         {/* The same way in as the tag's chevron, gated on the same thing, so
-            the two can never disagree about whether there is a page. */}
+            the two can never disagree about whether there is a page. A bare
+            "More Details" row was mostly passed over, so this one carries a
+            tinted tile, says what is inside, and shows the first two things
+            we checked as headlines. */}
         {hasTagPage ? (
           <Section>
             <Row
-              title="More Details"
+              tile={{ icon: ListChecks, className: 'bg-primary' }}
               accessory="chevron"
-              accessibilityHint="What LavenderBook checked, and what visitors reported."
-              onPress={onMoreDetails}
-            />
+              accessibilityLabel={`${DETAILS_TEXT.spoken}. ${teaser.line}`}
+              onPress={onMoreDetails}>
+              <Text textStyle="headline" className="text-foreground">
+                {DETAILS_TEXT.titleTitle}
+              </Text>
+              <Text textStyle="footnote" className="text-label-secondary">
+                {teaser.line}
+              </Text>
+              {teaser.points.map((point, index) => (
+                <Text
+                  key={index}
+                  textStyle="subheadline"
+                  numberOfLines={1}
+                  className="mt-0.5 text-foreground">
+                  {'\u2022 '}
+                  {point}
+                </Text>
+              ))}
+            </Row>
           </Section>
         ) : null}
 

@@ -1,6 +1,15 @@
-import { ChevronLeft, ChevronRight, CircleUser, Eye, EyeOff, Flag, X } from 'lucide-react-native';
+import {
+  ChevronLeft,
+  ChevronRight,
+  CircleUser,
+  Eye,
+  EyeOff,
+  Flag,
+  ListChecks,
+  X,
+} from 'lucide-react-native';
 import * as React from 'react';
-import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, View } from 'react-native';
 import Animated, {
   SlideInLeft,
   SlideInRight,
@@ -21,12 +30,13 @@ import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Separator } from '@/components/ui/separator';
 import { Text } from '@/components/ui/text';
-import { ABOUT_TEXT } from '@/lib/directory-text';
+import { ABOUT_TEXT, DETAILS_TEXT, detailsTeaser } from '@/lib/directory-text';
 import { MASK_TEXT, moderationStatus, REPORT_TEXT, spokenMasked, STATUS_TEXT } from '@/lib/moderation-text';
 import type { AnswerSummaryRow } from '@/lib/questionnaire';
 import { postedLabel } from '@/lib/review-dates';
 import { useSkin } from '@/lib/skin';
 import { isMapped, type NearbyVenue } from '@/lib/use-nearby-venues';
+import { cn } from '@/lib/utils';
 import { useVenueDetails, type Note, type VenueReview } from '@/lib/venue-details';
 
 function ReviewRow({ review, onReport }: { review: VenueReview; onReport: () => void }) {
@@ -212,6 +222,62 @@ function TagPage({ notes, summary, reviewCount, onBack }: TagPageProps) {
   );
 }
 
+/**
+ * The way in to the page behind the tags, made hard to miss.
+ *
+ * It was a small outlined "More details" pill in the header, which read as a
+ * label and was mostly not pressed - while what is behind it (which door to
+ * use, who a clinic cannot take) is often the most useful thing on the card.
+ * So it is a card of its own at the top of the scroll: a filled symbol, a
+ * title, a line counting what is inside, the first two things we checked as
+ * headlines, and something that looks like a button. One Pressable; the
+ * "button" is only drawn, because a button inside a button breaks the web.
+ */
+function DetailsCard({
+  notes,
+  answeredReviews,
+  onPress,
+}: {
+  notes: Note[];
+  answeredReviews: number;
+  onPress: () => void;
+}) {
+  const teaser = detailsTeaser(notes, answeredReviews);
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${DETAILS_TEXT.spoken}. ${teaser.line}`}
+      className={cn(
+        'mb-4 flex-row items-start gap-3 rounded-xl bg-secondary p-4 active:opacity-80',
+        Platform.select({ web: 'cursor-pointer transition-opacity hover:opacity-90' })
+      )}>
+      <View className="size-9 items-center justify-center rounded-full bg-primary">
+        <Icon as={ListChecks} className="size-5 text-primary-foreground" />
+      </View>
+      <View className="flex-1 gap-1.5">
+        <View className="gap-0.5">
+          <Text className="font-semibold text-secondary-foreground">{DETAILS_TEXT.title}</Text>
+          <Text className="text-xs text-muted-foreground">{teaser.line}</Text>
+        </View>
+        {teaser.points.map((point, index) => (
+          <View key={index} className="flex-row gap-2">
+            <Text className="text-sm leading-5 text-muted-foreground">{'\u2022'}</Text>
+            <Text numberOfLines={1} className="flex-1 text-sm leading-5 text-secondary-foreground">
+              {point}
+            </Text>
+          </View>
+        ))}
+        <View className="mt-1 flex-row items-center gap-1 self-start rounded-full bg-primary py-1.5 pl-3 pr-2">
+          <Text className="text-xs font-medium text-primary-foreground">{DETAILS_TEXT.action}</Text>
+          <Icon as={ChevronRight} className="size-3.5 text-primary-foreground" />
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
 export type VenueSheetProps = {
   venue: NearbyVenue;
   onClose: () => void;
@@ -314,25 +380,6 @@ function BasicVenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
               </Text>
             ) : null}
 
-            {/* The same destination as the tag pill's chevron, and gated on
-                the same condition so the two can never disagree about whether
-                there is a page. The pill is easy to miss - it reads as a
-                label first - so the way in says so in words as well.
-
-                Borrowed from the Locate row in venue-list: a rounded outline
-                row is this app's small secondary action. A coloured link
-                would not work here, because --primary is near-black in light
-                mode and near-white in dark; colour carries no meaning. */}
-            {hasTagPage && page === 'reviews' ? (
-              <Pressable
-                onPress={openTagPage}
-                accessibilityRole="button"
-                accessibilityLabel="More details: what LavenderBook checked, and what visitors reported"
-                className="mt-0.5 flex-row items-center gap-1 self-start rounded-full border border-border py-1.5 pl-3 pr-2 active:bg-accent">
-                <Text className="text-xs font-medium text-foreground">More details</Text>
-                <Icon as={ChevronRight} className="size-3.5 text-muted-foreground" />
-              </Pressable>
-            ) : null}
           </View>
           {/* An online organisation has nowhere to route to. */}
           {isMapped(venue) ? (
@@ -377,6 +424,16 @@ function BasicVenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
                   </Text>
                   <Text className="text-xs text-muted-foreground">{ABOUT_TEXT.attribution}</Text>
                 </View>
+              ) : null}
+              {/* The same destination as a tag pill's chevron, and gated on the
+                  same condition, so the two can never disagree about whether
+                  there is a page. */}
+              {hasTagPage ? (
+                <DetailsCard
+                  notes={notes}
+                  answeredReviews={summary[0]?.answeredReviews ?? 0}
+                  onPress={openTagPage}
+                />
               ) : null}
               {reviews === null ? (
                 <View className="items-center py-8">
