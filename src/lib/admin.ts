@@ -67,6 +67,13 @@ export type AdminUserPage = {
  */
 function describe(error: PostgrestError): string {
   if (error.code === '42501') return 'This account is not an administrator.';
+  // PostgREST's "no function takes these arguments". The panel is deployed
+  // separately from the migrations, so for a while after a release that adds a
+  // function this is simply true - and its own wording ("Could not find the
+  // function ... in the schema cache") tells an admin nothing they can act on.
+  if (error.code === 'PGRST202') {
+    return 'The database does not have this yet. It needs the newest migration (npx supabase db push).';
+  }
   // Everything else these functions raise is already written for a person - "no
   // such tag", "that tag is in use by 3 venue(s) and 1 question(s) - archive it
   // instead". Passing it through beats inventing a second, vaguer vocabulary for
@@ -725,6 +732,12 @@ export type AdminVenue = {
   id: string;
   name: string;
   address: string | null;
+  /**
+   * What the place is, in a sentence or two - shown in the app's list and on
+   * the place card. Null until someone writes one, and always null from a
+   * database older than 20261113100000.
+   */
+  description: string | null;
   lat: number | null;
   lng: number | null;
   googlePlaceId: string | null;
@@ -747,11 +760,29 @@ export type VenueHas = 'any' | 'with' | 'without';
 export type VenueVisibility = 'any' | 'on' | 'off';
 export type VenueSort = 'name' | 'created_at' | 'review_count' | 'note_count';
 
+/** Mirrors venues_description_length in the migration. */
+export const VENUE_DESCRIPTION_MAX = 500;
+
+/** Mirrors venues_name_length. */
+export const VENUE_NAME_MAX = 200;
+
+/**
+ * The slug of the tag that marks an organisation with no place to visit. A
+ * slug, not a label: labels are editable prose. See 20261018110000.
+ */
+export const ONLINE_TAG_SLUG = 'online';
+
+/** Whether a place is an online organisation: tagged so, and never mapped. */
+export function isOnlineVenue(venue: Pick<AdminVenue, 'tags'>): boolean {
+  return venue.tags.some((tag) => tag.slug === ONLINE_TAG_SLUG);
+}
+
 export type VenueQuery = {
   search: string;
   /** A specific tag, or null for no tag filter. */
   tagId: string | null;
   tagState: VenueTagState;
+  description: VenueHas;
   notes: VenueHas;
   reviews: VenueHas;
   visibility: VenueVisibility;
@@ -782,6 +813,10 @@ export async function listAdminVenues(query: VenueQuery): Promise<AdminVenuePage
     p_search: query.search.trim() || undefined,
     p_tag_id: query.tagId ?? undefined,
     p_tag_state: query.tagState,
+    // Only when it narrows anything: a database from before descriptions has
+    // no such argument, and naming it would fail the whole list rather than
+    // just this one filter.
+    p_description: query.description === 'any' ? undefined : query.description,
     p_notes: query.notes,
     p_reviews: query.reviews,
     p_visibility: query.visibility,
@@ -797,6 +832,7 @@ export async function listAdminVenues(query: VenueQuery): Promise<AdminVenuePage
     id: row.id,
     name: row.name,
     address: (row.address as string | null) ?? null,
+    description: (row.description as string | null | undefined) ?? null,
     lat: (row.lat as number | null) ?? null,
     lng: (row.lng as number | null) ?? null,
     googlePlaceId: (row.google_place_id as string | null) ?? null,
@@ -817,7 +853,12 @@ export async function listAdminVenues(query: VenueQuery): Promise<AdminVenuePage
  *
  * `created` is false when the place was already known - usually because someone
  * reviewed it - and the panel says so rather than pretending it made something.
- * Tags are added to whatever the venue already carries, never replacing them.
+ * Tags are added to whatever the venue already carries, never replacing them,
+ * and a description typed here replaces the old one while an empty one leaves
+ * it alone.
+ *
+ * With no Google id and no coordinates this adds an online organisation: a
+ * venue the list shows and the map never does.
  */
 export async function upsertVenue(
   place: {
@@ -826,6 +867,7 @@ export async function upsertVenue(
     address: string | null;
     lat: number | null;
     lng: number | null;
+    description?: string | null;
   },
   tagIds: string[]
 ): Promise<{ venueId: string; created: boolean }> {
@@ -836,12 +878,31 @@ export async function upsertVenue(
     p_lat: place.lat ?? undefined,
     p_lng: place.lng ?? undefined,
     p_tag_ids: tagIds.length > 0 ? tagIds : undefined,
+    // Left out when empty, for the same reason as p_description in the list.
+    p_description: place.description?.trim() || undefined,
   });
 
   if (error) throw new Error(describe(error));
 
   const row = (data ?? [])[0];
   return { venueId: row.venue_id, created: row.created };
+}
+
+/**
+ * Rename a place and set what the app says it is. An empty description clears
+ * it. Nothing else about the place changes - not its tags, its notes or where
+ * it is.
+ */
+export async function updateVenue(
+  id: string,
+  draft: { name: string; description: string }
+): Promise<void> {
+  const { error } = await supabase.rpc('admin_update_venue', {
+    p_id: id,
+    p_name: draft.name.trim(),
+    p_description: draft.description.trim(),
+  });
+  if (error) throw new Error(describe(error));
 }
 
 /**

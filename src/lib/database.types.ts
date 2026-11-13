@@ -501,6 +501,7 @@ export type Database = {
         Row: {
           address: string | null
           created_at: string
+          description: string | null
           google_place_id: string | null
           id: string
           last_synced_at: string | null
@@ -512,6 +513,7 @@ export type Database = {
         Insert: {
           address?: string | null
           created_at?: string
+          description?: string | null
           google_place_id?: string | null
           id?: string
           last_synced_at?: string | null
@@ -523,6 +525,7 @@ export type Database = {
         Update: {
           address?: string | null
           created_at?: string
+          description?: string | null
           google_place_id?: string | null
           id?: string
           last_synced_at?: string | null
@@ -838,6 +841,7 @@ export type Database = {
       admin_list_venues: {
         Args: {
           p_desc?: boolean
+          p_description?: string
           p_limit?: number
           p_notes?: string
           p_offset?: number
@@ -852,6 +856,7 @@ export type Database = {
           address: string
           avg_stars: number
           created_at: string
+          description: string
           google_place_id: string
           id: string
           lat: number
@@ -1007,9 +1012,14 @@ export type Database = {
         Args: { p_body: string; p_id: string }
         Returns: undefined
       }
+      admin_update_venue: {
+        Args: { p_description?: string; p_id: string; p_name: string }
+        Returns: undefined
+      }
       admin_upsert_venue: {
         Args: {
           p_address?: string
+          p_description?: string
           p_google_place_id?: string
           p_lat?: number
           p_lng?: number

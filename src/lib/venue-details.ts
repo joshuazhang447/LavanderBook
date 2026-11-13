@@ -62,15 +62,23 @@ export function bathroomConsensus(ratings: Ratings): { label: string; tally: str
 
 /**
  * Everything the place card shows, fetched once: the ratings, everyone's
- * reviews, what LavenderBook checked, what visitors reported, and - for a
- * signed-in author - how many new questions are waiting. Shared by every
- * skin's card, so they can never disagree about a place.
+ * reviews, what LavenderBook says the place is and what it checked there,
+ * what visitors reported, and - for a signed-in author - how many new
+ * questions are waiting. Shared by every skin's card, so they can never
+ * disagree about a place.
  */
 export function useVenueDetails(venue: NearbyVenue) {
   const { session } = useAuth();
   const [ratings, setRatings] = React.useState<Ratings | null>(null);
   const [reviews, setReviews] = React.useState<VenueReview[] | null>(null);
   const [notes, setNotes] = React.useState<Note[]>([]);
+  // Kept with the venue it was fetched for: the card can be handed another
+  // place while it is open, and one place's description under another's name
+  // is worse than none for a moment.
+  const [fetchedDescription, setFetchedDescription] = React.useState<{
+    venueId: string;
+    text: string | null;
+  } | null>(null);
   const [summary, setSummary] = React.useState<AnswerSummaryRow[]>([]);
   const [newQuestions, setNewQuestions] = React.useState(0);
   /** Bumped to ask again, after a report changes what this reader sees. */
@@ -122,6 +130,20 @@ export function useVenueDetails(venue: NearbyVenue) {
         if (active) setNotes((data as Note[] | null) ?? []);
       });
 
+    // What LavenderBook says this place is. Public, like the notes. A server
+    // from before the column answers with an error, which is read as "none"
+    // rather than shown: the card is complete without it.
+    supabase
+      .from('venues')
+      .select('description')
+      .eq('id', venue.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (active && !error) {
+          setFetchedDescription({ venueId: venue.id, text: data?.description ?? null });
+        }
+      });
+
     // Same reasoning as the notes: whether anyone has answered anything is what
     // decides whether the tag pill opens a page at all.
     fetchAnswerSummary(venue.id)
@@ -162,9 +184,16 @@ export function useVenueDetails(venue: NearbyVenue) {
   const tags = venueTags(venue);
   const nudge = userId ? newQuestions : 0;
   const hasTagPage = notes.length > 0 || summary.length > 0;
+  // The fetched one once it is in; until then whatever the row came with (a
+  // list row has it, a map marker does not).
+  const description =
+    (fetchedDescription?.venueId === venue.id
+      ? fetchedDescription.text
+      : (venue.description ?? null)) || null;
 
   return {
     reviews,
+    description,
     notes,
     summary,
     average,

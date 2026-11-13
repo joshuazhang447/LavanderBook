@@ -2,6 +2,7 @@ import { AlertTriangle, MapPin, Search } from 'lucide-react-native';
 import * as React from 'react';
 import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
 
+import { DescriptionField } from '@/components/admin/description-field';
 import { TagChip } from '@/components/admin/tag-chip';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -41,6 +42,7 @@ export function PlaceDialog({ allTags, onClose, onSaved }: PlaceDialogProps) {
   const [searching, setSearching] = React.useState(false);
   const [chosen, setChosen] = React.useState<PlaceResult | null>(null);
   const [tagIds, setTagIds] = React.useState<string[]>([]);
+  const [description, setDescription] = React.useState('');
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -76,6 +78,7 @@ export function PlaceDialog({ allTags, onClose, onSaved }: PlaceDialogProps) {
           address: chosen.address,
           lat: chosen.latitude,
           lng: chosen.longitude,
+          description,
         },
         tagIds
       );
@@ -200,6 +203,14 @@ export function PlaceDialog({ allTags, onClose, onSaved }: PlaceDialogProps) {
                 At least one. A place with no tag and no reviews would be created invisible — the
                 map only draws somewhere that is reviewed or tagged.
               </Text>
+
+              {/* Asked for here, while whoever is adding the place still knows
+                  why: a listed place with nothing under its name is a gap
+                  somebody has to come back for. Optional all the same - it can
+                  be written from the row's Edit later. */}
+              <View className="pt-2">
+                <DescriptionField value={description} onChangeText={setDescription} />
+              </View>
             </View>
           ) : null}
 

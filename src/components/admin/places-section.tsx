@@ -11,6 +11,7 @@ import {
 import * as React from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, View } from 'react-native';
 
+import { EditPlaceDialog } from '@/components/admin/edit-place-dialog';
 import { useDebounced } from '@/components/admin/filters';
 import { PlaceDialog } from '@/components/admin/place-dialog';
 import { TagChip } from '@/components/admin/tag-chip';
@@ -66,6 +67,12 @@ import {
 import { cn } from '@/lib/utils';
 
 const PAGE_SIZES = [25, 50, 100];
+
+const DESCRIPTION_OPTIONS = [
+  { value: 'any', label: 'Any description' },
+  { value: 'with', label: 'Has a description' },
+  { value: 'without', label: 'No description' },
+] as const;
 
 const NOTES_OPTIONS = [
   { value: 'any', label: 'Any notes' },
@@ -187,13 +194,14 @@ function VenueTagsDialog({ venue, allTags, onClose, onSaved }: TagsDialogProps) 
 
 type VenueRowProps = {
   venue: AdminVenue;
+  onEdit: () => void;
   onEditTags: () => void;
   onDelete: () => void;
   onChanged: () => void;
   onShowReviews: () => void;
 };
 
-function VenueRow({ venue, onEditTags, onDelete, onChanged, onShowReviews }: VenueRowProps) {
+function VenueRow({ venue, onEdit, onEditTags, onDelete, onChanged, onShowReviews }: VenueRowProps) {
   const [expanded, setExpanded] = React.useState(false);
   const noCoords = venue.lat === null || venue.lng === null;
 
@@ -222,6 +230,30 @@ function VenueRow({ venue, onEditTags, onDelete, onChanged, onShowReviews }: Ven
           </View>
           {venue.address ? (
             <Text className="text-xs text-muted-foreground">{venue.address}</Text>
+          ) : null}
+          {/* The line the app prints under the name. A tagged place without one
+              is listed in the app with nothing to say what it is, so the gap is
+              pointed out here, with the way to close it - but only for a tagged
+              place: an untagged one is in no list for it to be missing from. */}
+          {venue.description ? (
+            <Text className="text-sm text-foreground">{venue.description}</Text>
+          ) : venue.tags.length > 0 ? (
+            <View className="flex-row flex-wrap items-center gap-1.5">
+              <Text className="text-xs text-muted-foreground">No description yet.</Text>
+              <Pressable
+                onPress={onEdit}
+                role="link"
+                aria-label={'Write a description for ' + venue.name}
+                className={Platform.select({ web: 'cursor-pointer' })}>
+                <Text
+                  className={cn(
+                    'text-xs text-primary',
+                    Platform.select({ web: 'hover:underline' })
+                  )}>
+                  Write one
+                </Text>
+              </Pressable>
+            </View>
           ) : null}
           <View className="flex-row flex-wrap items-center gap-2">
             {/* A sibling of the row's buttons, never nested inside one:
@@ -258,6 +290,9 @@ function VenueRow({ venue, onEditTags, onDelete, onChanged, onShowReviews }: Ven
         </View>
 
         <View className="flex-row items-center gap-1">
+          <Button variant="outline" size="sm" onPress={onEdit}>
+            <Text>Edit</Text>
+          </Button>
           <Button variant="outline" size="sm" onPress={onEditTags}>
             <Text>Tags</Text>
           </Button>
@@ -316,6 +351,7 @@ export function PlacesSection({ visible, onShowReviews }: PlacesSectionProps) {
   const [search, setSearch] = React.useState('');
   const settledSearch = useDebounced(search, 300);
   const [tagFilter, setTagFilter] = React.useState<string>('any');
+  const [description, setDescription] = React.useState<VenueHas>('any');
   const [notes, setNotes] = React.useState<VenueHas>('any');
   const [reviews, setReviews] = React.useState<VenueHas>('any');
   const [visibility, setVisibility] = React.useState<VenueVisibility>('any');
@@ -330,6 +366,7 @@ export function PlacesSection({ visible, onShowReviews }: PlacesSectionProps) {
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
   const [adding, setAdding] = React.useState(false);
+  const [editing, setEditing] = React.useState<AdminVenue | null>(null);
   const [editingTags, setEditingTags] = React.useState<AdminVenue | null>(null);
   const [confirming, setConfirming] = React.useState<AdminVenue | null>(null);
   const [reloads, setReloads] = React.useState(0);
@@ -349,6 +386,7 @@ export function PlacesSection({ visible, onShowReviews }: PlacesSectionProps) {
         search: settledSearch,
         tagId,
         tagState,
+        description,
         notes,
         reviews,
         visibility,
@@ -385,6 +423,7 @@ export function PlacesSection({ visible, onShowReviews }: PlacesSectionProps) {
   }, [
     settledSearch,
     tagFilter,
+    description,
     notes,
     reviews,
     visibility,
@@ -447,7 +486,7 @@ export function PlacesSection({ visible, onShowReviews }: PlacesSectionProps) {
             <Input
               value={search}
               onChangeText={(next) => refine(() => setSearch(next))}
-              placeholder="Search a name or address"
+              placeholder="Search a name, address or description"
               autoCapitalize="none"
               autoCorrect={false}
               className="flex-1 border-0 bg-transparent px-0 shadow-none dark:bg-transparent"
@@ -462,6 +501,21 @@ export function PlacesSection({ visible, onShowReviews }: PlacesSectionProps) {
             </SelectTrigger>
             <SelectContent className="w-[150px]">
               {tagOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value} label={option.label} />
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={DESCRIPTION_OPTIONS.find((o) => o.value === description)}
+            onValueChange={(option) =>
+              option && refine(() => setDescription(option.value as VenueHas))
+            }>
+            <SelectTrigger className="w-[180px]" aria-label="Description">
+              <SelectValue placeholder="Any description" />
+            </SelectTrigger>
+            <SelectContent className="w-[180px]">
+              {DESCRIPTION_OPTIONS.map((option) => (
                 <SelectItem key={option.value} value={option.value} label={option.label} />
               ))}
             </SelectContent>
@@ -534,6 +588,7 @@ export function PlacesSection({ visible, onShowReviews }: PlacesSectionProps) {
             <VenueRow
               key={venue.id}
               venue={venue}
+              onEdit={() => setEditing(venue)}
               onEditTags={() => setEditingTags(venue)}
               onDelete={() => setConfirming(venue)}
               onChanged={refetch}
@@ -611,6 +666,15 @@ export function PlacesSection({ visible, onShowReviews }: PlacesSectionProps) {
             );
             refetch();
           }}
+        />
+      ) : null}
+
+      {editing ? (
+        <EditPlaceDialog
+          key={editing.id}
+          venue={editing}
+          onClose={() => setEditing(null)}
+          onSaved={refetch}
         />
       ) : null}
 

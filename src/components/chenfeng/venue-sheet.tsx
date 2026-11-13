@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import type { VenueSheetProps } from '@/components/venue-sheet';
+import { ABOUT_TEXT } from '@/lib/directory-text';
 import { lightImpact } from '@/lib/haptics';
 import { MASK_TEXT, moderationStatus, REPORT_TEXT, spokenMasked, STATUS_TEXT } from '@/lib/moderation-text';
 import type { AnswerSummaryRow } from '@/lib/questionnaire';
@@ -126,7 +127,8 @@ function PlaceCard({
   onMoreDetails: () => void;
   onReport: (review: VenueReview) => void;
 }) {
-  const { reviews, average, count, bathroom, hasOwnReview, tags, nudge, hasTagPage } = details;
+  const { reviews, description, average, count, bathroom, hasOwnReview, tags, nudge, hasTagPage } =
+    details;
   // "New" means asked since this author last saved - not merely unanswered,
   // which would nag anyone who skipped an optional one.
   const action =
@@ -209,6 +211,21 @@ function PlaceCard({
       </View>
 
       <List>
+        {/* What the place is, before what anyone thought of it: a section of
+            its own whose footer says who wrote it, so it is never read as one
+            of the reviews below. */}
+        {description ? (
+          <Section header={ABOUT_TEXT.headingTitle} footer={ABOUT_TEXT.attribution}>
+            <Row
+              title={
+                <Text textStyle="body" className="text-foreground">
+                  <LinkedText text={description} linkClassName="text-primary" />
+                </Text>
+              }
+            />
+          </Section>
+        ) : null}
+
         {/* The same way in as the tag's chevron, gated on the same thing, so
             the two can never disagree about whether there is a page. */}
         {hasTagPage ? (

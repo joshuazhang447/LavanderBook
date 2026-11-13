@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Separator } from '@/components/ui/separator';
 import { Text } from '@/components/ui/text';
+import { ABOUT_TEXT } from '@/lib/directory-text';
 import { MASK_TEXT, moderationStatus, REPORT_TEXT, spokenMasked, STATUS_TEXT } from '@/lib/moderation-text';
 import type { AnswerSummaryRow } from '@/lib/questionnaire';
 import { postedLabel } from '@/lib/review-dates';
@@ -228,6 +229,7 @@ export function VenueSheet(props: VenueSheetProps) {
 function BasicVenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
   const {
     reviews,
+    description,
     notes,
     summary,
     average,
@@ -361,23 +363,35 @@ function BasicVenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
             entering={returning ? SlideInLeft.duration(220) : undefined}
             exiting={SlideOutLeft.duration(180)}
             className="absolute inset-0">
-            {reviews === null ? (
-              <View className="flex-1 items-center justify-center">
-                <ActivityIndicator />
-              </View>
-            ) : (
-              <ScrollView className="flex-1" contentContainerClassName="px-5 pb-4">
-                {reviews.length === 0 ? (
-                  <Text className="py-8 text-center text-sm text-muted-foreground">
-                    No written reviews yet.
+            <ScrollView className="flex-1" contentContainerClassName="px-5 pb-4">
+              {/* What the place is, before what anyone thought of it - and
+                  under its own heading saying who wrote it, so it is never
+                  read as one of the reviews below. Here rather than in the
+                  header: the header does not scroll, and a paragraph there
+                  would take the room the reviews open in. */}
+              {description ? (
+                <View className="gap-1 pb-4 pt-1">
+                  <Text className="text-sm font-medium text-foreground">{ABOUT_TEXT.heading}</Text>
+                  <Text className="text-sm leading-5 text-foreground">
+                    <LinkedText text={description} />
                   </Text>
-                ) : (
-                  reviews.map((review) => (
-                    <ReviewRow key={review.id} review={review} onReport={() => openReport(review)} />
-                  ))
-                )}
-              </ScrollView>
-            )}
+                  <Text className="text-xs text-muted-foreground">{ABOUT_TEXT.attribution}</Text>
+                </View>
+              ) : null}
+              {reviews === null ? (
+                <View className="items-center py-8">
+                  <ActivityIndicator />
+                </View>
+              ) : reviews.length === 0 ? (
+                <Text className="py-8 text-center text-sm text-muted-foreground">
+                  No written reviews yet.
+                </Text>
+              ) : (
+                reviews.map((review) => (
+                  <ReviewRow key={review.id} review={review} onReport={() => openReport(review)} />
+                ))
+              )}
+            </ScrollView>
           </Animated.View>
         ) : page === 'report' && reporting ? (
           <Animated.View

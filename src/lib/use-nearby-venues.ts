@@ -4,7 +4,14 @@ import type { Database } from '@/lib/database.types';
 import { GRID_METERS, GRID_PADDING_METERS, snapToGrid } from '@/lib/location-privacy';
 import { publicSupabase, supabase } from '@/lib/supabase';
 
-export type NearbyVenue = Database['public']['Functions']['venues_near']['Returns'][number];
+export type NearbyVenue = Database['public']['Functions']['venues_near']['Returns'][number] & {
+  /**
+   * What LavenderBook says the place is, when the row came from the list
+   * (venues_directory sends it). The map's own rows do not carry one, and the
+   * place card asks for it itself; see useVenueDetails.
+   */
+  description?: string | null;
+};
 
 /**
  * Whether a venue has a place on the map. Online organisations do not: they
