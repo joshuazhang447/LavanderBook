@@ -68,6 +68,26 @@ export const VOICES_TEXT = {
   directions: 'Directions',
   /** Read out for the directions button: where it goes, and what opens. */
   directionsSpoken: (name: string) => `Directions to ${name} in Google Maps`,
+  getInTouch: 'Get in touch',
+  writeReview: 'Write a review',
+  noReviewsYet: 'No reviews yet',
+  noWritten: 'No written reviews yet',
+  haveYouBeen: 'Have you been? Tell others how it went.',
+  seeChecked: 'See everything we checked',
+  seeAnswers: 'See all answers',
+  /** Read out after the review action when there are new questions. */
+  newSpoken: 'There are new questions for you to answer',
+  /** A place LavenderBook lists as a warning, over its card. */
+  warning: 'LavenderBook lists this place as a warning',
+  warningLine: 'What LavenderBook knows about it is in the note below.',
+  /** A place with no public address: its first contact, as the thing to do. */
+  contactVerb: {
+    website: 'Open website',
+    phone: 'Call',
+    text: 'Send a text',
+    email: 'Email',
+    link: 'Open link',
+  },
 } as const;
 
 /**

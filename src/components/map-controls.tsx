@@ -237,16 +237,21 @@ type RecenterButtonProps = {
    */
   usingLocation: boolean;
   onPress: () => void;
+  /** From the bottom of the screen, when something sits under it (OAU's places sheet). */
+  bottom?: number;
 };
 
 /**
  * Bottom-right, where both Google and Apple put it. Filled while following, so
  * the button doubles as the indicator for whether the map is tracking you.
  */
-export function RecenterButton({ following, usingLocation, onPress }: RecenterButtonProps) {
+export function RecenterButton({ following, usingLocation, onPress, bottom }: RecenterButtonProps) {
   const oau = useSkin().skin === 'oau';
   return (
-    <View pointerEvents="box-none" className="absolute bottom-5 right-4">
+    <View
+      pointerEvents="box-none"
+      className={cn('absolute right-4', bottom === undefined && 'bottom-5')}
+      style={bottom === undefined ? undefined : { bottom }}>
       <TextClassContext.Provider
         value={
           following ? (oau ? 'text-sticker-foreground' : 'text-primary-foreground') : 'text-foreground'

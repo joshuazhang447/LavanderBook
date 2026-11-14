@@ -62,6 +62,32 @@ export const OAU_DETAILS_TEXT = {
   noLongerAsked: 'No longer asked here',
 } as const;
 
+/** The Map tab's search bar and places sheet (section 14.2-14.3). */
+export const OAU_MAP_TEXT = {
+  search: 'Search places',
+  searchLabel: 'Search for any place',
+  clear: 'Clear search',
+  nothingFound: (query: string) => `Nothing found for "${query}".`,
+  area: 'Area',
+  /** The sheet's title: "28 places near Ottawa, Ontario", the count in the tab's colour. */
+  places: (count: number, where: string | null) =>
+    `${count === 1 ? '1 place' : `${count} places`} ${where ? `near ${where}` : 'near you'}`,
+  placesWord: (count: number) => (count === 1 ? 'place' : 'places'),
+  near: (where: string | null) => (where ? `near ${where}` : 'near you'),
+  placesLoading: (where: string | null) => `Places ${where ? `near ${where}` : 'near you'}`,
+  /** The place card's way back to the list. */
+  back: (count: number) => (count === 1 ? '1 place' : `${count} places`),
+  change: 'Change',
+  changeSpoken: 'Change the distance and which places are shown',
+  done: 'Done',
+  refresh: 'Refresh',
+  refreshing: 'Refreshing',
+  /** The distance bands the list is grouped under. */
+  bands: ['Within 1 km', '1 – 5 km', '5 – 25 km', 'Further'] as const,
+  showMore: 'Show the list',
+  showLess: 'Show less of the list',
+} as const;
+
 /** "Shown as Amber Finch": the name readers see on one of your reviews. */
 export function shownAs(alias: string | null): string {
   return alias ? `Shown as ${alias}` : 'Shown under your account name';
