@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { Platform, Pressable, View } from 'react-native';
 
+import { OauSegments } from '@/components/oau/segments';
 import { Segmented } from '@/components/ui/segmented';
 import { Text } from '@/components/ui/text';
 import { LIST_FILTER_TEXT } from '@/lib/directory-text';
@@ -30,6 +31,21 @@ export function ListFilterControl({ counts }: { counts: Record<ListFilter, numbe
     selectionTick();
     setListFilter(next);
   };
+
+  if (skin === 'oau') {
+    return (
+      <OauSegments
+        options={ORDER.map((filter) => ({
+          value: filter,
+          label: `${LIST_FILTER_TEXT[filter].label} ${counts[filter]}`,
+          spoken: `${LIST_FILTER_TEXT[filter].spoken}, ${counts[filter]}`,
+        }))}
+        value={value}
+        onChange={(next) => setListFilter(next)}
+        accessibilityLabel={LIST_FILTER_TEXT.label}
+      />
+    );
+  }
 
   if (skin === 'chenfeng') {
     return (

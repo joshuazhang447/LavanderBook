@@ -30,6 +30,7 @@ import { useTagIcons } from '@/lib/tag-icons';
 import type { PlaceResult } from '@/lib/place-search';
 import { lookupPlace } from '@/lib/place-search';
 import { useSkin } from '@/lib/skin';
+import { skinColor } from '@/lib/theme';
 import { supabase } from '@/lib/supabase';
 import { deriveTagColors } from '@/lib/tag-colors';
 import { VIEW_RADIUS_METERS, ZOOM_IN_SLACK } from '@/lib/use-location';
@@ -143,6 +144,39 @@ const tipStyle: React.CSSProperties = {
 
 /** A reviewed place nobody has tagged: somewhere visitors added, not one we list. */
 const UNTAGGED_PIN = '#475569';
+
+/**
+ * OAU's pins and labels (LavenderBookStyle/oau-style-guide.md, section 10):
+ * the same geometry, drawn as stickers - an ink outline instead of the white
+ * rim - with the labels on cream paper and the clusters as cream counters.
+ * The website only: on a phone a pin is a bitmap Android captures once.
+ */
+const OAU_INK = skinColor('oau', 'light', 'outline-ink');
+const OAU_HEAD: React.CSSProperties = {
+  border: `1.5px solid ${OAU_INK}`,
+  boxShadow: '0 2px 5px rgba(166,134,89,0.45)',
+};
+const OAU_TIP: React.CSSProperties = {
+  borderRight: `1.5px solid ${OAU_INK}`,
+  borderBottom: `1.5px solid ${OAU_INK}`,
+};
+const OAU_LABEL: React.CSSProperties = {
+  background: skinColor('oau', 'light', 'card'),
+  border: `1px solid ${skinColor('oau', 'light', 'border')}`,
+  borderRadius: 10,
+  boxShadow: '0 1px 4px rgba(69,49,30,0.2)',
+  fontFamily: "'LavenderBook Source Sans', system-ui, sans-serif",
+};
+const OAU_NAME: React.CSSProperties = { color: OAU_INK, fontWeight: 700 };
+const OAU_META: React.CSSProperties = { color: skinColor('oau', 'light', 'muted-foreground') };
+const OAU_GROUP: React.CSSProperties = {
+  border: `1.5px solid ${OAU_INK}`,
+  background: skinColor('oau', 'light', 'band'),
+  backgroundImage: 'none',
+  color: OAU_INK,
+  boxShadow: '0 0 0 4px rgba(69,49,30,0.14), 0 2px 5px rgba(166,134,89,0.4)',
+  fontFamily: "'LavenderBook Source Sans', system-ui, sans-serif",
+};
 
 // White on every theme, like the map under it, so a chip always takes its
 // light-mode colours.
@@ -259,6 +293,7 @@ function PlaceMarker({
   onSelect: (venue: NearbyVenue) => void;
 }) {
   const shown = useShown();
+  const oau = useSkin().skin === 'oau';
   const { venue } = item;
   const geometry = placeGeometry(item);
   const tag = venueTags(venue)[0] ?? null;
@@ -297,9 +332,17 @@ function PlaceMarker({
             // half its diagonal below its centre.
             top: geometry.pin.y + PIN_SIZE + PIN_TAIL - TIP_SIDE / 2 - (TIP_SIDE * Math.SQRT2) / 2,
             backgroundColor: fill,
+            ...(oau ? OAU_TIP : null),
           }}
         />
-        <div style={{ ...headStyle, left: geometry.pin.x, top: geometry.pin.y, backgroundColor: fill }}>
+        <div
+          style={{
+            ...headStyle,
+            left: geometry.pin.x,
+            top: geometry.pin.y,
+            backgroundColor: fill,
+            ...(oau ? OAU_HEAD : null),
+          }}>
           {kindGlyph(tag?.slug ?? null, icon)}
         </div>
 
@@ -311,12 +354,13 @@ function PlaceMarker({
               top: geometry.label.y,
               width: geometry.label.width,
               height: geometry.label.height,
+              ...(oau ? OAU_LABEL : null),
             }}>
-            <div style={nameStyle}>{venue.name}</div>
+            <div style={oau ? { ...nameStyle, ...OAU_NAME } : nameStyle}>{venue.name}</div>
             {rating || tag ? (
               <div style={metaStyle}>
                 {rating ? (
-                  <span style={ratingStyle}>
+                  <span style={oau ? { ...ratingStyle, ...OAU_META } : ratingStyle}>
                     <span style={{ color: '#f59e0b' }}>★</span>
                     {rating.slice(1)}
                   </span>
@@ -328,7 +372,9 @@ function PlaceMarker({
                 ) : null}
               </div>
             ) : null}
-            {quote ? <div style={quoteStyle}>“{quote}”</div> : null}
+            {quote ? (
+              <div style={oau ? { ...quoteStyle, ...OAU_META } : quoteStyle}>“{quote}”</div>
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -339,6 +385,7 @@ function PlaceMarker({
 /** Places whose pins would touch, as one count. Pressed, it zooms in or fans out. */
 function GroupMarker({ item, onPress }: { item: GroupItem; onPress: (group: GroupItem) => void }) {
   const shown = useShown();
+  const oau = useSkin().skin === 'oau';
   const geometry = groupGeometry(item.venues.length);
   const size = groupSize(item.venues.length);
   const press = () => onPress(item);
@@ -370,6 +417,7 @@ function GroupMarker({ item, onPress }: { item: GroupItem; onPress: (group: Grou
             width: size,
             height: size,
             borderRadius: size / 2,
+            ...(oau ? OAU_GROUP : null),
           }}>
           {names.length}
         </div>
