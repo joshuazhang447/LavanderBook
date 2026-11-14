@@ -18,6 +18,7 @@ import {
   arrangePlaces,
   matching,
   useAreaVenues,
+  useOnlineFold,
   type ArrangedPlaces,
   type PlaceRow,
 } from '@/lib/directory';
@@ -179,6 +180,42 @@ export function OnlineHeading() {
         {ONLINE_TEXT.heading}
       </Text>
       <Text className="text-xs text-muted-foreground">{ONLINE_TEXT.lead}</Text>
+    </View>
+  );
+}
+
+/**
+ * The online organisations under their heading, folded to the first few with a
+ * "Show all" while `open` is false (useOnlineFold). Basic's and Material's, in
+ * the list and the Directory.
+ */
+export function OnlineSection({
+  rows,
+  open,
+  heading = true,
+  listed,
+  onSelect,
+  onLocate,
+}: {
+  rows: PlaceRow[];
+  /** Show every row: a search, or a single kind. */
+  open: boolean;
+  /** False under the Online kind, whose own heading has said all of this. */
+  heading?: boolean;
+  listed?: boolean;
+  onSelect: (venue: NearbyVenue) => void;
+  onLocate: (venue: NearbyVenue) => void;
+}) {
+  const fold = useOnlineFold(rows, open);
+  return (
+    <View className="gap-2">
+      {heading ? <OnlineHeading /> : null}
+      <PlaceGroup rows={fold.rows} listed={listed} onSelect={onSelect} onLocate={onLocate} />
+      {fold.hiddenOf !== null ? (
+        <Button variant="outline" size="sm" onPress={fold.expand} className="self-start">
+          <Text>{ONLINE_TEXT.showAll(fold.hiddenOf)}</Text>
+        </Button>
+      ) : null}
     </View>
   );
 }
@@ -352,10 +389,12 @@ export function VenueList({ origin, refreshKey, onSelectVenue, onLocateVenue }: 
             <PlaceGroup rows={places.nearby} onSelect={onSelectVenue} onLocate={onLocateVenue} />
           ) : null}
           {places.online.length > 0 ? (
-            <View className="gap-2">
-              <OnlineHeading />
-              <PlaceGroup rows={places.online} onSelect={onSelectVenue} onLocate={onLocateVenue} />
-            </View>
+            <OnlineSection
+              rows={places.online}
+              open={searching}
+              onSelect={onSelectVenue}
+              onLocate={onLocateVenue}
+            />
           ) : null}
         </ScrollView>
       ) : (

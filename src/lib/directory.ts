@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { BackHandler, Platform } from 'react-native';
 
+import { provinceAt } from '@/lib/area-province';
 import { DIRECTORY_TEXT } from '@/lib/directory-text';
 import { roundForSearch } from '@/lib/location-privacy';
 import { useMapLocation } from '@/lib/map-location';
@@ -17,8 +18,9 @@ import { venueTags, type VenueTag } from '@/lib/venue-tags';
  * and nothing at all once the map is zoomed out past a few kilometres. The
  * list and the Directory tab are not a map. They ask what is around here -
  * every reviewed or listed place within the distance chosen on the meter,
- * nearest first, and the online organisations, which are nowhere and so always
- * in range.
+ * nearest first, and the online organisations that serve here: their city, if
+ * it is within the distance, their province, or all of Canada
+ * (20261114130000).
  *
  * One request per city and distance: the rows come back whole, and choosing a
  * kind or typing a search in the Directory filters them here. A city has tens
@@ -62,19 +64,35 @@ const NO_SUCH_FUNCTION = 'PGRST202';
  */
 let directoryMissing = false;
 
+/**
+ * Cleared once a server's venues_directory has turned out not to take
+ * p_province (it predates 20261114130000), for the same reason.
+ */
+let provinceSupported = true;
+
 type Outcome = { ok: true; venues: NearbyVenue[] } | { ok: false };
 
 async function fetchArea(near: Coords, radius: number): Promise<Outcome> {
   if (!directoryMissing) {
+    // Which province the rounded point is in, worked out here: organisations
+    // that serve a whole province are listed in that province only.
+    const province = provinceSupported ? await provinceAt(near) : null;
     // publicSupabase, not supabase: this carries a place, and must not carry
     // the account with it. See @/lib/location-privacy.
     const { data, error } = await publicSupabase.rpc('venues_directory', {
       p_lat: near.latitude,
       p_lng: near.longitude,
       p_radius_meters: radius,
+      ...(province === null ? {} : { p_province: province }),
     });
     if (!error) return { ok: true, venues: (data as NearbyVenue[] | null) ?? [] };
     if (error.code !== NO_SUCH_FUNCTION) return { ok: false };
+    // A server from before service areas (20261114130000) has venues_directory
+    // without p_province: ask it again the way it understands.
+    if (province !== null && provinceSupported) {
+      provinceSupported = false;
+      return fetchArea(near, radius);
+    }
     directoryMissing = true;
   }
 
@@ -237,6 +255,29 @@ export function arrangePlaces(
   nearby.sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
   online.sort((a, b) => a.venue.name.localeCompare(b.venue.name));
   return { nearby, online };
+}
+
+/** How many online rows a folded section shows before "Show all". */
+const ONLINE_PREVIEW = 3;
+
+/**
+ * The online section, folded: in a list of everything around, the places you
+ * can go to come first and the organisations with no public address would
+ * otherwise run on for screens after them. Shows the first few and a count;
+ * one press opens the rest for as long as the screen is open.
+ *
+ * Never folded when `open` is true: a search (what was asked for is what is
+ * shown) or a single kind (somebody who chose Shelter wants every shelter).
+ */
+export function useOnlineFold(rows: PlaceRow[], open: boolean) {
+  const [expanded, setExpanded] = React.useState(false);
+  const folded = !open && !expanded && rows.length > ONLINE_PREVIEW + 1;
+  return {
+    rows: folded ? rows.slice(0, ONLINE_PREVIEW) : rows,
+    /** How many there are in all, when folded; null when everything is showing. */
+    hiddenOf: folded ? rows.length : null,
+    expand: React.useCallback(() => setExpanded(true), []),
+  };
 }
 
 /**

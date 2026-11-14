@@ -19,7 +19,7 @@ import {
 
 import { LargeTitleScreen } from '@/components/chenfeng/large-title-screen';
 import { ChenfengLocationChoiceScreen } from '@/components/chenfeng/location-choice';
-import { ChenfengPlaceRows } from '@/components/chenfeng/venue-list';
+import { ChenfengOnlineRows, ChenfengPlaceRows } from '@/components/chenfeng/venue-list';
 import { usePlaceSheets } from '@/components/directory-sheets';
 import { DirectoryTransition } from '@/components/directory-transition';
 import { DistanceMeter } from '@/components/distance-meter';
@@ -30,7 +30,7 @@ import { Input } from '@/components/ui/input';
 import { EmptyState, List, Row, Section } from '@/components/ui/list';
 import { Text } from '@/components/ui/text';
 import { directoryLead, EVERY_KIND, ONLINE_KIND, useDirectory, type Directory } from '@/lib/directory';
-import { DIRECTORY_TEXT, ONLINE_TEXT } from '@/lib/directory-text';
+import { DIRECTORY_TEXT } from '@/lib/directory-text';
 import { EVERY_KIND_ICON, kindIcon } from '@/lib/kind-icons';
 import { useTagIcons } from '@/lib/tag-icons';
 import { cn } from '@/lib/utils';
@@ -199,10 +199,12 @@ function Body({
         />
       ) : null}
       {places.online.length > 0 ? (
-        <ChenfengPlaceRows
+        <ChenfengOnlineRows
           plain={false}
-          header={onlineKind ? undefined : ONLINE_TEXT.headingTitle}
-          footer={onlineKind ? undefined : ONLINE_TEXT.lead}
+          // Folded only over every kind at once: a search, or a kind somebody
+          // chose, shows all it found.
+          open={kind !== null || view === 'search'}
+          heading={!onlineKind}
           rows={places.online}
           listed
           onSelect={onSelect}

@@ -22,7 +22,7 @@ import { EmptyState, Row, Section } from '@/components/ui/list';
 import { Menu, measureAnchor, type MenuAnchor } from '@/components/ui/menu';
 import { Text } from '@/components/ui/text';
 import { formatDistance, useListRows } from '@/components/venue-list';
-import type { PlaceRow } from '@/lib/directory';
+import { useOnlineFold, type PlaceRow } from '@/lib/directory';
 import { LIST_FILTER_TEXT, LIST_TEXT, ONLINE_TEXT } from '@/lib/directory-text';
 import { lightImpact } from '@/lib/haptics';
 import type { Coords } from '@/lib/use-location';
@@ -116,10 +116,9 @@ export function ChenfengVenueList({
               />
             ) : null}
             {places.online.length > 0 ? (
-              <ChenfengPlaceRows
-                header={ONLINE_TEXT.headingTitle}
-                footer={ONLINE_TEXT.lead}
+              <ChenfengOnlineRows
                 rows={places.online}
+                open={searching}
                 onSelect={onSelectVenue}
                 onLocate={onLocateVenue}
               />
@@ -178,9 +177,53 @@ type ChenfengPlaceRowsProps = {
   footer?: string;
   /** In the Directory, where every row is a listed place. See PlaceRowCard. */
   listed?: boolean;
+  /** A last, tinted row that opens the rest of a folded section (useOnlineFold). */
+  more?: { label: string; onPress: () => void };
   onSelect: (venue: NearbyVenue) => void;
   onLocate: (venue: NearbyVenue) => void;
 };
+
+/**
+ * The online organisations as their own section, folded to the first few with
+ * a "Show All" row while `open` is false (useOnlineFold): a search or a single
+ * kind shows everything.
+ */
+export function ChenfengOnlineRows({
+  rows,
+  open,
+  heading = true,
+  plain,
+  listed,
+  onSelect,
+  onLocate,
+}: {
+  rows: PlaceRow[];
+  open: boolean;
+  /** False under the Online kind, whose own heading has said all of this. */
+  heading?: boolean;
+  plain?: boolean;
+  listed?: boolean;
+  onSelect: (venue: NearbyVenue) => void;
+  onLocate: (venue: NearbyVenue) => void;
+}) {
+  const fold = useOnlineFold(rows, open);
+  return (
+    <ChenfengPlaceRows
+      plain={plain}
+      header={heading ? ONLINE_TEXT.headingTitle : undefined}
+      footer={heading ? ONLINE_TEXT.lead : undefined}
+      rows={fold.rows}
+      listed={listed}
+      more={
+        fold.hiddenOf !== null
+          ? { label: ONLINE_TEXT.showAllTitle(fold.hiddenOf), onPress: fold.expand }
+          : undefined
+      }
+      onSelect={onSelect}
+      onLocate={onLocate}
+    />
+  );
+}
 
 /**
  * A run of places as plain rows, with what goes with them: "Show on Map" as a
@@ -193,6 +236,7 @@ export function ChenfengPlaceRows({
   header,
   footer,
   listed,
+  more,
   onSelect,
   onLocate,
 }: ChenfengPlaceRowsProps) {
@@ -231,6 +275,7 @@ export function ChenfengPlaceRows({
             <React.Fragment key={venue.id}>{row}</React.Fragment>
           );
         })}
+        {more ? <Row title={more.label} tone="tint" onPress={more.onPress} /> : null}
       </Section>
 
       <Menu
