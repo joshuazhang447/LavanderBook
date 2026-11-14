@@ -176,6 +176,15 @@ const OAU_LABEL: React.CSSProperties = {
   fontFamily: "'LavenderBook Source Sans', system-ui, sans-serif",
 };
 const OAU_NAME: React.CSSProperties = { color: OAU_INK, fontWeight: 700 };
+/** The open card's pin: grown a little on a soft move, its label pressed in. */
+const OAU_SELECTED_HEAD: React.CSSProperties = {
+  transform: 'scale(1.15)',
+  transition: 'transform 180ms cubic-bezier(0.2, 0.9, 0.3, 1.2)',
+};
+const OAU_SELECTED_LABEL: React.CSSProperties = {
+  border: `1.5px solid ${OAU_INK}`,
+  background: skinColor('oau', 'light', 'sticker'),
+};
 const OAU_META: React.CSSProperties = { color: skinColor('oau', 'light', 'muted-foreground') };
 const OAU_GROUP: React.CSSProperties = {
   border: `1.5px solid ${OAU_INK}`,
@@ -295,11 +304,14 @@ function PlaceMarker({
   item,
   icon,
   onSelect,
+  selected = false,
 }: {
   item: PlaceItem;
   /** The tag's chosen icon key, from useTagIcons(). */
   icon: string | null;
   onSelect: (venue: NearbyVenue) => void;
+  /** Its card is open: OAU presses it into the map. */
+  selected?: boolean;
 }) {
   const shown = useShown();
   const oau = useSkin().skin === 'oau';
@@ -351,6 +363,7 @@ function PlaceMarker({
             top: geometry.pin.y,
             backgroundColor: fill,
             ...(oau ? OAU_HEAD : null),
+            ...(oau && selected ? OAU_SELECTED_HEAD : null),
           }}>
           {kindGlyph(tag?.slug ?? null, icon)}
         </div>
@@ -364,6 +377,7 @@ function PlaceMarker({
               width: geometry.label.width,
               height: geometry.label.height,
               ...(oau ? OAU_LABEL : null),
+              ...(oau && selected ? OAU_SELECTED_LABEL : null),
             }}>
             <div style={oau ? { ...nameStyle, ...OAU_NAME } : nameStyle}>{venue.name}</div>
             {rating || tag ? (
@@ -440,13 +454,14 @@ type PlaceMarkersProps = {
   onSelect: (venue: NearbyVenue) => void;
   /** Shared with the camera: true while a fly steps the map, when its idles mean nothing yet. */
   flyingRef: React.RefObject<boolean>;
+  selectedId?: string | null;
 };
 
 /**
  * Every place on the map, laid out for the current zoom (map-layout.ts):
  * pins, labels where they fit, and groups where pins would touch.
  */
-function PlaceMarkers({ venues, onSelect, flyingRef }: PlaceMarkersProps) {
+function PlaceMarkers({ venues, onSelect, flyingRef, selectedId = null }: PlaceMarkersProps) {
   const map = useMap();
   const tagIcons = useTagIcons();
   const [zoom, setZoom] = React.useState<number | null>(null);
@@ -534,6 +549,7 @@ function PlaceMarkers({ venues, onSelect, flyingRef }: PlaceMarkersProps) {
         item={item}
         icon={tagIcons[venueTags(item.venue)[0]?.slug ?? ""] ?? null}
         onSelect={onSelect}
+        selected={item.venue.id === selectedId}
       />
     )
   );
@@ -949,6 +965,8 @@ type VenueMapProps = {
    * bar sits above them instead (tab-bar.tsx).
    */
   bottomInset?: number;
+  /** The place whose card is open, which OAU draws pressed into the map. */
+  selectedVenueId?: string | null;
 };
 
 /**
@@ -977,6 +995,7 @@ export function VenueMap({
   focusRadiusMeters = VIEW_RADIUS_METERS,
   onUserPannedTo,
   onSpanChanged,
+  selectedVenueId = null,
 }: VenueMapProps) {
   const programmaticRef = React.useRef(false);
   const flyingRef = React.useRef(false);
@@ -1127,7 +1146,12 @@ export function VenueMap({
             flyingRef={flyingRef}
           />
 
-          <PlaceMarkers venues={venues} onSelect={onSelectVenue} flyingRef={flyingRef} />
+          <PlaceMarkers
+            venues={venues}
+            onSelect={onSelectVenue}
+            flyingRef={flyingRef}
+            selectedId={selectedVenueId}
+          />
 
           {/* Keyed by place: a new search remounts the pin rather than moving
               it, which is what replays the entrance fade. */}

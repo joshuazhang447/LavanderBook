@@ -364,6 +364,7 @@ export default function MapScreen() {
             setSpan(null);
           }}
           bottomInset={tabBarOverlap}
+          selectedVenueId={oau ? (viewingVenue?.id ?? null) : null}
         />
       ) : chenfeng ? (
         <ChenfengVenueList

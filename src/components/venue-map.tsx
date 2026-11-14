@@ -97,6 +97,8 @@ type VenueMapProps = {
    * they must stay visible. Zero or absent: nothing does.
    */
   bottomInset?: number;
+  /** The website draws the open card's pin pressed in; a phone's markers are bitmaps, so not here. */
+  selectedVenueId?: string | null;
 };
 
 /**
