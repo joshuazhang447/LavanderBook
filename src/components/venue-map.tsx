@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Dimensions, StyleSheet } from 'react-native';
+import { Dimensions, Platform, StyleSheet } from 'react-native';
 import MapView from 'react-native-maps';
 
 import { SearchMarker } from '@/components/search-marker';
@@ -11,7 +11,9 @@ import {
   zoomOfRegion,
   type GroupItem,
 } from '@/lib/map-layout';
+import { OAU_MAP_STYLE } from '@/lib/oau-map-style';
 import type { PlaceResult } from '@/lib/place-search';
+import { useSkin } from '@/lib/skin';
 import { useTagIcons } from '@/lib/tag-icons';
 import type { Coords } from '@/lib/use-location';
 import {
@@ -122,6 +124,10 @@ export function VenueMap({
   bottomInset = 0,
 }: VenueMapProps) {
   const mapRef = React.useRef<MapView>(null);
+  // OAU draws its own pins and, on Android, its own base map. A marker is a
+  // bitmap Android captures once, so the skin is part of its key.
+  const oau = useSkin().skin === 'oau';
+  const skinKey = oau ? 'oau' : 'plain';
   const [ready, setReady] = React.useState(false);
   const programmaticRef = React.useRef(false);
   const programmaticTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -239,6 +245,7 @@ export function VenueMap({
     <MapView
       ref={mapRef}
       style={StyleSheet.absoluteFill}
+      customMapStyle={oau && Platform.OS === 'android' ? OAU_MAP_STYLE : undefined}
       initialRegion={initialRegion}
       // Complete, not onRegionChange: the latter fires continuously through the
       // whole gesture and would fire a query per frame.
@@ -322,10 +329,10 @@ export function VenueMap({
       */}
       {items.map((item) =>
         item.kind === 'group' ? (
-          <GroupMarker key={item.key} item={item} onPress={pressGroup} />
+          <GroupMarker key={`${item.key}:${skinKey}`} item={item} onPress={pressGroup} />
         ) : (
           <PlaceMarker
-            key={placeMarkerKey(item, tagIcons[venueTags(item.venue)[0]?.slug ?? ''] ?? null)}
+            key={`${placeMarkerKey(item, tagIcons[venueTags(item.venue)[0]?.slug ?? ''] ?? null)}:${skinKey}`}
             item={item}
             icon={tagIcons[venueTags(item.venue)[0]?.slug ?? ''] ?? null}
             onPress={onSelectVenue}

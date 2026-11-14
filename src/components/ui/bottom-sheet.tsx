@@ -243,7 +243,10 @@ export function BottomSheet({
           ? 'max-w-[640px] self-center rounded-t-[28px] bg-surface-container-low'
           : oau
             ? cn(
-                'max-w-[640px] self-center rounded-t-[28px] bg-background',
+                // Wide: a centred card 560 across (oau-style-guide.md, 14.14).
+                isWide
+                  ? 'max-w-[560px] self-center rounded-[24px] border-[1.5px] border-outline-ink bg-background'
+                  : 'max-w-[640px] self-center rounded-t-[28px] bg-background',
                 Platform.select({ web: 'shadow-[0_-10px_30px_-12px_rgba(69,49,30,0.3)]' })
               )
             : 'rounded-t-3xl border-t border-border bg-background'
@@ -266,7 +269,7 @@ export function BottomSheet({
     // Rendered through the portal host at the app root, so it covers the whole
     // screen rather than the column it was opened from.
     <Portal name={name}>
-      <View className="absolute inset-0 justify-end">
+      <View className={cn('absolute inset-0', oau && isWide ? 'justify-center px-4' : 'justify-end')}>
         <Animated.View
           entering={FadeIn.duration(180)}
           exiting={FadeOut.duration(160)}

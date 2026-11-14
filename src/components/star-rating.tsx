@@ -11,7 +11,11 @@ import { Icon } from '@/components/ui/icon';
 import { selectionTick } from '@/lib/haptics';
 import { spring } from '@/lib/motion';
 import { useSkin } from '@/lib/skin';
+import { skinColor } from '@/lib/theme';
 import { cn } from '@/lib/utils';
+
+/** OAU's star fill: marigold, under an ink outline (oau-style-guide.md, section 13.15). */
+const OAU_MARIGOLD = skinColor('oau', 'light', 'star');
 
 export const STAR_HINT: Record<number, string> = {
   1: 'Hostile',
@@ -54,7 +58,20 @@ const CHENFENG_STAR_CLASS: Record<Size, string> = {
 };
 
 function StarIcon({ earned, className }: { earned: boolean; className: string }) {
-  const chenfeng = useSkin().skin === 'chenfeng';
+  const { skin } = useSkin();
+  const chenfeng = skin === 'chenfeng';
+  // OAU: a sticker star - marigold inside an ink outline; an empty one is
+  // outlined in the fields' brown.
+  if (skin === 'oau') {
+    return (
+      <Icon
+        as={Star}
+        className={cn(className, earned ? 'text-outline-ink' : 'text-input')}
+        fill={earned ? OAU_MARIGOLD : 'none'}
+        strokeWidth={1.75}
+      />
+    );
+  }
   return (
     <Icon
       as={Star}
@@ -121,7 +138,9 @@ function StarButton({
   className: string;
   onChange: (value: number) => void;
 }) {
-  const chenfeng = useSkin().skin === 'chenfeng';
+  const { skin } = useSkin();
+  const chenfeng = skin === 'chenfeng';
+  const oau = skin === 'oau';
   const scale = useSharedValue(1);
   const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.get() }] }));
 
@@ -131,15 +150,21 @@ function StarButton({
         // A small, quickly-damped nudge. Anything larger reads as a jump.
         // .set rather than .value =, which the React Compiler rejects as a mutation.
         // Chenfeng's bounces on .bouncy, with the tick iOS plays for a pick.
+        // OAU's is a stamp: pressed in a little further, settling flat.
         scale.set(
           chenfeng
             ? withSequence(withSpring(1.2, spring('snappy')), withSpring(1, spring('bouncy')))
-            : withSequence(
-                withSpring(1.15, { damping: 18, stiffness: 450 }),
-                withSpring(1, { damping: 20, stiffness: 300 })
-              )
+            : oau
+              ? withSequence(
+                  withSpring(1.25, { damping: 14, stiffness: 520 }),
+                  withSpring(1, { damping: 18, stiffness: 260 })
+                )
+              : withSequence(
+                  withSpring(1.15, { damping: 18, stiffness: 450 }),
+                  withSpring(1, { damping: 20, stiffness: 300 })
+                )
         );
-        if (chenfeng) selectionTick();
+        if (chenfeng || oau) selectionTick();
         onChange(star);
       }}
       accessibilityRole="radio"
@@ -148,7 +173,9 @@ function StarButton({
       // its own max is a different scale, and "6 of 8, undefined" helps nobody.
       accessibilityLabel={max === 5 ? `${star} of 5, ${STAR_HINT[star]}` : `${star} of ${max}`}
       // No grey box behind a pressed star in Chenfeng: iOS has none.
-      className={chenfeng ? 'p-1 active:opacity-60' : 'rounded-md p-1 active:bg-accent'}>
+      className={
+        chenfeng || oau ? 'p-1 active:opacity-60' : 'rounded-md p-1 active:bg-accent'
+      }>
       <Animated.View style={style}>
         <StarIcon earned={value !== null && star <= value} className={className} />
       </Animated.View>

@@ -123,6 +123,7 @@ type BodyProps = {
 };
 
 function Body({ directory, onSelect, onLocate }: BodyProps) {
+  const { isWide: wide } = useIsWideViewport();
   if (directory.failed) {
     return (
       <Notice icon={TriangleAlert} title={DIRECTORY_TEXT.failedTitle} text={DIRECTORY_TEXT.failed}>
@@ -178,8 +179,9 @@ function Body({ directory, onSelect, onLocate }: BodyProps) {
     );
   }
 
-  // One kind, or every place.
-  return (
+  // One kind, or every place. Wide: the header card in a column of its own
+  // beside the places (section 14.14).
+  const header = (
     <View className="gap-4">
       <View className="items-start">
         <Button variant="secondary" size="sm" onPress={directory.back}>
@@ -188,6 +190,21 @@ function Body({ directory, onSelect, onLocate }: BodyProps) {
         </Button>
       </View>
       <KindHeader kind={kind} count={count} onChange={directory.back} />
+    </View>
+  );
+  if (wide) {
+    return (
+      <View className="flex-row items-start gap-6">
+        <View className="w-[300px]">{header}</View>
+        <View className="flex-1 pt-12">
+          <Places directory={directory} onSelect={onSelect} onLocate={onLocate} />
+        </View>
+      </View>
+    );
+  }
+  return (
+    <View className="gap-4">
+      {header}
       <Places directory={directory} onSelect={onSelect} onLocate={onLocate} />
     </View>
   );

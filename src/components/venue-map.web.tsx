@@ -49,6 +49,13 @@ const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY;
  */
 const mapId = process.env.EXPO_PUBLIC_GOOGLE_MAPS_MAP_ID || 'DEMO_MAP_ID';
 
+/**
+ * OAU's warm base map (oau-style-guide.md, section 10) is a Map ID's style,
+ * set in the Google Cloud console, not in code. Until one is set the map keeps
+ * the ordinary Map ID and OAU's stickers carry the look.
+ */
+const oauMapId = process.env.EXPO_PUBLIC_GOOGLE_MAPS_MAP_ID_OAU || null;
+
 /** Ground resolution at zoom 0 on the equator, in metres per pixel. */
 const EQUATOR_METERS_PER_PIXEL = 156543.03392;
 
@@ -154,7 +161,8 @@ const UNTAGGED_PIN = '#475569';
 const OAU_INK = skinColor('oau', 'light', 'outline-ink');
 const OAU_HEAD: React.CSSProperties = {
   border: `1.5px solid ${OAU_INK}`,
-  boxShadow: '0 2px 5px rgba(166,134,89,0.45)',
+  // A cream ring inside the ink, as a sticker's edge.
+  boxShadow: 'inset 0 0 0 2px #FFFDF9, 0 2px 5px rgba(166,134,89,0.45)',
 };
 const OAU_TIP: React.CSSProperties = {
   borderRight: `1.5px solid ${OAU_INK}`,
@@ -174,7 +182,8 @@ const OAU_GROUP: React.CSSProperties = {
   background: skinColor('oau', 'light', 'band'),
   backgroundImage: 'none',
   color: OAU_INK,
-  boxShadow: '0 0 0 4px rgba(69,49,30,0.14), 0 2px 5px rgba(166,134,89,0.4)',
+  // A little stack of stickers behind it: blue, then pink.
+  boxShadow: `3px 3px 0 0 ${skinColor('oau', 'light', 'note-rule')}, 6px 6px 0 0 ${skinColor('oau', 'light', 'oau-pink')}, 0 2px 5px rgba(166,134,89,0.4)`,
   fontFamily: "'LavenderBook Source Sans', system-ui, sans-serif",
 };
 
@@ -971,6 +980,8 @@ export function VenueMap({
 }: VenueMapProps) {
   const programmaticRef = React.useRef(false);
   const flyingRef = React.useRef(false);
+  // A Map ID cannot change on a live map; switching skin remounts it (keyed below).
+  const shownMapId = useSkin().skin === 'oau' && oauMapId ? oauMapId : mapId;
   // The span last handed to onSpanChanged.
   const reportedSpanRef = React.useRef<number | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
@@ -1052,8 +1063,9 @@ export function VenueMap({
     <View className="flex-1">
       <APIProvider apiKey={apiKey}>
         <Map
+          key={shownMapId}
           style={{ width: '100%', height: '100%' }}
-          mapId={mapId}
+          mapId={shownMapId}
           defaultCenter={{ lat: center.latitude, lng: center.longitude }}
           defaultZoom={zoomForRadius(center.latitude, initialRadiusMeters)}
           // A raster map rounds every zoom to a whole level unless told not to:
