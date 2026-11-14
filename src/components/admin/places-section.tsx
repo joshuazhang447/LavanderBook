@@ -3,6 +3,7 @@ import {
   ChevronLeft,
   ChevronRight,
   EyeOff,
+  Globe,
   MapPin,
   MoreHorizontal,
   Plus,
@@ -54,6 +55,7 @@ import {
 import { Text } from '@/components/ui/text';
 import {
   deleteVenue,
+  isOnlineVenue,
   listAdminTags,
   listAdminVenues,
   setVenueTags,
@@ -278,7 +280,17 @@ function VenueRow({ venue, onEdit, onEditTags, onDelete, onChanged, onShowReview
               <Text className="text-xs text-muted-foreground">{reviewLabel(venue)}</Text>
             )}
             <Text className="text-xs text-muted-foreground">· {summarise(venue)}</Text>
-            {!venue.onMap ? (
+            {/* An online organisation is off the map by design, not by
+                mistake: it is listed in the app's list and Directory. Only a
+                place that should be on the map and is not gets the warning. */}
+            {isOnlineVenue(venue) && noCoords ? (
+              <View className="flex-row items-center gap-1">
+                <Icon as={Globe} className="size-3 text-muted-foreground" />
+                <Text className="text-xs text-muted-foreground">
+                  online: in the list and Directory, never on the map
+                </Text>
+              </View>
+            ) : !venue.onMap ? (
               <View className="flex-row items-center gap-1">
                 <Icon as={EyeOff} className="size-3 text-destructive" />
                 <Text className="text-xs text-destructive">
@@ -658,11 +670,13 @@ export function PlacesSection({ visible, onShowReviews }: PlacesSectionProps) {
         <PlaceDialog
           allTags={tags}
           onClose={() => setAdding(false)}
-          onSaved={({ created, name }) => {
+          onSaved={({ created, name, online }) => {
             setNotice(
-              created
-                ? `Added ${name}. It is on the map now.`
-                : `We already knew ${name} — your tags were added to it.`
+              online
+                ? `Added ${name}. It is in the app's list and Directory, under Online.`
+                : created
+                  ? `Added ${name}. It is on the map now.`
+                  : `We already knew ${name} — your tags were added to it.`
             );
             refetch();
           }}
