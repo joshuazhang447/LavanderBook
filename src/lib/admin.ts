@@ -484,6 +484,15 @@ export async function updateTag(id: string, draft: TagDraft): Promise<void> {
   if (error) throw new Error(describe(error));
 }
 
+/**
+ * Sets the icon a tag's places are drawn with: a key from src/lib/kind-icons.ts,
+ * or null for the slug's default. The server checks only the key's shape.
+ */
+export async function setTagIcon(id: string, icon: string | null): Promise<void> {
+  const { error } = await supabase.rpc('admin_set_tag_icon', { p_tag_id: id, p_icon: icon ?? '' });
+  if (error) throw new Error(describe(error));
+}
+
 /** Retires a tag without touching anything that references it. Reversible. */
 export async function setTagArchived(id: string, archived: boolean): Promise<string | null> {
   const { data, error } = await supabase.rpc('admin_set_tag_archived', {
