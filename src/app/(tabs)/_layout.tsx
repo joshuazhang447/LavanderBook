@@ -19,6 +19,7 @@ export default function TabsLayout() {
       */}
       <TabList style={{ display: 'none' }}>
         <TabTrigger name="map" href="/" />
+        <TabTrigger name="directory" href="/directory" />
         <TabTrigger name="account" href="/account" />
       </TabList>
 
@@ -32,7 +33,7 @@ export default function TabsLayout() {
         detachInactiveScreens defaults to true, which tears the map's native view
         down while you are on another tab. A camera move issued during the
         re-attach window is silently dropped - which is why Locate moved the map
-        only sometimes. Two screens is cheap to keep alive.
+        only sometimes. Three screens is cheap to keep alive.
 
         Native only. react-native-screens' web Screen drops the style prop
         outright on its not-detaching path, discarding both expo-router's

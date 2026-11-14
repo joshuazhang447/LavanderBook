@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import * as React from 'react';
-import { Platform, View, type ScrollViewProps } from 'react-native';
+import { Platform, View, type ScrollView, type ScrollViewProps } from 'react-native';
 import Animated, {
   Extrapolation,
   interpolate,
@@ -36,6 +36,8 @@ type LargeTitleScreenProps = Omit<ScrollViewProps, 'children'> & {
   back?: boolean;
   /** A 44 pt glass button at the bar's trailing end. */
   trailing?: React.ReactNode;
+  /** The scroll view, for a screen that scrolls itself back to the top. */
+  scrollRef?: React.Ref<ScrollView>;
   children: React.ReactNode;
 };
 
@@ -54,6 +56,7 @@ export function LargeTitleScreen({
   grouped,
   back,
   trailing,
+  scrollRef,
   children,
   contentContainerStyle,
   ...props
@@ -68,6 +71,7 @@ export function LargeTitleScreen({
     return (
       <Animated.ScrollView
         {...props}
+        ref={scrollRef as React.Ref<Animated.ScrollView>}
         contentInsetAdjustmentBehavior="automatic"
         className={cn('flex-1', background)}
         contentContainerStyle={[
@@ -91,6 +95,7 @@ export function LargeTitleScreen({
       back={back}
       trailing={trailing}
       scrollY={scrollY}
+      scrollRef={scrollRef}
       contentContainerStyle={contentContainerStyle}
       scrollProps={props}>
       {children}
@@ -106,6 +111,7 @@ function DrawnLargeTitle({
   back,
   trailing,
   scrollY,
+  scrollRef,
   contentContainerStyle,
   scrollProps,
   children,
@@ -117,6 +123,7 @@ function DrawnLargeTitle({
   back?: boolean;
   trailing?: React.ReactNode;
   scrollY: ReturnType<typeof useSharedValue<number>>;
+  scrollRef?: React.Ref<ScrollView>;
   contentContainerStyle: ScrollViewProps['contentContainerStyle'];
   scrollProps: Omit<ScrollViewProps, 'children'>;
   children: React.ReactNode;
@@ -141,6 +148,7 @@ function DrawnLargeTitle({
     <View className={cn('flex-1', background)}>
       <Animated.ScrollView
         {...scrollProps}
+        ref={scrollRef as React.Ref<Animated.ScrollView>}
         onScroll={onScroll}
         scrollEventThrottle={16}
         className="flex-1"

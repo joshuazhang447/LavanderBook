@@ -1,5 +1,5 @@
 import { TabTrigger, useTabTrigger, type TabTriggerSlotProps } from 'expo-router/ui';
-import { CircleUser, Map as MapIcon, Search, type LucideIcon } from 'lucide-react-native';
+import { BookOpen, CircleUser, Map as MapIcon, Search, type LucideIcon } from 'lucide-react-native';
 import * as React from 'react';
 import type { ReactNode } from 'react';
 import { Platform, Pressable, useWindowDimensions, View } from 'react-native';
@@ -28,6 +28,9 @@ import { cn } from '@/lib/utils';
  */
 const TABS = [
   { name: 'map', label: 'Map', chenfengLabel: 'Map', icon: MapIcon },
+  // Every place LavenderBook lists around here, by kind. A book, for the app's
+  // own name and because a directory is one.
+  { name: 'directory', label: 'Directory', chenfengLabel: 'Directory', icon: BookOpen },
   // iOS uses possessives sparingly: Chenfeng says "Account".
   { name: 'account', label: 'My Account', chenfengLabel: 'Account', icon: CircleUser },
 ] as const satisfies readonly {
@@ -282,8 +285,10 @@ const GLASS_BAR_HEIGHT = 62;
 const GLASS_BAR_FLOOR = 12;
 /** From the screen's sides. */
 const GLASS_BAR_SIDE = 16;
-/** One tab's width while the bar hugs two of them (estimate). */
+/** One tab's width where there is room for it (estimate). */
 const GLASS_TAB_WIDTH = 96;
+/** The gap between the bar and the search circle beside it. */
+const GLASS_BAR_GAP = 8;
 /** The capsule's padding around the selected pill. */
 const GLASS_BAR_PADDING = 4;
 
@@ -320,7 +325,33 @@ export function useTabBarOverlap(): number {
   return glassBarBottom(insets.bottom) + GLASS_BAR_HEIGHT;
 }
 
-type GlassTabProps = TabButtonProps & { index: number; onPressed: (index: number | null) => void };
+/**
+ * How wide each of the floating bar's tabs is: 96 where the screen has room,
+ * less on a phone - three tabs at 96, the search circle and the margins are
+ * wider than a 375 pt screen, and the bar must never push search off the edge.
+ * Whatever is left after search, its gap and the bar's own padding is shared
+ * out, so a fourth tab would only need adding to TABS.
+ */
+function useGlassTabWidth(): number {
+  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const room =
+    width -
+    insets.left -
+    insets.right -
+    GLASS_BAR_SIDE * 2 -
+    GLASS_BAR_HEIGHT -
+    GLASS_BAR_GAP -
+    GLASS_BAR_PADDING * 2;
+  // The floor is for the prerender, where the width is zero.
+  return Math.max(64, Math.min(GLASS_TAB_WIDTH, Math.floor(room / TABS.length)));
+}
+
+type GlassTabProps = TabButtonProps & {
+  index: number;
+  width: number;
+  onPressed: (index: number | null) => void;
+};
 
 /**
  * One Chenfeng tab: the symbol over a 10 pt semibold label, in the tint when
@@ -332,6 +363,7 @@ function GlassTab({
   label,
   isFocused,
   index,
+  width,
   onPressed,
   onPressIn,
   onPressOut,
@@ -364,7 +396,7 @@ function GlassTab({
         // Content Viewer on a long press instead.
         accessibilityShowsLargeContentViewer
         accessibilityLargeContentTitle={label}
-        style={{ width: GLASS_TAB_WIDTH }}
+        style={{ width }}
         className={cn(
           'h-full items-center justify-center',
           Platform.select({ web: 'cursor-pointer select-none outline-none' })
@@ -424,7 +456,7 @@ function GlassSearchButton({ size }: { size: number }) {
 
 /**
  * Chenfeng: iOS 26's tab bar - a glass capsule floating over the screen, so the
- * map shows through, hugging its two tabs at the leading margin, with search as
+ * map shows through, hugging its tabs at the leading margin, with search as
  * its own circle at the trailing one. The pill behind the current tab slides
  * to the next with .smooth. Screens keep their content clear of it with
  * useTabBarOverlap. It stands aside while search is open: the search field
@@ -440,12 +472,13 @@ function GlassTabBar() {
     TABS.findIndex((tab) => getTrigger(tab.name)?.isFocused)
   );
   const [pressed, setPressed] = React.useState<number | null>(null);
-  const pillX = useSharedValue(focused * GLASS_TAB_WIDTH);
+  const tabWidth = useGlassTabWidth();
+  const pillX = useSharedValue(focused * tabWidth);
   const pillScale = useSharedValue(1);
 
   React.useEffect(() => {
-    pillX.set(withSpring(focused * GLASS_TAB_WIDTH, spring('smooth', reduceMotion)));
-  }, [focused, pillX, reduceMotion]);
+    pillX.set(withSpring(focused * tabWidth, spring('smooth', reduceMotion)));
+  }, [focused, tabWidth, pillX, reduceMotion]);
 
   React.useEffect(() => {
     // Pressing the current tab swells its pill, as glass.
@@ -477,7 +510,7 @@ function GlassTabBar() {
         elevation: 10,
       }}
       className="absolute flex-row items-center justify-between">
-      <GlassGroup className="flex-row" spacing={8}>
+      <GlassGroup className="flex-row" spacing={GLASS_BAR_GAP}>
         <Glass radius={GLASS_BAR_HEIGHT / 2} overMap style={{ height: GLASS_BAR_HEIGHT }}>
           <View className="h-full flex-row" style={{ padding: GLASS_BAR_PADDING }}>
             <Animated.View
@@ -488,7 +521,7 @@ function GlassTabBar() {
                   top: GLASS_BAR_PADDING,
                   bottom: GLASS_BAR_PADDING,
                   left: GLASS_BAR_PADDING,
-                  width: GLASS_TAB_WIDTH,
+                  width: tabWidth,
                 },
                 pillStyle,
               ]}
@@ -499,6 +532,7 @@ function GlassTabBar() {
                   icon={tab.icon}
                   label={tab.chenfengLabel}
                   index={index}
+                  width={tabWidth}
                   onPressed={setPressed}
                 />
               </TabTrigger>
