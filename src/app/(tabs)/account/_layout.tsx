@@ -2,6 +2,7 @@ import { Stack } from 'expo-router';
 import { useColorScheme } from 'nativewind';
 import { Platform } from 'react-native';
 
+import { TabTint } from '@/components/oau/tab-tint';
 import { useSkin } from '@/lib/skin';
 import { skinColor } from '@/lib/theme';
 
@@ -21,32 +22,37 @@ export default function AccountLayout() {
   const nativeHeader = chenfeng && Platform.OS === 'ios';
 
   return (
-    <Stack
-      screenOptions={
-        nativeHeader
-          ? {
-              headerShown: true,
-              headerLargeTitleEnabled: true,
-              headerTransparent: true,
-              headerShadowVisible: false,
-              headerLargeTitleShadowVisible: false,
-              headerBackButtonDisplayMode: 'minimal',
-              // Bar symbols are monochrome; only the primary action is tinted.
-              headerTintColor: skinColor('chenfeng', scheme, 'foreground'),
-              contentStyle: { backgroundColor: skinColor('chenfeng', scheme, 'grouped') },
-            }
-          : {
-              headerShown: false,
-              animation: chenfeng && Platform.OS === 'android' ? 'ios_from_right' : undefined,
-            }
-      }>
-      <Stack.Screen name="index" options={{ title: 'Account' }} />
-      <Stack.Screen name="location" options={{ title: 'Use My Location' }} />
-      <Stack.Screen name="leave-now" options={{ title: 'Leave Now Button' }} />
-      <Stack.Screen name="names" options={{ title: 'Per-Place Names' }} />
-      <Stack.Screen name="dates" options={{ title: 'Hide Exact Dates' }} />
-      <Stack.Screen name="appearance" options={{ title: 'Appearance' }} />
-      <Stack.Screen name="privacy" options={{ title: 'Privacy Policy' }} />
-    </Stack>
+    // OAU's pink, for everything in My Account.
+    <TabTint tab="account">
+      <Stack
+        screenOptions={
+          nativeHeader
+            ? {
+                headerShown: true,
+                headerLargeTitleEnabled: true,
+                headerTransparent: true,
+                headerShadowVisible: false,
+                headerLargeTitleShadowVisible: false,
+                headerBackButtonDisplayMode: 'minimal',
+                // Bar symbols are monochrome; only the primary action is tinted.
+                headerTintColor: skinColor('chenfeng', scheme, 'foreground'),
+                contentStyle: {
+                  backgroundColor: skinColor('chenfeng', scheme, 'grouped'),
+                },
+              }
+            : {
+                headerShown: false,
+                animation: chenfeng && Platform.OS === 'android' ? 'ios_from_right' : undefined,
+              }
+        }>
+        <Stack.Screen name="index" options={{ title: 'Account' }} />
+        <Stack.Screen name="location" options={{ title: 'Use My Location' }} />
+        <Stack.Screen name="leave-now" options={{ title: 'Leave Now Button' }} />
+        <Stack.Screen name="names" options={{ title: 'Per-Place Names' }} />
+        <Stack.Screen name="dates" options={{ title: 'Hide Exact Dates' }} />
+        <Stack.Screen name="appearance" options={{ title: 'Appearance' }} />
+        <Stack.Screen name="privacy" options={{ title: 'Privacy Policy' }} />
+      </Stack>
+    </TabTint>
   );
 }

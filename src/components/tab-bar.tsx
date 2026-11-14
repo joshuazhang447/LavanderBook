@@ -17,6 +17,7 @@ import { openMapSearch, useMapSearchOpen } from '@/lib/map-search-state';
 import { stateLayerOpacity } from '@/lib/material';
 import { materialSpring, spring } from '@/lib/motion';
 import { useSkin } from '@/lib/skin';
+import { oauTabColor } from '@/lib/theme';
 import { cn } from '@/lib/utils';
 
 /**
@@ -108,6 +109,7 @@ function TabButton({
 export function TopTabBar({ trailing }: { trailing?: ReactNode }) {
   const { skin } = useSkin();
   if (skin === 'chenfeng') return <ChenfengTopBar trailing={trailing} />;
+  if (skin === 'oau') return <OauTopBar trailing={trailing} />;
   return <BasicTopBar trailing={trailing} />;
 }
 
@@ -148,7 +150,166 @@ export function BottomTabBar() {
   const { skin } = useSkin();
   if (skin === 'material') return <MaterialTabBar />;
   if (skin === 'chenfeng') return <GlassTabBar />;
+  if (skin === 'oau') return <OauTabBar />;
   return <BasicTabBar />;
+}
+
+/**
+ * OAU's bars (LavenderBookStyle/oau-style-guide.md, sections 13.3-13.4). Each
+ * tab has its own colour of the trans flag - the Map blue, the Directory white,
+ * My Account pink - and the bar carries all three: a thin flag in equal thirds
+ * along its edge, and the current tab in a pill of its own colour.
+ */
+function FlagThirds() {
+  return (
+    <View pointerEvents="none" className="absolute -top-px left-0 right-0 h-[3px] flex-row">
+      <View className="flex-1 bg-flag-trans-blue" />
+      {/* An ink hairline above and below, so the white third holds on cream. */}
+      <View className="flex-1 border-y-hairline border-separator bg-flag-trans-white" />
+      <View className="flex-1 bg-flag-trans-pink" />
+    </View>
+  );
+}
+
+type OauTabProps = TabButtonProps & { tab: TabName };
+
+/** One of the bottom bar's tabs: the icon in a 56 x 32 pill, the label under it. */
+function OauTab({
+  tab,
+  icon,
+  label,
+  isFocused,
+  // Dropped for the same reason as in TabButton. Do not "clean up".
+  style: _injected,
+  ...rest
+}: OauTabProps) {
+  return (
+    <TextClassContext.Provider value={isFocused ? 'text-foreground' : 'text-muted-foreground'}>
+      <Pressable
+        {...rest}
+        role="tab"
+        aria-selected={!!isFocused}
+        aria-label={label}
+        className={cn(
+          'flex-1 items-center justify-center gap-0.5',
+          Platform.select({ web: 'cursor-pointer select-none' }),
+        )}>
+        <View
+          className={cn(
+            'h-8 w-14 items-center justify-center rounded-full border-[1.5px]',
+            isFocused ? 'border-outline-ink' : 'border-transparent',
+          )}
+          style={isFocused ? { backgroundColor: oauTabColor(tab, 'sticker') } : undefined}>
+          <Icon as={icon} className="size-[22px]" />
+        </View>
+        <Text
+          oauStyle="micro"
+          maxFontSizeMultiplier={1.3}
+          numberOfLines={1}
+          className={isFocused ? 'font-bold' : undefined}>
+          {label}
+        </Text>
+      </Pressable>
+    </TextClassContext.Provider>
+  );
+}
+
+/** Narrow screens: the memorial's cream, 64 tall, every tab labelled. */
+function OauTabBar() {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <View
+      style={{
+        paddingBottom: insets.bottom,
+        paddingLeft: insets.left,
+        paddingRight: insets.right,
+      }}
+      className="border-t border-border bg-band">
+      <FlagThirds />
+      <View className="h-16 flex-row">
+        {TABS.map((tab) => (
+          <TabTrigger key={tab.name} name={tab.name} asChild>
+            <OauTab tab={tab.name} icon={tab.icon} label={tab.label} />
+          </TabTrigger>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/** One of the wide header's tabs: icon and label, a rule in its colour while current. */
+function OauTopTab({
+  tab,
+  icon,
+  label,
+  isFocused,
+  // Dropped for the same reason as in TabButton. Do not "clean up".
+  style: _injected,
+  ...rest
+}: OauTabProps) {
+  return (
+    <TextClassContext.Provider value={isFocused ? 'text-foreground' : 'text-muted-foreground'}>
+      <Pressable
+        {...rest}
+        role="tab"
+        aria-selected={!!isFocused}
+        aria-label={label}
+        className={cn(
+          'h-16 flex-row items-center gap-2 px-3',
+          Platform.select({
+            web: 'cursor-pointer select-none hover:bg-accent',
+          }),
+        )}>
+        <Icon as={icon} className="size-[18px]" />
+        <Text oauStyle="label" className={isFocused ? 'font-bold' : undefined}>
+          {label}
+        </Text>
+        {isFocused ? (
+          <View
+            pointerEvents="none"
+            className="absolute bottom-0 left-2 right-2 h-[3px] rounded-t-[3px] border-x-hairline border-t-hairline border-separator"
+            style={{ backgroundColor: oauTabColor(tab, 'oau-flag') }}
+          />
+        ) : null}
+      </Pressable>
+    </TextClassContext.Provider>
+  );
+}
+
+/** Wide screens: the book and its name in Halant, OAU's credit, then the tabs. */
+function OauTopBar({ trailing }: { trailing?: ReactNode }) {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <View
+      style={{
+        paddingTop: insets.top,
+        paddingLeft: insets.left,
+        paddingRight: insets.right,
+      }}
+      className="border-b border-border bg-band">
+      <View className="h-16 w-full max-w-5xl flex-row items-center justify-between self-center px-6">
+        <View className="flex-row items-center gap-3">
+          <View className="flex-row items-center gap-2">
+            <LogoImage logo={BOOK_MARK} />
+            <Text oauStyle="heading" className="text-foreground">
+              LavenderBook
+            </Text>
+          </View>
+          <OauHeaderCredit />
+        </View>
+        <View className="flex-row items-center gap-1">
+          {TABS.map((tab) => (
+            <TabTrigger key={tab.name} name={tab.name} asChild>
+              <OauTopTab tab={tab.name} icon={tab.icon} label={tab.label} />
+            </TabTrigger>
+          ))}
+          {trailing}
+        </View>
+      </View>
+    </View>
+  );
 }
 
 /** Basic: icons only. */
