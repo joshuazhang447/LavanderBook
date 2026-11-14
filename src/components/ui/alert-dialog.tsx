@@ -1,6 +1,8 @@
 import { buttonTextVariants, buttonVariants } from '@/components/ui/button';
+import { useTabTintProps } from '@/components/oau/tab-tint';
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view';
 import { TextClassContext } from '@/components/ui/text';
+import { useSkin } from '@/lib/skin';
 import { cn } from '@/lib/utils';
 import * as AlertDialogPrimitive from '@rn-primitives/alert-dialog';
 import * as React from 'react';
@@ -9,6 +11,11 @@ import { FadeIn, FadeOut, ReduceMotion } from 'react-native-reanimated';
 import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens';
 
 const AlertDialog = AlertDialogPrimitive.Root;
+
+/** OAU's windows, as the Dialog's (dialog.tsx): ink outline, rounder, a warm dim, Halant title. */
+const OAU_CONTENT = 'rounded-[24px] border-[1.5px] border-outline-ink';
+const OAU_DIM = 'bg-[rgba(69,49,30,0.28)]';
+const OAU_TITLE = 'font-oau-display text-oau-heading';
 
 const AlertDialogTrigger = AlertDialogPrimitive.Trigger;
 
@@ -49,21 +56,28 @@ function AlertDialogOverlay({
 function AlertDialogContent({
   className,
   portalHost,
+  style,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Content> & {
     portalHost?: string;
   }) {
+  const oau = useSkin().skin === 'oau';
+  // The tab's colours, read before the window leaves the tab (dialog.tsx).
+  const tint = useTabTintProps();
   return (
     <AlertDialogPortal hostName={portalHost}>
-      <AlertDialogOverlay>
+      <AlertDialogOverlay className={oau ? OAU_DIM : undefined}>
         <AlertDialogPrimitive.Content
           className={cn(
             'bg-background border-border z-50 flex w-full max-w-[calc(100%-2rem)] flex-col gap-4 rounded-lg border p-6 shadow-lg shadow-black/5 sm:max-w-lg',
+            oau && OAU_CONTENT,
+            oau && tint.className,
             Platform.select({
               web: 'animate-in fade-in-0 zoom-in-95 duration-200',
             }),
             className
           )}
+          style={oau && tint.style ? [tint.style, style] : style}
           {...props}
         />
       </AlertDialogOverlay>
@@ -92,9 +106,10 @@ function AlertDialogTitle({
   className,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Title>) {
+  const oau = useSkin().skin === 'oau';
   return (
     <AlertDialogPrimitive.Title
-      className={cn('text-foreground text-lg font-semibold', className)}
+      className={cn('text-foreground text-lg font-semibold', oau && OAU_TITLE, className)}
       {...props}
     />
   );

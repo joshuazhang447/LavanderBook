@@ -19,6 +19,7 @@ import { clearMapFocus, focusMapOn, useMapFocus } from '@/lib/map-focus';
 import type { MapViewMode } from '@/components/map-controls';
 import { MapControls, RecenterButton } from '@/components/map-controls';
 import { MapSearch } from '@/components/map-search';
+import { OauMapChrome } from '@/components/oau/map-panel';
 import { ReviewSheet } from '@/components/review-sheet';
 import { Text } from '@/components/ui/text';
 import { VenueMap } from '@/components/venue-map';
@@ -96,7 +97,12 @@ export default function MapScreen() {
   // Chenfeng: the list's filter is typed into the tab bar's search field, so
   // it lives here rather than in the list. The other skins' list has its own.
   const [listQuery, setListQuery] = React.useState('');
-  const chenfeng = useSkin().skin === 'chenfeng';
+  const { skin } = useSkin();
+  const chenfeng = skin === 'chenfeng';
+  // OAU has no Map | List switch: the places are a sheet over the map (a panel
+  // on a wide screen), so its map is always showing.
+  const oau = skin === 'oau';
+  const shownMode: MapViewMode = oau ? 'map' : mode;
   // The map or the list, behind Chenfeng's floating controls.
   const content = useBackdrop();
   // Non-zero only under a tab bar floating over the map.
@@ -135,7 +141,7 @@ export default function MapScreen() {
 
   // No GPS at all in List view, or once the user has panned away.
   const { position: followPosition, anchor: followAnchor } = useFollowPosition(
-    mode === 'map' && following,
+    shownMode === 'map' && following,
     FOLLOW_REFETCH_METERS
   );
 
@@ -280,6 +286,24 @@ export default function MapScreen() {
     );
   };
 
+  // Everything around the user themselves while following, otherwise around
+  // the middle of the map - measured from there, exactly, on the device.
+  const listOrigin = following
+    ? (followPosition ?? (location.status === 'granted' ? location : fetchRegion))
+    : fetchRegion;
+
+  // From a place's card to the review form for it.
+  const writeReviewFor = (venue: NearbyVenue) => {
+    setViewingVenue(null);
+    setSelectedVenueId(venue.id);
+    setSelected({
+      placeId: venue.google_place_id ?? undefined,
+      name: venue.name,
+      latitude: venue.lat,
+      longitude: venue.lng,
+    });
+  };
+
   const locateVenue = (venue: NearbyVenue) => {
     // The lists hide Locate for these; this is the backstop, because a null
     // centre would reach the map's initialRegion.
@@ -294,7 +318,7 @@ export default function MapScreen() {
       {/* What Chenfeng's floating controls blur on Android: the map, or the
           list. No view at all on the website or iOS - see BackdropView. */}
       <BackdropView backdropRef={content.ref} style={StyleSheet.absoluteFill}>
-      {mode === 'map' ? (
+      {shownMode === 'map' ? (
         <VenueMap
           // Remounted when the map should open somewhere else; see startKey.
           key={startKey}
@@ -340,6 +364,7 @@ export default function MapScreen() {
             setSpan(null);
           }}
           bottomInset={tabBarOverlap}
+          selectedVenueId={oau ? (viewingVenue?.id ?? null) : null}
         />
       ) : chenfeng ? (
         <ChenfengVenueList
@@ -397,6 +422,30 @@ export default function MapScreen() {
             onListQuery={setListQuery}
           />
         </GlassBackdrop>
+      ) : oau ? (
+        <>
+          <OauMapChrome
+            origin={listOrigin}
+            searchOrigin={fetchRegion}
+            refreshKey={String(savedCount)}
+            refreshing={refreshing}
+            onRefresh={refresh}
+            venue={viewingVenue}
+            onSelectVenue={setViewingVenue}
+            onCloseVenue={() => setViewingVenue(null)}
+            onWriteReview={writeReviewFor}
+            onLocate={(venue) => {
+              setViewingVenue(null);
+              locateVenue(venue);
+            }}
+            onPickPlace={pickPlace}
+            onClearPlace={() => setSearchResult(null)}
+            following={following}
+            usingLocation={onDevice}
+            onRecenter={recenter}
+          />
+          <LocationChoiceDialog open={choosingLocation} onOpenChange={setChoosingLocation} />
+        </>
       ) : (
         <>
           <MapControls
@@ -431,21 +480,12 @@ export default function MapScreen() {
         <ChenfengLocationSheet onClose={() => setChoosingLocation(false)} />
       ) : null}
 
-      {viewingVenue ? (
+      {/* OAU opens the card in its places sheet or panel instead. */}
+      {viewingVenue && !oau ? (
         <VenueSheet
           venue={viewingVenue}
           onClose={() => setViewingVenue(null)}
-          onWriteReview={() => {
-            const venue = viewingVenue;
-            setViewingVenue(null);
-            setSelectedVenueId(venue.id);
-            setSelected({
-              placeId: venue.google_place_id ?? undefined,
-              name: venue.name,
-              latitude: venue.lat,
-              longitude: venue.lng,
-            });
-          }}
+          onWriteReview={() => writeReviewFor(viewingVenue)}
         />
       ) : null}
 

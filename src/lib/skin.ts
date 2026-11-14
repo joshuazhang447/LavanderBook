@@ -6,8 +6,11 @@ import { useOnAdmin } from '@/lib/safety';
 
 /**
  * The look of the app: its buttons, switches and tab bar, and the colours and
- * corner radius under them. Three, every one of them on every platform:
+ * corner radius under them. Four, every one of them on every platform:
  *
+ *   oau       One Among Us's look: warm paper, brown ink and the trans flag's
+ *             colours, one per tab - specified outside the repository in
+ *             LavenderBookStyle/oau-style-guide.md. Light only.
  *   basic     the original look
  *   material  Material 3
  *   chenfeng  the current iOS look as SwiftUI draws it: grouped grey pages,
@@ -19,28 +22,33 @@ import { useOnAdmin } from '@/lib/safety';
  * second is "Material".
  *
  * Kept on this device and nowhere else, like where the map opens - nothing
- * about it belongs on an account. Until someone picks, each platform gets the
- * one that looks at home on it. "Leave now" wipes the device's storage, which
- * takes the choice with it.
+ * about it belongs on an account. Until someone picks, the website gets OAU and
+ * each phone the one that looks at home on it. "Leave now" wipes the device's
+ * storage, which takes the choice with it.
  *
  * Two things never change with it: the safety notice with "Leave now", and the
  * admin panel. The root layout keeps both outside the skin.
  */
 
-export type Skin = 'basic' | 'material' | 'chenfeng';
+export type Skin = 'oau' | 'basic' | 'material' | 'chenfeng';
 
 /** In the order the setting lists them. */
 export const SKINS: readonly { id: Skin; label: string }[] = [
+  { id: 'oau', label: 'OAU' },
   { id: 'basic', label: 'Basic' },
   { id: 'material', label: 'Material' },
   { id: 'chenfeng', label: 'Chenfeng' },
 ];
 
-/** Until someone picks: the one that looks at home on this platform. */
+/**
+ * Until someone picks: OAU on the website, and in the phone apps the one that
+ * looks at home there - web first; the apps move to OAU by a later decision.
+ * Anyone who has picked keeps their choice.
+ */
 export const DEFAULT_SKIN: Skin = Platform.select<Skin>({
   android: 'material',
   ios: 'chenfeng',
-  default: 'basic',
+  default: 'oau',
 });
 
 type State = {
@@ -67,7 +75,7 @@ function emit(next: Partial<State>) {
 }
 
 function isSkin(value: unknown): value is Skin {
-  return value === 'basic' || value === 'material' || value === 'chenfeng';
+  return value === 'oau' || value === 'basic' || value === 'material' || value === 'chenfeng';
 }
 
 async function read(): Promise<Skin | null> {

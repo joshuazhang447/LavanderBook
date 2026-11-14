@@ -4,7 +4,7 @@ import { cn, M3_TYPES, TEXT_STYLES } from '@/lib/utils';
 import { Slot } from '@rn-primitives/slot';
 import { cva, type VariantProps } from 'class-variance-authority';
 import * as React from 'react';
-import { Platform, Text as RNText, type Role, type TextStyle } from 'react-native';
+import { Platform, Text as RNText, StyleSheet, type Role, type TextStyle } from 'react-native';
 
 const textVariants = cva(
   cn(
@@ -290,12 +290,90 @@ function materialStyle(
   return { fontFamily: robotoFamily(boldText ? (BOLDER[weight] ?? weight) : weight) };
 }
 
+/**
+ * OAU's type scale (LavenderBookStyle/oau-style-guide.md, section 5.2): Halant
+ * for titles and names, Source Sans 3 for the rest. The note was a
+ * handwriting face in the guide; Source Sans 3 italic stands in for it.
+ */
+export type OauStyleName =
+  | 'display'
+  | 'title'
+  | 'heading'
+  | 'subheading'
+  | 'body'
+  | 'callout'
+  | 'label'
+  | 'caption'
+  | 'micro'
+  | 'overline'
+  | 'note';
+
+/** Spelled out in full, as STYLE_CLASS is: size, line height and the style's weight. */
+const OAU_CLASS: Record<OauStyleName, string> = {
+  display: 'text-oau-display font-semibold',
+  title: 'text-oau-title font-semibold',
+  heading: 'text-oau-heading font-semibold',
+  subheading: 'text-oau-subheading font-semibold',
+  body: 'text-oau-body font-normal',
+  callout: 'text-oau-callout font-normal',
+  label: 'text-oau-label font-semibold',
+  caption: 'text-oau-caption font-normal',
+  micro: 'text-oau-micro font-semibold',
+  overline: 'text-oau-overline font-semibold uppercase',
+  note: 'text-oau-note font-normal italic',
+};
+
+const OAU_DISPLAY: ReadonlySet<OauStyleName> = new Set(['display', 'title', 'heading']);
+
+/** Halant on the website, where the stylesheet sets Source Sans 3 for all other text. */
+const HALANT_WEB = `'LavenderBook Halant', Georgia, 'Times New Roman', serif`;
+
+/** Source Sans 3's files, loaded by SkinProvider on a phone: one family per weight. */
+function sourceSansFamily(weight: Weight, italic: boolean): string {
+  switch (weight) {
+    case 'thin':
+    case 'extralight':
+    case 'light':
+    case 'normal':
+    case 'medium':
+      return italic ? 'SourceSans3_400Regular_Italic' : 'SourceSans3_400Regular';
+    case 'semibold':
+      return 'SourceSans3_600SemiBold';
+    default:
+      return 'SourceSans3_700Bold';
+  }
+}
+
+/**
+ * What OAU adds to a Text's own style. On a phone every text needs its font
+ * file named - Halant for the title styles, Source Sans 3 in the file for its
+ * weight otherwise. On the website only the titles do: the stylesheet draws
+ * everything else in Source Sans 3 already.
+ */
+function oauStyle(
+  className: string,
+  style: OauStyleName | undefined,
+  fontsReady: boolean,
+  boldText: boolean
+): TextStyle | undefined {
+  const display = style !== undefined && OAU_DISPLAY.has(style);
+  if (Platform.OS === 'web') return display ? { fontFamily: HALANT_WEB } : undefined;
+  if (!fontsReady) return undefined;
+  const drawn = weightOf(className);
+  const weight = boldText ? (BOLDER[drawn] ?? drawn) : drawn;
+  if (display) {
+    return { fontFamily: weight === 'medium' ? 'Halant_500Medium' : 'Halant_600SemiBold' };
+  }
+  return { fontFamily: sourceSansFamily(weight, /(?:^|\s)italic(?=\s|$)/.test(className)) };
+}
+
 function Text({
   className,
   asChild = false,
   variant = 'default',
   textStyle,
   type,
+  oauStyle: oauStyleName,
   emphasized = false,
   style,
   ...props
@@ -313,6 +391,8 @@ function Text({
      * Chenfeng's; Basic keeps sizing with classes.
      */
     type?: M3TypeName;
+    /** One of OAU's type styles: OAU's vocabulary, as textStyle is Chenfeng's. */
+    oauStyle?: OauStyleName;
     /** The style's bold variant (Chenfeng) or its Emphasized one (Material). */
     emphasized?: boolean;
   }) {
@@ -324,6 +404,7 @@ function Text({
     textVariants({ variant }),
     textStyle && cn(STYLE_CLASS[textStyle], weightClass(textStyle, emphasized)),
     type && cn(M3_CLASS[type], m3WeightClass(type, emphasized)),
+    oauStyleName && OAU_CLASS[oauStyleName],
     textClass,
     className
   );
@@ -332,7 +413,9 @@ function Text({
       ? chenfengStyle(merged, textStyle, fontsReady, boldText)
       : skin === 'material'
         ? materialStyle(merged, fontsReady, boldText)
-        : undefined;
+        : skin === 'oau'
+          ? oauStyle(merged, oauStyleName, fontsReady, boldText)
+          : undefined;
 
   return (
     <Component
@@ -340,10 +423,20 @@ function Text({
       role={variant ? ROLE[variant] : undefined}
       aria-level={variant ? ARIA_LEVEL[variant] : undefined}
       dynamicTypeRamp={textStyle && Platform.OS === 'ios' ? RAMP[textStyle] : undefined}
-      style={own ? [own, style] : style}
+      style={own ? withOwn(own, style) : style}
       {...props}
     />
   );
+}
+
+/**
+ * A skin's own style beside the caller's. One object on the website, never an
+ * array: NativeWind's web runtime pushes the class into a style array in place,
+ * and a memoised one piles up stale classes (AGENTS.md, Skins rule 13).
+ */
+function withOwn(own: TextStyle, style: React.ComponentProps<typeof RNText>['style']) {
+  if (Platform.OS !== 'web') return [own, style];
+  return style ? { ...own, ...StyleSheet.flatten(style) } : own;
 }
 
 export { Text, TextClassContext };

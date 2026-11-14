@@ -23,6 +23,8 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useLeaveNowReserve } from '@/components/leave-now';
+import { PaperBackdrop } from '@/components/oau/paper';
+import { OauTabScope, useTabTintProps } from '@/components/oau/tab-tint';
 import { useIsWideViewport } from '@/components/tab-bar';
 import { useDisplaySettings } from '@/lib/accessibility';
 import { materialSpring } from '@/lib/motion';
@@ -46,6 +48,12 @@ type BottomSheetProps = {
   children: React.ReactNode;
   /** Lift the sheet over the keyboard (a form). */
   keyboardAvoiding?: boolean;
+  /**
+   * Asked before any way of closing it - a drag, the dim, back, Escape - goes
+   * through; resolving false keeps the sheet open (a form with changes). Its
+   * own close button should ask the same.
+   */
+  confirmClose?: () => Promise<boolean>;
 };
 
 /**
@@ -60,7 +68,10 @@ type BottomSheetProps = {
  * of the sheet's sits beneath the way out (AGENTS.md, Safety notice rule 5).
  *
  * Drawn per skin: Basic keeps its card; Material is Material's modal sheet
- * (docs/material-design-guideline.md, section 13.11). Chenfeng has its own
+ * (docs/material-design-guideline.md, section 13.11). OAU's is paper with the
+ * tab's colour washing in at the top (LavenderBookStyle/oau-style-guide.md,
+ * section 13.6), and carries the tab's colours in with it: the sheet renders at
+ * the portal host, outside the tab it was opened from. Chenfeng has its own
  * (src/components/ui/sheet.tsx), which this does not touch.
  */
 export function BottomSheet({
@@ -71,14 +82,19 @@ export function BottomSheet({
   header,
   children,
   keyboardAvoiding,
+  confirmClose,
 }: BottomSheetProps) {
   const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const leaveNow = useLeaveNowReserve();
   const { isWide } = useIsWideViewport();
   const { reduceMotion } = useDisplaySettings();
-  const material = useSkin().skin === 'material';
-  // Basic's sheet never bounces; Material's does, as its springs do.
+  const { skin } = useSkin();
+  const material = skin === 'material';
+  const oau = skin === 'oau';
+  // Read here, in the tab, before the sheet leaves it for the portal host.
+  const tint = useTabTintProps();
+  // Basic's and OAU's sheets never bounce; Material's does, as its springs do.
   const noBounce = !material || reduceMotion;
 
   const partialHeight = Math.round(windowHeight * partial);
@@ -109,6 +125,19 @@ export function BottomSheet({
     [atFull, fullHeight, partialHeight, height, noBounce]
   );
 
+  // Every way out goes through here, so a form can ask first.
+  const attemptClose = React.useCallback(() => {
+    if (!confirmClose) {
+      onClose();
+      return;
+    }
+    void confirmClose().then((ok) => {
+      if (ok) onClose();
+      // Kept: back to where it was, from wherever a drag left it.
+      else goTo(atFull.get());
+    });
+  }, [confirmClose, onClose, goTo, atFull]);
+
   // The window changed size (rotation, the browser): stay at the same height.
   React.useEffect(() => {
     height.set(atFull.get() ? fullHeight : partialHeight);
@@ -119,19 +148,19 @@ export function BottomSheet({
   React.useEffect(() => {
     if (Platform.OS === 'android') {
       const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-        onClose();
+        attemptClose();
         return true;
       });
       return () => subscription.remove();
     }
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       const onKey = (event: KeyboardEvent) => {
-        if (event.key === 'Escape') onClose();
+        if (event.key === 'Escape') attemptClose();
       };
       window.addEventListener('keydown', onKey);
       return () => window.removeEventListener('keydown', onKey);
     }
-  }, [onClose]);
+  }, [attemptClose]);
 
   const drag = Gesture.Pan()
     .activeOffsetY([-6, 6])
@@ -150,7 +179,7 @@ export function BottomSheet({
       if (projected < partialHeight * 0.55 || (event.velocityY > 1300 && now < partialHeight + 24)) {
         height.set(
           withTiming(0, { duration: 180 }, (done) => {
-            if (done) runOnJS(onClose)();
+            if (done) runOnJS(attemptClose)();
           })
         );
         return;
@@ -168,6 +197,38 @@ export function BottomSheet({
 
   const sheetStyle = useAnimatedStyle(() => ({ height: height.get() }));
 
+  const content = (
+    <>
+      <GestureDetector gesture={drag}>
+        <View>
+          <Pressable
+            onPress={() => goTo(!atFull.get())}
+            accessibilityRole="button"
+            accessibilityLabel={expanded ? 'Show less' : 'Show more'}
+            hitSlop={8}
+            className={cn(
+              'items-center',
+              material ? 'pb-1 pt-[22px]' : oau ? 'pb-1 pt-2.5' : 'pb-1 pt-3',
+              Platform.select({ web: 'cursor-grab' })
+            )}>
+            <View
+              className={cn(
+                'rounded-full',
+                material
+                  ? 'h-1 w-8 bg-on-surface-variant/40'
+                  : oau
+                    ? 'h-[5px] w-9 bg-foreground/25'
+                    : 'h-1.5 w-12 bg-muted-foreground/30'
+              )}
+            />
+          </Pressable>
+          {header}
+        </View>
+      </GestureDetector>
+      <View className="flex-1">{children}</View>
+    </>
+  );
+
   const sheet = (
     <Animated.View
       entering={SlideInDown.duration(260)}
@@ -180,31 +241,27 @@ export function BottomSheet({
         'w-full overflow-hidden',
         material
           ? 'max-w-[640px] self-center rounded-t-[28px] bg-surface-container-low'
-          : 'rounded-t-3xl border-t border-border bg-background'
+          : oau
+            ? cn(
+                // Wide: a centred card 560 across (oau-style-guide.md, 14.14).
+                isWide
+                  ? 'max-w-[560px] self-center rounded-[24px] border-[1.5px] border-outline-ink bg-background'
+                  : 'max-w-[640px] self-center rounded-t-[28px] bg-background',
+                Platform.select({ web: 'shadow-[0_-10px_30px_-12px_rgba(69,49,30,0.3)]' })
+              )
+            : 'rounded-t-3xl border-t border-border bg-background'
       )}>
-      <GestureDetector gesture={drag}>
-        <View>
-          <Pressable
-            onPress={() => goTo(!atFull.get())}
-            accessibilityRole="button"
-            accessibilityLabel={expanded ? 'Show less' : 'Show more'}
-            hitSlop={8}
-            className={cn(
-              'items-center',
-              material ? 'pb-1 pt-[22px]' : 'pb-1 pt-3',
-              Platform.select({ web: 'cursor-grab' })
-            )}>
-            <View
-              className={cn(
-                'rounded-full',
-                material ? 'h-1 w-8 bg-on-surface-variant/40' : 'h-1.5 w-12 bg-muted-foreground/30'
-              )}
-            />
-          </Pressable>
-          {header}
-        </View>
-      </GestureDetector>
-      <View className="flex-1">{children}</View>
+      {oau ? (
+        // The tab's colours, its paper and its wash, inside the portal.
+        <OauTabScope tab={tint.tab}>
+          <View className={cn('flex-1', tint.className)} style={tint.style}>
+            <PaperBackdrop tab={tint.tab} />
+            {content}
+          </View>
+        </OauTabScope>
+      ) : (
+        content
+      )}
     </Animated.View>
   );
 
@@ -212,7 +269,7 @@ export function BottomSheet({
     // Rendered through the portal host at the app root, so it covers the whole
     // screen rather than the column it was opened from.
     <Portal name={name}>
-      <View className="absolute inset-0 justify-end">
+      <View className={cn('absolute inset-0', oau && isWide ? 'justify-center px-4' : 'justify-end')}>
         <Animated.View
           entering={FadeIn.duration(180)}
           exiting={FadeOut.duration(160)}
@@ -220,8 +277,11 @@ export function BottomSheet({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Close"
-            onPress={onClose}
-            className={cn('flex-1', material ? 'bg-black/[0.32]' : 'bg-black/50')}
+            onPress={attemptClose}
+            className={cn(
+              'flex-1',
+              material ? 'bg-black/[0.32]' : oau ? 'bg-[rgba(69,49,30,0.28)]' : 'bg-black/50'
+            )}
           />
         </Animated.View>
         {keyboardAvoiding ? <KeyboardAvoidingView behavior="padding">{sheet}</KeyboardAvoidingView> : sheet}

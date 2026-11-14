@@ -1,6 +1,7 @@
 import { ChevronRight } from 'lucide-react-native';
 import { Pressable, useColorScheme, View } from 'react-native';
 
+import { Ribbon } from '@/components/oau/ribbon';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { useSkin } from '@/lib/skin';
@@ -33,8 +34,12 @@ export function TagPill({ tag, onPress }: TagPillProps) {
   const colors = deriveTagColors(tag.color, tag.textColor)[scheme === 'dark' ? 'dark' : 'light'];
   // Chenfeng: a 24 pt capsule, Footnote semibold, its chevron 11 pt - and the
   // colours still the admin's: tags are content, not chrome.
-  const chenfeng = useSkin().skin === 'chenfeng';
+  const { skin } = useSkin();
+  const chenfeng = skin === 'chenfeng';
   const label = chenfeng ? 'text-[13px] font-semibold leading-4' : 'text-xs font-medium';
+
+  // OAU: a ribbon, notched at its end, in the same colours.
+  if (skin === 'oau') return <Ribbon tag={tag} onPress={onPress} />;
 
   if (!onPress) {
     return (

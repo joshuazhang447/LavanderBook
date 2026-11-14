@@ -1,5 +1,5 @@
 import * as Font from 'expo-font';
-import { useColorScheme, vars } from 'nativewind';
+import { colorScheme as nativewindScheme, useColorScheme, vars } from 'nativewind';
 import * as React from 'react';
 import { Platform, View } from 'react-native';
 
@@ -38,10 +38,69 @@ function appearances(skin: Skin): Appearances {
 
 /** Built once: a new vars() object every render would restyle the whole tree. */
 const SKIN_VARS: Record<Skin, Appearances> = {
+  oau: appearances('oau'),
   basic: appearances('basic'),
   material: appearances('material'),
   chenfeng: appearances('chenfeng'),
 };
+
+/**
+ * OAU's typefaces: Halant for titles and names, Source Sans 3 for everything
+ * else (its italic stands in for the guide's handwriting, whose font is too
+ * large to ship). One family per weight, as Inter's; the Text component picks
+ * the file. Loaded the first time OAU is used.
+ */
+const OAU_FILES = {
+  Halant_500Medium: require('@expo-google-fonts/halant/500Medium/Halant_500Medium.ttf'),
+  Halant_600SemiBold: require('@expo-google-fonts/halant/600SemiBold/Halant_600SemiBold.ttf'),
+  SourceSans3_400Regular: require('@expo-google-fonts/source-sans-3/400Regular/SourceSans3_400Regular.ttf'),
+  SourceSans3_400Regular_Italic: require('@expo-google-fonts/source-sans-3/400Regular_Italic/SourceSans3_400Regular_Italic.ttf'),
+  SourceSans3_600SemiBold: require('@expo-google-fonts/source-sans-3/600SemiBold/SourceSans3_600SemiBold.ttf'),
+  SourceSans3_700Bold: require('@expo-google-fonts/source-sans-3/700Bold/SourceSans3_700Bold.ttf'),
+};
+
+let oauLoading: Promise<void> | null = null;
+
+/** Loads OAU's fonts the first time OAU is used; true once they are there. */
+function useOauFonts(skin: Skin): boolean {
+  const needed = skin === 'oau';
+  const [loaded, setLoaded] = React.useState(() => Font.isLoaded('SourceSans3_400Regular'));
+
+  React.useEffect(() => {
+    if (!needed || loaded) return;
+    let active = true;
+    oauLoading ??= Font.loadAsync(OAU_FILES);
+    oauLoading
+      .then(() => active && setLoaded(true))
+      // Without them, text stays in the system font: worse, never broken.
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [needed, loaded]);
+
+  return !needed || loaded;
+}
+
+/**
+ * OAU is light only. On a phone NativeWind's scheme is the app's own
+ * Appearance, so holding it at light also keeps React Native's useColorScheme,
+ * the status bar and every dark: class light; leaving OAU hands the scheme
+ * back to the device. Set only on a change of skin, never on first render for
+ * the others, so they behave exactly as before.
+ */
+function useOauLightOnly(skin: Skin) {
+  const wasOau = React.useRef(false);
+  React.useEffect(() => {
+    if (skin === 'oau') {
+      wasOau.current = true;
+      nativewindScheme.set('light');
+    } else if (wasOau.current) {
+      wasOau.current = false;
+      nativewindScheme.set('system');
+    }
+  }, [skin]);
+}
 
 /**
  * Inter, Chenfeng's typeface on Android, where the system font is not San
@@ -128,12 +187,14 @@ export function SkinProvider({ skin, children }: React.PropsWithChildren<{ skin:
   // Each skin's own fonts; true for a skin that needs none.
   const chenfengFonts = useChenfengFonts(skin);
   const materialFonts = useMaterialFonts(skin);
-  const fontsReady = chenfengFonts && materialFonts;
+  const oauFonts = useOauFonts(skin);
+  const fontsReady = chenfengFonts && materialFonts && oauFonts;
+  useOauLightOnly(skin);
   const value = React.useMemo(
     () => ({ skin, setSkin: chooseSkin, fontsReady }),
     [skin, fontsReady]
   );
-  const scheme = colorScheme === 'dark' ? 'dark' : 'light';
+  const scheme = colorScheme === 'dark' && skin !== 'oau' ? 'dark' : 'light';
 
   return (
     <SkinContext.Provider value={value}>

@@ -2,6 +2,7 @@ import { Stack } from 'expo-router';
 import { useColorScheme } from 'nativewind';
 import { Platform } from 'react-native';
 
+import { TabTint } from '@/components/oau/tab-tint';
 import { useSkin } from '@/lib/skin';
 import { skinColor } from '@/lib/theme';
 
@@ -19,23 +20,28 @@ export default function DirectoryLayout() {
   const nativeHeader = skin === 'chenfeng' && Platform.OS === 'ios';
 
   return (
-    <Stack
-      screenOptions={
-        nativeHeader
-          ? {
-              headerShown: true,
-              headerLargeTitleEnabled: true,
-              headerTransparent: true,
-              headerShadowVisible: false,
-              headerLargeTitleShadowVisible: false,
-              // Bar symbols are monochrome; only the primary action is tinted.
-              headerTintColor: skinColor('chenfeng', scheme, 'foreground'),
-              // A plain list, not a settings page: the plain background.
-              contentStyle: { backgroundColor: skinColor('chenfeng', scheme, 'background') },
-            }
-          : { headerShown: false }
-      }>
-      <Stack.Screen name="index" options={{ title: 'Directory' }} />
-    </Stack>
+    // OAU's white, for everything in the Directory.
+    <TabTint tab="directory">
+      <Stack
+        screenOptions={
+          nativeHeader
+            ? {
+                headerShown: true,
+                headerLargeTitleEnabled: true,
+                headerTransparent: true,
+                headerShadowVisible: false,
+                headerLargeTitleShadowVisible: false,
+                // Bar symbols are monochrome; only the primary action is tinted.
+                headerTintColor: skinColor('chenfeng', scheme, 'foreground'),
+                // A plain list, not a settings page: the plain background.
+                contentStyle: {
+                  backgroundColor: skinColor('chenfeng', scheme, 'background'),
+                },
+              }
+            : { headerShown: false }
+        }>
+        <Stack.Screen name="index" options={{ title: 'Directory' }} />
+      </Stack>
+    </TabTint>
   );
 }

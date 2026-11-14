@@ -23,6 +23,18 @@ export const BOOK_MARK: Logo = {
   ],
 };
 
+/** The same book at 40 x 48: OAU's colophon and the book on its tile. */
+export const BOOK_LARGE: Logo = {
+  width: 40,
+  height: 48,
+  files: [
+    { scale: 1, source: require('@/assets/images/book-large-48.png') },
+    { scale: 1.5, source: require('@/assets/images/book-large-72.png') },
+    { scale: 2, source: require('@/assets/images/book-large-96.png') },
+    { scale: 3, source: require('@/assets/images/book-large-144.png') },
+  ],
+};
+
 /** OAU's maple leaves, outlined heavier at the smaller sizes so they stay crisp. */
 export const OAU_LEAVES: Logo = {
   width: 23,

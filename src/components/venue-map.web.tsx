@@ -30,6 +30,7 @@ import { useTagIcons } from '@/lib/tag-icons';
 import type { PlaceResult } from '@/lib/place-search';
 import { lookupPlace } from '@/lib/place-search';
 import { useSkin } from '@/lib/skin';
+import { skinColor } from '@/lib/theme';
 import { supabase } from '@/lib/supabase';
 import { deriveTagColors } from '@/lib/tag-colors';
 import { VIEW_RADIUS_METERS, ZOOM_IN_SLACK } from '@/lib/use-location';
@@ -144,6 +145,50 @@ const tipStyle: React.CSSProperties = {
 /** A reviewed place nobody has tagged: somewhere visitors added, not one we list. */
 const UNTAGGED_PIN = '#475569';
 
+/**
+ * OAU's pins and labels (LavenderBookStyle/oau-style-guide.md, section 10):
+ * the same geometry, drawn as stickers - an ink outline instead of the white
+ * rim - with the labels on cream paper and the clusters as cream counters.
+ * The website only: on a phone a pin is a bitmap Android captures once.
+ */
+const OAU_INK = skinColor('oau', 'light', 'outline-ink');
+const OAU_HEAD: React.CSSProperties = {
+  border: `1.5px solid ${OAU_INK}`,
+  // A cream ring inside the ink, as a sticker's edge.
+  boxShadow: 'inset 0 0 0 2px #FFFDF9, 0 2px 5px rgba(166,134,89,0.45)',
+};
+const OAU_TIP: React.CSSProperties = {
+  borderRight: `1.5px solid ${OAU_INK}`,
+  borderBottom: `1.5px solid ${OAU_INK}`,
+};
+const OAU_LABEL: React.CSSProperties = {
+  background: skinColor('oau', 'light', 'card'),
+  border: `1px solid ${skinColor('oau', 'light', 'border')}`,
+  borderRadius: 10,
+  boxShadow: '0 1px 4px rgba(69,49,30,0.2)',
+  fontFamily: "'LavenderBook Source Sans', system-ui, sans-serif",
+};
+const OAU_NAME: React.CSSProperties = { color: OAU_INK, fontWeight: 700 };
+/** The open card's pin: grown a little on a soft move, its label pressed in. */
+const OAU_SELECTED_HEAD: React.CSSProperties = {
+  transform: 'scale(1.15)',
+  transition: 'transform 180ms cubic-bezier(0.2, 0.9, 0.3, 1.2)',
+};
+const OAU_SELECTED_LABEL: React.CSSProperties = {
+  border: `1.5px solid ${OAU_INK}`,
+  background: skinColor('oau', 'light', 'sticker'),
+};
+const OAU_META: React.CSSProperties = { color: skinColor('oau', 'light', 'muted-foreground') };
+const OAU_GROUP: React.CSSProperties = {
+  border: `1.5px solid ${OAU_INK}`,
+  background: skinColor('oau', 'light', 'band'),
+  backgroundImage: 'none',
+  color: OAU_INK,
+  // A little stack of stickers behind it: blue, then pink.
+  boxShadow: `3px 3px 0 0 ${skinColor('oau', 'light', 'note-rule')}, 6px 6px 0 0 ${skinColor('oau', 'light', 'oau-pink')}, 0 2px 5px rgba(166,134,89,0.4)`,
+  fontFamily: "'LavenderBook Source Sans', system-ui, sans-serif",
+};
+
 // White on every theme, like the map under it, so a chip always takes its
 // light-mode colours.
 const labelStyle: React.CSSProperties = {
@@ -252,13 +297,17 @@ function PlaceMarker({
   item,
   icon,
   onSelect,
+  selected = false,
 }: {
   item: PlaceItem;
   /** The tag's chosen icon key, from useTagIcons(). */
   icon: string | null;
   onSelect: (venue: NearbyVenue) => void;
+  /** Its card is open: OAU presses it into the map. */
+  selected?: boolean;
 }) {
   const shown = useShown();
+  const oau = useSkin().skin === 'oau';
   const { venue } = item;
   const geometry = placeGeometry(item);
   const tag = venueTags(venue)[0] ?? null;
@@ -297,9 +346,18 @@ function PlaceMarker({
             // half its diagonal below its centre.
             top: geometry.pin.y + PIN_SIZE + PIN_TAIL - TIP_SIDE / 2 - (TIP_SIDE * Math.SQRT2) / 2,
             backgroundColor: fill,
+            ...(oau ? OAU_TIP : null),
           }}
         />
-        <div style={{ ...headStyle, left: geometry.pin.x, top: geometry.pin.y, backgroundColor: fill }}>
+        <div
+          style={{
+            ...headStyle,
+            left: geometry.pin.x,
+            top: geometry.pin.y,
+            backgroundColor: fill,
+            ...(oau ? OAU_HEAD : null),
+            ...(oau && selected ? OAU_SELECTED_HEAD : null),
+          }}>
           {kindGlyph(tag?.slug ?? null, icon)}
         </div>
 
@@ -311,12 +369,14 @@ function PlaceMarker({
               top: geometry.label.y,
               width: geometry.label.width,
               height: geometry.label.height,
+              ...(oau ? OAU_LABEL : null),
+              ...(oau && selected ? OAU_SELECTED_LABEL : null),
             }}>
-            <div style={nameStyle}>{venue.name}</div>
+            <div style={oau ? { ...nameStyle, ...OAU_NAME } : nameStyle}>{venue.name}</div>
             {rating || tag ? (
               <div style={metaStyle}>
                 {rating ? (
-                  <span style={ratingStyle}>
+                  <span style={oau ? { ...ratingStyle, ...OAU_META } : ratingStyle}>
                     <span style={{ color: '#f59e0b' }}>★</span>
                     {rating.slice(1)}
                   </span>
@@ -328,7 +388,9 @@ function PlaceMarker({
                 ) : null}
               </div>
             ) : null}
-            {quote ? <div style={quoteStyle}>“{quote}”</div> : null}
+            {quote ? (
+              <div style={oau ? { ...quoteStyle, ...OAU_META } : quoteStyle}>“{quote}”</div>
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -339,6 +401,7 @@ function PlaceMarker({
 /** Places whose pins would touch, as one count. Pressed, it zooms in or fans out. */
 function GroupMarker({ item, onPress }: { item: GroupItem; onPress: (group: GroupItem) => void }) {
   const shown = useShown();
+  const oau = useSkin().skin === 'oau';
   const geometry = groupGeometry(item.venues.length);
   const size = groupSize(item.venues.length);
   const press = () => onPress(item);
@@ -370,6 +433,7 @@ function GroupMarker({ item, onPress }: { item: GroupItem; onPress: (group: Grou
             width: size,
             height: size,
             borderRadius: size / 2,
+            ...(oau ? OAU_GROUP : null),
           }}>
           {names.length}
         </div>
@@ -383,13 +447,14 @@ type PlaceMarkersProps = {
   onSelect: (venue: NearbyVenue) => void;
   /** Shared with the camera: true while a fly steps the map, when its idles mean nothing yet. */
   flyingRef: React.RefObject<boolean>;
+  selectedId?: string | null;
 };
 
 /**
  * Every place on the map, laid out for the current zoom (map-layout.ts):
  * pins, labels where they fit, and groups where pins would touch.
  */
-function PlaceMarkers({ venues, onSelect, flyingRef }: PlaceMarkersProps) {
+function PlaceMarkers({ venues, onSelect, flyingRef, selectedId = null }: PlaceMarkersProps) {
   const map = useMap();
   const tagIcons = useTagIcons();
   const [zoom, setZoom] = React.useState<number | null>(null);
@@ -477,6 +542,7 @@ function PlaceMarkers({ venues, onSelect, flyingRef }: PlaceMarkersProps) {
         item={item}
         icon={tagIcons[venueTags(item.venue)[0]?.slug ?? ""] ?? null}
         onSelect={onSelect}
+        selected={item.venue.id === selectedId}
       />
     )
   );
@@ -892,6 +958,8 @@ type VenueMapProps = {
    * bar sits above them instead (tab-bar.tsx).
    */
   bottomInset?: number;
+  /** The place whose card is open, which OAU draws pressed into the map. */
+  selectedVenueId?: string | null;
 };
 
 /**
@@ -920,6 +988,7 @@ export function VenueMap({
   focusRadiusMeters = VIEW_RADIUS_METERS,
   onUserPannedTo,
   onSpanChanged,
+  selectedVenueId = null,
 }: VenueMapProps) {
   const programmaticRef = React.useRef(false);
   const flyingRef = React.useRef(false);
@@ -1067,7 +1136,12 @@ export function VenueMap({
             flyingRef={flyingRef}
           />
 
-          <PlaceMarkers venues={venues} onSelect={onSelectVenue} flyingRef={flyingRef} />
+          <PlaceMarkers
+            venues={venues}
+            onSelect={onSelectVenue}
+            flyingRef={flyingRef}
+            selectedId={selectedVenueId}
+          />
 
           {/* Keyed by place: a new search remounts the pin rather than moving
               it, which is what replays the entrance fade. */}

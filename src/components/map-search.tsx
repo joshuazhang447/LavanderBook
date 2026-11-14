@@ -2,6 +2,7 @@ import { ArrowLeft, MapPin, Search, X } from 'lucide-react-native';
 import * as React from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -22,6 +23,7 @@ import { useIsWideViewport } from '@/components/tab-bar';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import type { PlaceResult } from '@/lib/place-search';
+import { useSkin } from '@/lib/skin';
 import { searchPlaces } from '@/lib/place-search';
 import { useFieldText } from '@/lib/use-field-text';
 import type { Coords } from '@/lib/use-location';
@@ -240,6 +242,9 @@ export function MapSearch({ origin, onPick, onClear, open, onOpenChange }: MapSe
 
   const fieldStyle = useAnimatedStyle(() => ({ width: width.get() }));
 
+  // OAU: a sticker like the controls beside it, its results on cream paper.
+  const oau = useSkin().skin === 'oau';
+
   function toggle() {
     if (open) reset();
     onOpenChange(!open);
@@ -259,7 +264,14 @@ export function MapSearch({ origin, onPick, onClear, open, onOpenChange }: MapSe
         // feed a moving number into the width above.
         if (!yielded) setPillX(event.nativeEvent.layout.x);
       }}>
-      <View className="flex-row items-center rounded-full bg-background p-1 shadow-md">
+      <View
+        className={
+          oau
+            ? `flex-row items-center rounded-full border-[1.5px] border-outline-ink bg-band p-1 ${
+                Platform.OS === 'web' ? 'shadow-[0_3px_8px_rgba(166,134,89,0.35)]' : ''
+              }`
+            : 'flex-row items-center rounded-full bg-background p-1 shadow-md'
+        }>
         <Pressable
           onPress={toggle}
           accessibilityRole="button"
@@ -333,7 +345,11 @@ export function MapSearch({ origin, onPick, onClear, open, onOpenChange }: MapSe
         <Animated.View
           entering={FadeIn.duration(160)}
           style={{ top: DROPDOWN_TOP, right: 0, width: dropdownWidth }}
-          className="absolute overflow-hidden rounded-xl border border-border bg-card shadow-md">
+          className={
+            oau
+              ? 'absolute overflow-hidden rounded-[18px] border border-border bg-card shadow-md'
+              : 'absolute overflow-hidden rounded-xl border border-border bg-card shadow-md'
+          }>
           {error ? (
             <View className="px-4 py-3">
               <Text className="text-sm text-muted-foreground">{error}</Text>

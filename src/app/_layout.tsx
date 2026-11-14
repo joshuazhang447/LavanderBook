@@ -4,6 +4,7 @@ import '@/lib/nativewind-animated';
 
 import { PortalHost } from '@rn-primitives/portal';
 import { Stack, ThemeProvider } from 'expo-router';
+import Head from 'expo-router/head';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { useColorScheme } from 'react-native';
@@ -22,15 +23,22 @@ import { SKIN_NAV_THEME } from '@/lib/theme';
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme() === 'dark' ? 'dark' : 'light';
+  const deviceScheme = useColorScheme();
   // Basic on the admin panel whatever is chosen.
   const skin = useAppSkin();
+  // OAU is light only, whatever the device says.
+  const colorScheme = deviceScheme === 'dark' && skin !== 'oau' ? 'dark' : 'light';
   const screens = useBackdrop();
 
   return (
     // Gestures - Chenfeng's sheets, switches and swipe actions - need this
     // around everything. It is a plain full-screen view; nothing else changes.
     <GestureHandlerRootView style={{ flex: 1 }}>
+      {/* The website's tab title, on every page; without it the browser shows
+          the address. Nothing on a phone. */}
+      <Head>
+        <title>LavenderBook</title>
+      </Head>
       <AuthProvider>
         <KeyboardProvider>
           <ThemeProvider value={SKIN_NAV_THEME[skin][colorScheme]}>

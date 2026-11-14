@@ -1,12 +1,16 @@
-import { CircleX, MapPin, Search } from 'lucide-react-native';
+import { ChevronDown, CircleX, MapPin, Search } from 'lucide-react-native';
 import * as React from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DistanceMeter } from '@/components/distance-meter';
+import { KindBadge } from '@/components/kind-badge';
 import { ListFilterControl } from '@/components/list-filter';
 import { useLeaveNowReserve } from '@/components/leave-now';
 import { MAP_CONTROLS_CLEARANCE } from '@/components/map-controls';
+import { IconSticker, OauCard, OauHeading } from '@/components/oau/card';
+import { PaperBackdrop } from '@/components/oau/paper';
+import { Ribbon } from '@/components/oau/ribbon';
 import { StarRating } from '@/components/star-rating';
 import { TagPill } from '@/components/tag-pill';
 import { Button } from '@/components/ui/button';
@@ -23,8 +27,11 @@ import {
   type PlaceRow,
 } from '@/lib/directory';
 import { LIST_FILTER_TEXT, LIST_TEXT, ONLINE_TEXT } from '@/lib/directory-text';
+import { EVERY_KIND_ICON, kindIcon } from '@/lib/kind-icons';
 import { countByFilter, passesListFilter, useListFilter } from '@/lib/list-filter';
 import { useSearchDistance } from '@/lib/search-distance';
+import { useSkin } from '@/lib/skin';
+import { useTagIcons } from '@/lib/tag-icons';
 import type { Coords } from '@/lib/use-location';
 import { isMapped, type NearbyVenue } from '@/lib/use-nearby-venues';
 import { cn } from '@/lib/utils';
@@ -56,7 +63,12 @@ type PlaceRowCardProps = {
  * description made the whole column jump; a list somebody is reading should
  * stay where it is.
  */
-export function PlaceRowCard({ row, first, listed, onSelect, onLocate }: PlaceRowCardProps) {
+export function PlaceRowCard(props: PlaceRowCardProps) {
+  const { skin } = useSkin();
+  return skin === 'oau' ? <OauPlaceRow {...props} /> : <BasicPlaceRow {...props} />;
+}
+
+function BasicPlaceRow({ row, first, listed, onSelect, onLocate }: PlaceRowCardProps) {
   const { venue, tags, distance } = row;
   const average = Number(venue.avg_stars ?? 0);
   // Listed by us, not yet reviewed by anyone. Drawing an empty star row here
@@ -143,6 +155,97 @@ export function PlaceRowCard({ row, first, listed, onSelect, onLocate }: PlaceRo
   );
 }
 
+/**
+ * OAU's row (LavenderBookStyle/oau-style-guide.md, section 14.3): the kind's
+ * badge, the name and how far, two lines of what it is, its ribbons and
+ * stars, and a round "show on map" sticker in place of Basic's Locate. Same
+ * rules as Basic's: no stars before anyone has rated it, no sticker for a
+ * place with nowhere to show, and the row and sticker are siblings.
+ */
+function OauPlaceRow({ row, first, listed, onSelect, onLocate }: PlaceRowCardProps) {
+  const { venue, tags, distance } = row;
+  const tagIcons = useTagIcons();
+  const average = Number(venue.avg_stars ?? 0);
+  const unreviewed = venue.review_count === 0;
+  const away = formatDistance(distance);
+  const lead = tags[0];
+
+  return (
+    <View className={cn('flex-row items-center', !first && 'border-t border-border')}>
+      <Pressable
+        onPress={() => onSelect(venue)}
+        accessibilityRole="button"
+        accessibilityLabel={[
+          venue.name,
+          unreviewed ? 'listed, not yet reviewed' : `${average.toFixed(1)} of 5`,
+          away,
+          venue.description,
+        ]
+          .filter(Boolean)
+          .join(', ')}
+        className={cn(
+          'flex-1 flex-row items-start gap-3 py-3.5 pl-4 pr-3 active:opacity-70',
+          Platform.select({ web: 'cursor-pointer transition-opacity hover:opacity-80' })
+        )}>
+        <KindBadge
+          tag={lead}
+          icon={lead ? kindIcon(lead.slug, tagIcons[lead.slug]) : EVERY_KIND_ICON}
+          size={36}
+        />
+        <View className="flex-1 gap-1">
+          <View className="flex-row items-start gap-2">
+            <Text oauStyle="subheading" numberOfLines={2} className="flex-1 text-foreground">
+              {venue.name}
+            </Text>
+            {away ? (
+              <Text
+                oauStyle="callout"
+                className="text-muted-foreground"
+                style={{ fontVariant: ['tabular-nums'] }}>
+                {away}
+              </Text>
+            ) : null}
+          </View>
+          {venue.description ? (
+            <Text oauStyle="callout" numberOfLines={2} className="text-muted-foreground">
+              {venue.description}
+            </Text>
+          ) : null}
+          <View className="mt-0.5 flex-row flex-wrap items-center gap-1.5">
+            {tags.map((tag) => (
+              <Ribbon key={tag.slug} tag={tag} />
+            ))}
+            {unreviewed ? (
+              <Text oauStyle="caption" className="text-muted-foreground">
+                {listed ? LIST_TEXT.noReviews : LIST_TEXT.listedNoReviews}
+              </Text>
+            ) : (
+              <View className="flex-row items-center gap-1.5">
+                <StarRating value={average} size="sm" />
+                <Text oauStyle="caption" className="font-semibold text-star-foreground">
+                  {average.toFixed(1)}
+                </Text>
+                <Text oauStyle="caption" className="text-muted-foreground">
+                  ({venue.review_count})
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </Pressable>
+
+      {isMapped(venue) ? (
+        <IconSticker
+          icon={MapPin}
+          label={`Show ${venue.name} on the map`}
+          onPress={() => onLocate(venue)}
+          className="mr-4"
+        />
+      ) : null}
+    </View>
+  );
+}
+
 type PlaceGroupProps = {
   rows: PlaceRow[];
   listed?: boolean;
@@ -152,20 +255,20 @@ type PlaceGroupProps = {
 
 /** A run of rows in one bordered box. */
 export function PlaceGroup({ rows, listed, onSelect, onLocate }: PlaceGroupProps) {
-  return (
-    <View className="overflow-hidden rounded-lg border border-border">
-      {rows.map((row, index) => (
-        <PlaceRowCard
-          key={row.venue.id}
-          row={row}
-          first={index === 0}
-          listed={listed}
-          onSelect={onSelect}
-          onLocate={onLocate}
-        />
-      ))}
-    </View>
-  );
+  const oau = useSkin().skin === 'oau';
+  const content = rows.map((row, index) => (
+    <PlaceRowCard
+      key={row.venue.id}
+      row={row}
+      first={index === 0}
+      listed={listed}
+      onSelect={onSelect}
+      onLocate={onLocate}
+    />
+  ));
+  // OAU: one cream card of rows.
+  if (oau) return <OauCard>{content}</OauCard>;
+  return <View className="overflow-hidden rounded-lg border border-border">{content}</View>;
 }
 
 /**
@@ -174,6 +277,8 @@ export function PlaceGroup({ rows, listed, onSelect, onLocate }: PlaceGroupProps
  * that ran straight on would look as if it were still sorted by distance.
  */
 export function OnlineHeading() {
+  const oau = useSkin().skin === 'oau';
+  if (oau) return <OauHeading title={ONLINE_TEXT.heading} line={ONLINE_TEXT.lead} />;
   return (
     <View className="gap-0.5 px-1">
       <Text role="heading" className="text-sm font-medium text-foreground">
@@ -207,6 +312,43 @@ export function OnlineSection({
   onLocate: (venue: NearbyVenue) => void;
 }) {
   const fold = useOnlineFold(rows, open);
+  const oau = useSkin().skin === 'oau';
+
+  // OAU: "Show all" is the card's last row, not a button under it.
+  if (oau) {
+    return (
+      <View className="gap-3">
+        {heading ? <OnlineHeading /> : null}
+        <OauCard>
+          {fold.rows.map((row, index) => (
+            <PlaceRowCard
+              key={row.venue.id}
+              row={row}
+              first={index === 0}
+              listed={listed}
+              onSelect={onSelect}
+              onLocate={onLocate}
+            />
+          ))}
+          {fold.hiddenOf !== null ? (
+            <Pressable
+              onPress={fold.expand}
+              accessibilityRole="button"
+              className={cn(
+                'min-h-12 flex-row items-center gap-2 border-t border-border px-4 py-3 active:bg-muted',
+                Platform.select({ web: 'cursor-pointer transition-colors hover:bg-muted/60' })
+              )}>
+              <Text oauStyle="label" className="flex-1 text-primary">
+                {ONLINE_TEXT.showAll(fold.hiddenOf)}
+              </Text>
+              <Icon as={ChevronDown} className="size-[18px] text-primary" />
+            </Pressable>
+          ) : null}
+        </OauCard>
+      </View>
+    );
+  }
+
   return (
     <View className="gap-2">
       {heading ? <OnlineHeading /> : null}
@@ -236,9 +378,15 @@ export function PlaceSearchField({
   placeholder: string;
   accessibilityLabel?: string;
 }) {
+  const oau = useSkin().skin === 'oau';
   return (
-    <View className="flex-row items-center gap-2 rounded-lg border border-border bg-card pl-3 pr-1">
-      <Icon as={Search} className="size-4 text-muted-foreground" />
+    <View
+      className={cn(
+        'flex-row items-center gap-2 bg-card pr-1',
+        // OAU: a field you type into on paper - cream card, a brown outline.
+        oau ? 'min-h-12 rounded-[12px] border-[1.5px] border-input pl-3.5' : 'rounded-lg border border-border pl-3'
+      )}>
+      <Icon as={Search} className={cn('text-muted-foreground', oau ? 'size-5' : 'size-4')} />
       <Input
         value={value}
         onChangeText={onChangeText}
@@ -359,9 +507,11 @@ export function VenueList({ origin, refreshKey, onSelectVenue, onLocateVenue }: 
     refreshKey
   );
   const any = !!places && places.nearby.length + places.online.length > 0;
+  const oau = useSkin().skin === 'oau';
 
   return (
     <View className="flex-1 bg-background">
+      {oau ? <PaperBackdrop tab="map" /> : null}
       <View
         className="w-full max-w-2xl gap-3 self-center px-4 pb-3"
         style={{ paddingTop: (isWide ? 0 : insets.top) + MAP_CONTROLS_CLEARANCE + leaveNow.top }}>

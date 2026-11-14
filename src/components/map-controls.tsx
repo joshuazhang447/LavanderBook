@@ -1,6 +1,6 @@
 import { List, LocateFixed, LocateOff, Map as MapIcon, RotateCw } from 'lucide-react-native';
 import * as React from 'react';
-import { Pressable, View } from 'react-native';
+import { Platform, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   cancelAnimation,
@@ -15,7 +15,19 @@ import { useLeaveNowReserve } from '@/components/leave-now';
 import { useIsWideViewport } from '@/components/tab-bar';
 import { Icon } from '@/components/ui/icon';
 import { Text, TextClassContext } from '@/components/ui/text';
+import { useSkin } from '@/lib/skin';
 import { cn } from '@/lib/utils';
+
+/**
+ * OAU's map controls are stickers (LavenderBookStyle/oau-style-guide.md,
+ * section 13.2): cream band, an ink outline, the chosen one in the tab's
+ * sticker colour. The group's shadow is a class on the website only.
+ */
+const OAU_GROUP = cn(
+  'rounded-full border-[1.5px] border-outline-ink bg-band p-1',
+  // Not shadow-md: on a phone NativeWind draws that as an outline.
+  Platform.select({ web: 'shadow-[0_3px_8px_rgba(166,134,89,0.35)]' })
+);
 
 export type MapViewMode = 'map' | 'list';
 
@@ -28,9 +40,12 @@ type ControlProps = {
 };
 
 function Control({ active, label, onPress, children, className }: ControlProps) {
+  const oau = useSkin().skin === 'oau';
   return (
     <TextClassContext.Provider
-      value={active ? 'text-primary-foreground' : 'text-foreground'}>
+      value={
+        active ? (oau ? 'text-sticker-foreground' : 'text-primary-foreground') : 'text-foreground'
+      }>
       <Pressable
         onPress={onPress}
         accessibilityRole="button"
@@ -38,7 +53,7 @@ function Control({ active, label, onPress, children, className }: ControlProps) 
         accessibilityState={{ selected: !!active }}
         className={cn(
           'flex-row items-center gap-1.5 rounded-full px-3 py-2 active:opacity-70',
-          active ? 'bg-primary' : 'bg-background',
+          oau ? (active ? 'bg-sticker' : 'bg-transparent') : active ? 'bg-primary' : 'bg-background',
           className
         )}>
         {children}
@@ -123,6 +138,8 @@ export function MapControls({
   const insets = useSafeAreaInsets();
   const { isWide } = useIsWideViewport();
   const leaveNow = useLeaveNowReserve();
+  const oau = useSkin().skin === 'oau';
+  const label = oau ? undefined : 'text-sm font-medium';
 
   /**
    * On a phone the row cannot hold these and an open search field: the field
@@ -176,24 +193,29 @@ export function MapControls({
           }}
           style={groupWidth > 0 ? { width: groupWidth } : undefined}
           className="flex-row gap-2 pr-2">
-          <View className="flex-row gap-1 rounded-full bg-background p-1 shadow-md">
+          <View
+            className={cn('flex-row gap-1', oau ? OAU_GROUP : 'rounded-full bg-background p-1 shadow-md')}>
             <Control
               active={mode === 'map'}
               label="Map view"
               onPress={() => onChangeMode('map')}>
               <Icon as={MapIcon} className="size-4" />
-              <Text className="text-sm font-medium">Map</Text>
+              <Text oauStyle={oau ? 'label' : undefined} className={label}>
+                Map
+              </Text>
             </Control>
             <Control
               active={mode === 'list'}
               label="List view"
               onPress={() => onChangeMode('list')}>
               <Icon as={List} className="size-4" />
-              <Text className="text-sm font-medium">List</Text>
+              <Text oauStyle={oau ? 'label' : undefined} className={label}>
+                List
+              </Text>
             </Control>
           </View>
 
-          <View className="rounded-full bg-background p-1 shadow-md">
+          <View className={oau ? OAU_GROUP : 'rounded-full bg-background p-1 shadow-md'}>
             <Control label={refreshing ? 'Refreshing' : 'Refresh'} onPress={onRefresh}>
               <RefreshIcon spinning={refreshing} />
             </Control>
@@ -215,17 +237,25 @@ type RecenterButtonProps = {
    */
   usingLocation: boolean;
   onPress: () => void;
+  /** From the bottom of the screen, when something sits under it (OAU's places sheet). */
+  bottom?: number;
 };
 
 /**
  * Bottom-right, where both Google and Apple put it. Filled while following, so
  * the button doubles as the indicator for whether the map is tracking you.
  */
-export function RecenterButton({ following, usingLocation, onPress }: RecenterButtonProps) {
+export function RecenterButton({ following, usingLocation, onPress, bottom }: RecenterButtonProps) {
+  const oau = useSkin().skin === 'oau';
   return (
-    <View pointerEvents="box-none" className="absolute bottom-5 right-4">
+    <View
+      pointerEvents="box-none"
+      className={cn('absolute right-4', bottom === undefined && 'bottom-5')}
+      style={bottom === undefined ? undefined : { bottom }}>
       <TextClassContext.Provider
-        value={following ? 'text-primary-foreground' : 'text-foreground'}>
+        value={
+          following ? (oau ? 'text-sticker-foreground' : 'text-primary-foreground') : 'text-foreground'
+        }>
         <Pressable
           onPress={onPress}
           accessibilityRole="button"
@@ -238,8 +268,14 @@ export function RecenterButton({ following, usingLocation, onPress }: RecenterBu
           }
           accessibilityState={{ selected: following }}
           className={cn(
-            'size-12 items-center justify-center rounded-full shadow-md active:opacity-70',
-            following ? 'bg-primary' : 'bg-background'
+            'size-12 items-center justify-center rounded-full active:opacity-70',
+            oau
+              ? cn(
+                  'border-[1.5px] border-outline-ink',
+                  following ? 'bg-sticker' : 'bg-band',
+                  Platform.select({ web: 'shadow-[0_3px_8px_rgba(166,134,89,0.35)]' })
+                )
+              : cn('shadow-md', following ? 'bg-primary' : 'bg-background')
           )}>
           <Icon as={usingLocation ? LocateFixed : LocateOff} className="size-5" />
         </Pressable>

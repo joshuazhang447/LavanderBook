@@ -4,7 +4,15 @@ import { View } from 'react-native';
 
 import { MATERIAL_SYMBOLS_FAMILY } from '@/lib/material';
 import { chooseSkin, SkinContext, useSkin, type Skin } from '@/lib/skin';
-import { paletteVariables, SKIN_TOKENS, skinPalette, type SkinVariant } from '@/lib/theme';
+import {
+  OAU_TAB_TINTS,
+  oauTintClass,
+  paletteVariables,
+  SKIN_TOKENS,
+  skinPalette,
+  type OauTab,
+  type SkinVariant,
+} from '@/lib/theme';
 
 /**
  * Website: the skin's variables go on the page itself, not on a view around the
@@ -71,6 +79,25 @@ const MATERIAL_SYMBOLS = require('@expo-google-fonts/material-symbols-rounded/40
 
 const MATERIAL_FONT = `'LavenderBook Roboto', Roboto, system-ui, sans-serif`;
 
+/**
+ * OAU's typefaces, served from the app like the others: Source Sans 3 for all
+ * text, Halant for what the Text component's oauStyle marks as a title. Its
+ * italic stands in for the guide's handwriting (Klee One is 8 MB).
+ */
+const SOURCE_SANS_FACES: [number, string, number][] = [
+  [400, 'normal', require('@expo-google-fonts/source-sans-3/400Regular/SourceSans3_400Regular.ttf')],
+  [400, 'italic', require('@expo-google-fonts/source-sans-3/400Regular_Italic/SourceSans3_400Regular_Italic.ttf')],
+  [600, 'normal', require('@expo-google-fonts/source-sans-3/600SemiBold/SourceSans3_600SemiBold.ttf')],
+  [700, 'normal', require('@expo-google-fonts/source-sans-3/700Bold/SourceSans3_700Bold.ttf')],
+];
+
+const HALANT_FACES: [number, number][] = [
+  [500, require('@expo-google-fonts/halant/500Medium/Halant_500Medium.ttf')],
+  [600, require('@expo-google-fonts/halant/600SemiBold/Halant_600SemiBold.ttf')],
+];
+
+const OAU_FONT = `'LavenderBook Source Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif`;
+
 function fontRules(): string[] {
   const faces = INTER_FACES.map(
     ([weight, module]) =>
@@ -94,12 +121,35 @@ function fontRules(): string[] {
   faces.push(
     `:root[data-skin='chenfeng'] [class*='css-text']:not(.${UNSKINNED} *, .gm-style *) { font-family: ${CHENFENG_FONT}; }`
   );
+  faces.push(
+    ...SOURCE_SANS_FACES.map(
+      ([weight, style, module]) =>
+        `@font-face { font-family: 'LavenderBook Source Sans'; font-style: ${style}; font-weight: ${weight}; font-display: swap; src: url('${Asset.fromModule(module).uri}') format('truetype'); }`
+    ),
+    ...HALANT_FACES.map(
+      ([weight, module]) =>
+        `@font-face { font-family: 'LavenderBook Halant'; font-style: normal; font-weight: ${weight}; font-display: swap; src: url('${Asset.fromModule(module).uri}') format('truetype'); }`
+    ),
+    `:root[data-skin='oau'] [class*='css-text']:not(.${UNSKINNED} *, .gm-style *) { font-family: ${OAU_FONT}; }`,
+    // OAU's scrollbars: a slim rounded thumb in the fields' brown on a clear
+    // track, no arrow buttons - the browser's grey bar with arrows looked out
+    // of place on the paper. Chromium and Safari take the ::-webkit rules;
+    // Firefox, which has none of them, the standard thin bar in the same colour
+    // (Chromium would let the standard ones override the rounded thumb).
+    `:root[data-skin='oau'] *:not(.${UNSKINNED} *, .gm-style *)::-webkit-scrollbar { width: 10px; height: 10px; background: transparent; }`,
+    `:root[data-skin='oau'] *:not(.${UNSKINNED} *, .gm-style *)::-webkit-scrollbar-track { background: transparent; }`,
+    `:root[data-skin='oau'] *:not(.${UNSKINNED} *, .gm-style *)::-webkit-scrollbar-button { display: none; width: 0; height: 0; }`,
+    `:root[data-skin='oau'] *:not(.${UNSKINNED} *, .gm-style *)::-webkit-scrollbar-corner { background: transparent; }`,
+    `:root[data-skin='oau'] *:not(.${UNSKINNED} *, .gm-style *)::-webkit-scrollbar-thumb { background-color: hsl(var(--input) / 0.4); border-radius: 999px; border: 3px solid transparent; background-clip: padding-box; }`,
+    `:root[data-skin='oau'] *:not(.${UNSKINNED} *, .gm-style *)::-webkit-scrollbar-thumb:hover { background-color: hsl(var(--input) / 0.7); }`,
+    `@supports not selector(::-webkit-scrollbar) { :root[data-skin='oau'] *:not(.${UNSKINNED} *, .gm-style *) { scrollbar-width: thin; scrollbar-color: hsl(var(--input) / 0.5) transparent; } }`
+  );
   return faces;
 }
 
 function stylesheet(): string {
   const rules: string[] = [];
-  for (const skin of ['material', 'chenfeng'] as const) {
+  for (const skin of ['material', 'chenfeng', 'oau'] as const) {
     rules.push(`:root[data-skin='${skin}'] { ${declarations(skin, { scheme: 'light' })} }`);
     rules.push(`.dark:root[data-skin='${skin}'] { ${declarations(skin, { scheme: 'dark' })} }`);
     if (SKIN_TOKENS[skin].contrast) {
@@ -115,6 +165,13 @@ function stylesheet(): string {
         `@media (prefers-contrast: more) { .dark:root[data-skin='${skin}'] .${ELEVATED} { ${declarations(skin, { scheme: 'dark', elevated: true, contrast: true }, ELEVATED_COLORS)} } }`
       );
     }
+  }
+  // OAU's tabs: each one's colour over the skin's own (theme.ts, OAU_TAB_TINTS).
+  for (const tab of Object.keys(OAU_TAB_TINTS) as OauTab[]) {
+    const tint = Object.entries(paletteVariables(OAU_TAB_TINTS[tab]))
+      .map(([name, value]) => `${name}: ${value};`)
+      .join(' ');
+    if (tint) rules.push(`:root[data-skin='oau'] .${oauTintClass(tab)} { ${tint} }`);
   }
   rules.push(...fontRules());
   // Basic again inside Unskinned, but only while a skin is on: under Basic

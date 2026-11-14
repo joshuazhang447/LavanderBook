@@ -20,6 +20,8 @@ import {
 import { kindIcon, kindIconKey } from '@/lib/kind-icons';
 import { deriveTagColors } from '@/lib/tag-colors';
 import type { NearbyVenue } from '@/lib/use-nearby-venues';
+import { useSkin } from '@/lib/skin';
+import { skinColor } from '@/lib/theme';
 import { venueTags } from '@/lib/venue-tags';
 
 /**
@@ -122,6 +124,8 @@ function PlaceMarkerImpl({ item, icon, onPress }: PlaceMarkerProps) {
   }, [venue.avg_stars, venue.review_count, venue.latest_review_body, venue.tags, venue.name]);
 
   const geometry = placeGeometry(item);
+  // OAU draws the same geometry as stickers (the map's key includes the skin).
+  const oau = useSkin().skin === 'oau';
   // White on every theme, like the map under it, so a chip always takes its
   // light-mode colours.
   const tag = venueTags(venue)[0] ?? null;
@@ -157,6 +161,7 @@ function PlaceMarkerImpl({ item, icon, onPress }: PlaceMarkerProps) {
         <View
           style={[
             styles.tip,
+            oau ? oauStyles.tip : null,
             {
               left: geometry.pin.x + (PIN_SIZE - TIP_SIDE) / 2,
               top: geometry.pin.y + PIN_SIZE + PIN_TAIL - TIP_SIDE / 2 - (TIP_SIDE * Math.SQRT2) / 2,
@@ -165,7 +170,11 @@ function PlaceMarkerImpl({ item, icon, onPress }: PlaceMarkerProps) {
           ]}
         />
         <View
-          style={[styles.head, { left: geometry.pin.x, top: geometry.pin.y, backgroundColor: fill }]}>
+          style={[
+            styles.head,
+            oau ? oauStyles.head : null,
+            { left: geometry.pin.x, top: geometry.pin.y, backgroundColor: fill },
+          ]}>
           {kindGlyph(tag?.slug ?? null, icon)}
         </View>
 
@@ -173,6 +182,7 @@ function PlaceMarkerImpl({ item, icon, onPress }: PlaceMarkerProps) {
           <View
             style={[
               styles.label,
+              oau ? oauStyles.label : null,
               {
                 left: geometry.label.x,
                 top: geometry.label.y,
@@ -180,7 +190,7 @@ function PlaceMarkerImpl({ item, icon, onPress }: PlaceMarkerProps) {
                 height: geometry.label.height,
               },
             ]}>
-            <Text style={styles.name} numberOfLines={1}>
+            <Text style={oau ? [styles.name, oauStyles.name] : styles.name} numberOfLines={1}>
               {venue.name}
             </Text>
             {rating || tag ? (
@@ -188,7 +198,7 @@ function PlaceMarkerImpl({ item, icon, onPress }: PlaceMarkerProps) {
                 {/* Star glyphs, not an icon: react-native-svg draws after
                     layout, and Android's snapshot can land before it. */}
                 {rating ? (
-                  <Text style={styles.rating} numberOfLines={1}>
+                  <Text style={oau ? [styles.rating, oauStyles.meta] : styles.rating} numberOfLines={1}>
                     <Text style={styles.star}>★</Text>
                     {rating.slice(1)}
                   </Text>
@@ -203,7 +213,7 @@ function PlaceMarkerImpl({ item, icon, onPress }: PlaceMarkerProps) {
               </View>
             ) : null}
             {quote ? (
-              <Text style={styles.quote} numberOfLines={1}>
+              <Text style={oau ? [styles.quote, oauStyles.meta] : styles.quote} numberOfLines={1}>
                 “{quote}”
               </Text>
             ) : null}
@@ -224,6 +234,7 @@ function GroupMarkerImpl({ item, onPress }: GroupMarkerProps) {
   const tracksViewChanges = useTracksViewChanges();
   const geometry = groupGeometry(item.venues.length);
   const size = groupSize(item.venues.length);
+  const oau = useSkin().skin === 'oau';
   const coordinate = React.useMemo(
     () => ({ latitude: item.lat, longitude: item.lng }),
     [item.lat, item.lng]
@@ -248,6 +259,7 @@ function GroupMarkerImpl({ item, onPress }: GroupMarkerProps) {
         <View
           style={[
             styles.groupHalo,
+            oau ? oauStyles.groupHalo : null,
             {
               left: geometry.pin.x - HALO,
               top: geometry.pin.y - HALO,
@@ -260,6 +272,7 @@ function GroupMarkerImpl({ item, onPress }: GroupMarkerProps) {
         <View
           style={[
             styles.group,
+            oau ? oauStyles.group : null,
             {
               left: geometry.pin.x,
               top: geometry.pin.y,
@@ -268,7 +281,9 @@ function GroupMarkerImpl({ item, onPress }: GroupMarkerProps) {
               borderRadius: size / 2,
             },
           ]}>
-          <Text style={styles.groupCount}>{item.venues.length}</Text>
+          <Text style={oau ? [styles.groupCount, oauStyles.groupCount] : styles.groupCount}>
+            {item.venues.length}
+          </Text>
         </View>
       </Animated.View>
     </Marker>
@@ -427,4 +442,33 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontVariant: ['tabular-nums'],
   },
+});
+
+/**
+ * OAU's pins and labels (oau-style-guide.md, section 10): the same geometry
+ * as stickers - an ink outline instead of the white rim, labels on cream
+ * paper, the clusters as cream counters. Laid over `styles`, so every size
+ * and offset stays the one map-layout.ts worked out.
+ */
+const OAU_INK = skinColor('oau', 'light', 'outline-ink');
+const oauStyles = StyleSheet.create({
+  head: { borderWidth: 1.5, borderColor: OAU_INK, shadowColor: '#A68659', shadowOpacity: 0.45 },
+  tip: { borderRightWidth: 1.5, borderBottomWidth: 1.5, borderColor: OAU_INK },
+  label: {
+    borderRadius: 10,
+    borderColor: skinColor('oau', 'light', 'border'),
+    backgroundColor: skinColor('oau', 'light', 'card'),
+    shadowColor: '#45311E',
+    shadowOpacity: 0.2,
+  },
+  name: { color: OAU_INK, fontWeight: '700' },
+  meta: { color: skinColor('oau', 'light', 'muted-foreground') },
+  groupHalo: { backgroundColor: 'rgba(69,49,30,0.14)' },
+  group: {
+    borderWidth: 1.5,
+    borderColor: OAU_INK,
+    backgroundColor: skinColor('oau', 'light', 'band'),
+    shadowColor: '#A68659',
+  },
+  groupCount: { color: OAU_INK },
 });

@@ -17,6 +17,7 @@ import { DistanceMeter } from '@/components/distance-meter';
 import { KindBadge } from '@/components/kind-badge';
 import { useLeaveNowReserve } from '@/components/leave-now';
 import { LocationChoiceScreen } from '@/components/location-choice';
+import { OauDirectoryScreen } from '@/components/oau/directory-screen';
 import { useIsWideViewport } from '@/components/tab-bar';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
@@ -54,7 +55,10 @@ import { cn } from '@/lib/utils';
  */
 export function DirectoryScreen() {
   const { skin } = useSkin();
-  return skin === 'chenfeng' ? <ChenfengDirectoryScreen /> : <BasicDirectoryScreen />;
+  // OAU's is tiles on paper (its own file).
+  if (skin === 'chenfeng') return <ChenfengDirectoryScreen />;
+  if (skin === 'oau') return <OauDirectoryScreen />;
+  return <BasicDirectoryScreen />;
 }
 
 function BasicDirectoryScreen() {

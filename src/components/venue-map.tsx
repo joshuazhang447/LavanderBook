@@ -12,6 +12,7 @@ import {
   type GroupItem,
 } from '@/lib/map-layout';
 import type { PlaceResult } from '@/lib/place-search';
+import { useSkin } from '@/lib/skin';
 import { useTagIcons } from '@/lib/tag-icons';
 import type { Coords } from '@/lib/use-location';
 import {
@@ -95,6 +96,8 @@ type VenueMapProps = {
    * they must stay visible. Zero or absent: nothing does.
    */
   bottomInset?: number;
+  /** The website draws the open card's pin pressed in; a phone's markers are bitmaps, so not here. */
+  selectedVenueId?: string | null;
 };
 
 /**
@@ -122,6 +125,10 @@ export function VenueMap({
   bottomInset = 0,
 }: VenueMapProps) {
   const mapRef = React.useRef<MapView>(null);
+  // OAU draws its own pins on Google's map as it is. A marker is a bitmap
+  // Android captures once, so the skin is part of its key.
+  const oau = useSkin().skin === 'oau';
+  const skinKey = oau ? 'oau' : 'plain';
   const [ready, setReady] = React.useState(false);
   const programmaticRef = React.useRef(false);
   const programmaticTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -322,10 +329,10 @@ export function VenueMap({
       */}
       {items.map((item) =>
         item.kind === 'group' ? (
-          <GroupMarker key={item.key} item={item} onPress={pressGroup} />
+          <GroupMarker key={`${item.key}:${skinKey}`} item={item} onPress={pressGroup} />
         ) : (
           <PlaceMarker
-            key={placeMarkerKey(item, tagIcons[venueTags(item.venue)[0]?.slug ?? ''] ?? null)}
+            key={`${placeMarkerKey(item, tagIcons[venueTags(item.venue)[0]?.slug ?? ''] ?? null)}:${skinKey}`}
             item={item}
             icon={tagIcons[venueTags(item.venue)[0]?.slug ?? ''] ?? null}
             onPress={onSelectVenue}

@@ -7,7 +7,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LargeTitleScreen } from '@/components/chenfeng/large-title-screen';
 import { useLeaveNowReserve } from '@/components/leave-now';
 import { LinkedText } from '@/components/linked-text';
+import { OauCard } from '@/components/oau/card';
+import { NoteCheck } from '@/components/oau/note';
+import { PaperBackdrop } from '@/components/oau/paper';
 import { useIsWideViewport, useTabBarOverlap } from '@/components/tab-bar';
+import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { List, Row, Section } from '@/components/ui/list';
 import { Text } from '@/components/ui/text';
@@ -27,7 +31,9 @@ import { cn } from '@/lib/utils';
  */
 export function PrivacyPolicyPage() {
   const { skin } = useSkin();
-  return skin === 'chenfeng' ? <ChenfengPolicy /> : <ColumnPolicy material={skin === 'material'} />;
+  if (skin === 'chenfeng') return <ChenfengPolicy />;
+  if (skin === 'oau') return <OauPolicy />;
+  return <ColumnPolicy material={skin === 'material'} />;
 }
 
 const SHORT_VERSION = PRIVACY_POLICY.intro.find(
@@ -135,6 +141,106 @@ function ChenfengPolicy() {
         </View>
       </List>
     </LargeTitleScreen>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// OAU
+// ---------------------------------------------------------------------------
+
+/**
+ * OAU's reading page (LavenderBookStyle/oau-style-guide.md, section 14.12): a
+ * column on My Account's pink paper, the short version on a card with sage
+ * checks, each heading with a pink rule under it, links pink and underlined.
+ * Typography only: the words are the same text as every skin's.
+ */
+function OauPolicy() {
+  const insets = useSafeAreaInsets();
+  const { isWide } = useIsWideViewport();
+  const { top: leaveNow } = useLeaveNowReserve();
+  const tabBarOverlap = useTabBarOverlap();
+  const topInset = (isWide ? 0 : insets.top) + leaveNow;
+  const link = 'text-primary underline';
+
+  return (
+    <View className="flex-1 bg-background" style={{ paddingTop: topInset }}>
+      <PaperBackdrop tab="account" washHeight={220} />
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="pb-12"
+        contentContainerStyle={tabBarOverlap ? { paddingBottom: 48 + tabBarOverlap } : undefined}>
+        <View className="w-full max-w-[640px] gap-7 self-center px-5 pt-5">
+          <View className="items-start">
+            <Button variant="secondary" size="sm" onPress={goBack} accessibilityLabel="Back to My Account">
+              <Icon as={ChevronLeft} className="size-4 text-foreground" />
+              <Text>My Account</Text>
+            </Button>
+          </View>
+
+          <View className="gap-1.5">
+            <Text oauStyle="display" role="heading" aria-level={1} className="text-foreground">
+              Privacy policy
+            </Text>
+            <Text oauStyle="caption" className="text-muted-foreground">
+              LavenderBook · Last updated {PRIVACY_POLICY.updated}
+            </Text>
+          </View>
+
+          <View className="gap-3">
+            {OPENING.map((block, index) => (
+              <Text key={index} oauStyle="body" className="text-foreground">
+                <Inline text={block.text} linkClassName={link} />
+              </Text>
+            ))}
+          </View>
+
+          {SHORT_VERSION ? (
+            <OauCard className="gap-3 p-5">
+              <Text oauStyle="heading" role="heading" className="text-foreground">
+                The short version
+              </Text>
+              <View className="gap-2.5">
+                {SHORT_VERSION.items.map((item, index) => (
+                  <NoteCheck key={index}>
+                    <Inline text={item} linkClassName={link} />
+                  </NoteCheck>
+                ))}
+              </View>
+            </OauCard>
+          ) : null}
+
+          {PRIVACY_POLICY.sections.map((section) => (
+            <View key={section.title} className="gap-3">
+              <View className="border-b border-note-rule pb-1.5">
+                <Text oauStyle="heading" role="heading" aria-level={2} className="text-foreground">
+                  {section.title}
+                </Text>
+              </View>
+              {section.blocks.map((block, index) =>
+                block.kind === 'p' ? (
+                  <Text key={index} oauStyle="body" className="text-muted-foreground">
+                    <Inline text={block.text} linkClassName={link} />
+                  </Text>
+                ) : (
+                  <View key={index} className="gap-2">
+                    {block.items.map((item, itemIndex) => (
+                      <View key={itemIndex} className="flex-row gap-2.5">
+                        <Text oauStyle="body" className="text-muted-foreground">
+                          {'•'}
+                        </Text>
+                        <Text oauStyle="body" className="flex-1 text-muted-foreground">
+                          <Inline text={item} linkClassName={link} />
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                )
+              )}
+            </View>
+          ))}
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 

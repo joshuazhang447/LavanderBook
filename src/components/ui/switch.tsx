@@ -27,7 +27,7 @@ type SwitchLook = {
 };
 
 /**
- * Basic's and Material's track and thumb. Basic's are the originals, untouched.
+ * Basic's, Material's and OAU's track and thumb. Basic's are the originals, untouched.
  *
  * Material 3: a 52 x 32 track, outlined while off; the thumb is 16 off and
  * grows to 24 on, its centre 16 in from either end.
@@ -56,6 +56,22 @@ const SWITCH_LOOKS: Record<Exclude<Skin, 'chenfeng'>, SwitchLook> = {
     thumbWeb: 'pointer-events-none block transition-all duration-200',
     thumbOn: 'size-6 translate-x-[22px] bg-primary-foreground',
     thumbOff: 'size-4 translate-x-[6px] bg-input',
+  },
+  /**
+   * OAU (the guide's section 13.8): a 52 x 32 track, sunk paper outlined in
+   * line brown while off, the tab's switch colour outlined in ink while on;
+   * the thumb a little cream sticker, 24 across with an ink outline.
+   */
+  oau: {
+    root: 'flex h-8 w-[52px] shrink-0 flex-row items-center rounded-full border-[1.5px]',
+    rootWeb:
+      'focus-visible:ring-ring peer inline-flex outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed',
+    rootOn: 'border-outline-ink bg-switch-on',
+    rootOff: 'border-input bg-muted',
+    thumb: 'size-6 rounded-full border-[1.5px] border-outline-ink bg-card transition-transform',
+    thumbWeb: 'pointer-events-none block shadow-[0_2px_5px_rgba(166,134,89,0.32)] duration-200',
+    thumbOn: 'translate-x-[21px]',
+    thumbOff: 'translate-x-[2.5px]',
   },
 };
 

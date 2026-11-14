@@ -122,7 +122,32 @@ export type SkinColor =
   | 'ring'
   | 'switch-on'
   | ExtraColor
-  | MaterialRole;
+  | MaterialRole
+  | OauColor;
+
+/**
+ * The fourth group came with OAU (LavenderBookStyle/oau-style-guide.md, section
+ * 4.3): paper and stickers, LavenderBook's note, caution paper, the wash at the
+ * top of a page. Only OAU defines them; every other skin gets them filled in
+ * from colours it already has (oauFallbacks), as Material's roles are.
+ */
+type OauColor =
+  | 'band'
+  | 'sticker'
+  | 'sticker-foreground'
+  | 'outline-ink'
+  | 'note'
+  | 'note-rule'
+  | 'wash'
+  | 'caution'
+  | 'caution-stripe'
+  | 'caution-foreground'
+  | 'positive'
+  | 'positive-foreground'
+  | 'oau-pink'
+  | 'oau-pink-foreground'
+  | 'oau-flag'
+  | 'star-foreground';
 
 type MaterialRole =
   | 'primary-container'
@@ -177,7 +202,8 @@ export const TRANSLUCENT_COLORS: readonly SkinColor[] = [
 type SkinPalette = Record<SkinColor, string>;
 
 /** A skin's own palette: Material's roles optional, filled in by roleFallbacks. */
-type TokenPalette = Omit<SkinPalette, MaterialRole> & Partial<Pick<SkinPalette, MaterialRole>>;
+type TokenPalette = Omit<SkinPalette, MaterialRole | OauColor> &
+  Partial<Pick<SkinPalette, MaterialRole | OauColor>>;
 
 export type SkinTokens = {
   /** --radius in px: rounded-lg; md, sm and xl are worked out from it. */
@@ -202,7 +228,33 @@ export type SkinTokens = {
   };
 };
 
-type CorePalette = Omit<SkinPalette, ExtraColor | MaterialRole>;
+type CorePalette = Omit<SkinPalette, ExtraColor | MaterialRole | OauColor>;
+
+/**
+ * OAU's colours, for a skin without them: each on a colour of the same job it
+ * already has, so a class like bg-note resolves in every skin and nothing it
+ * draws changes. global.css repeats Basic's.
+ */
+function oauFallbacks(palette: TokenPalette): Pick<SkinPalette, OauColor> {
+  return {
+    band: palette.muted,
+    sticker: palette.primary,
+    'sticker-foreground': palette['primary-foreground'],
+    'outline-ink': palette.border,
+    note: palette.muted,
+    'note-rule': palette.border,
+    wash: palette.background,
+    caution: palette.muted,
+    'caution-stripe': palette.muted,
+    'caution-foreground': palette.destructive,
+    positive: palette.muted,
+    'positive-foreground': palette.foreground,
+    'oau-pink': palette.secondary,
+    'oau-pink-foreground': palette['secondary-foreground'],
+    'oau-flag': palette.primary,
+    'star-foreground': palette.foreground,
+  };
+}
 
 /**
  * Material's roles, for a skin without them: each on a colour of the same job
@@ -403,6 +455,79 @@ const MATERIAL_DARK: CorePalette = {
  * label, for whatever cannot take alpha. The glass is not here: it is drawn by
  * the components that float (src/components/glass.tsx).
  */
+/**
+ * OAU: warm paper and brown ink from One Among Us's memorial site, and the
+ * trans flag's colours as the accent, one per tab (OAU_TAB_TINTS). This is the
+ * Map's palette, blue; the guide is LavenderBookStyle/oau-style-guide.md, and
+ * its section 4.4 checks every text pairing here against WCAG AA.
+ */
+const OAU_LIGHT: TokenPalette = {
+  background: '35.3 68% 95.1%', // #FBF4EA paper
+  foreground: '29.2 39.4% 19.4%', // #45311E ink
+  card: '37.5 100% 98.4%', // #FFFCF7
+  'card-foreground': '29.2 39.4% 19.4%',
+  popover: '35.3 68% 95.1%', // sheets are paper too
+  'popover-foreground': '29.2 39.4% 19.4%',
+  primary: '199 72.3% 32.5%', // #17698F
+  'primary-foreground': '37.5 100% 98.4%',
+  secondary: '198.5 86.7% 94.1%', // #E3F5FD
+  'secondary-foreground': '199.2 77.4% 26.1%', // #0F5576
+  muted: '34.8 54.4% 88.8%', // #F2E5D3 sunk paper
+  'muted-foreground': '31 34.1% 34.5%', // #76593A
+  accent: '33.6 55.6% 91.2%', // #F5EADC a pressed row
+  'accent-foreground': '29.2 39.4% 19.4%',
+  destructive: '10.5 70.2% 36.9%', // #A0331C brick red
+  'destructive-foreground': '37.5 100% 98.4%',
+  border: '34.3 42.2% 83.7%', // #E7D8C4
+  input: '32.7 26.8% 48.2%', // #9C7E5A
+  ring: '199 72.3% 32.5%',
+  'switch-on': '201.1 62.8% 44.3%', // #2A86B8
+  star: '38 86.6% 56.1%', // #F0A92E, always with an ink outline
+  'segment-thumb': '37.5 100% 98.4%',
+  'system-purple': '201.1 62.8% 44.3%',
+  'system-indigo': '199 72.3% 32.5%',
+  'system-gray': '31 34.1% 34.5%',
+  grouped: '33.9 56.1% 92%', // #F6ECDF
+  'label-secondary': '31 34.1% 34.5% / 1',
+  'label-tertiary': '31 29.9% 38% / 1', // #7E6244
+  separator: '29.2 39.4% 19.4% / 0.14',
+  fill: '29.2 39.4% 19.4% / 0.12',
+  'fill-secondary': '29.2 39.4% 19.4% / 0.1',
+  'fill-tertiary': '29.2 39.4% 19.4% / 0.08',
+  'fill-quaternary': '29.2 39.4% 19.4% / 0.06',
+  'tint-fill': '199 72.3% 32.5% / 0.12',
+  band: '31.7 100% 92.9%', // #FFEEDB, the memorial's own button cream
+  sticker: '197.6 85.9% 80.6%', // #A3DFF8
+  'sticker-foreground': '29.2 39.4% 19.4%',
+  'outline-ink': '29.2 39.4% 19.4%',
+  note: '0 0% 100%',
+  'note-rule': '196.6 94.1% 66.9%', // #5BCEFA, the flag's blue
+  wash: '199.4 79.5% 92.4%', // #DCF1FB
+  caution: '17.1 84% 95.1%', // #FDEEE8
+  'caution-stripe': '17.6 81% 91.8%', // #FBE3D9
+  'caution-foreground': '10.5 70.2% 36.9%',
+  positive: '120 31.7% 92%', // #E4F1E4
+  'positive-foreground': '133.3 33.8% 31.4%', // #356B41
+  'oau-pink': '345 100% 91.4%', // #FFD3DE
+  'oau-pink-foreground': '341.2 53.3% 35.3%', // #8A2A48
+  'oau-flag': '196.6 94.1% 66.9%',
+  'star-foreground': '38.6 100% 28%', // #8F5C00
+};
+
+/** Under the device's increased contrast (the guide's section 4.5). */
+const OAU_CONTRAST: Partial<SkinPalette> = {
+  foreground: '29.1 43.2% 15.9%', // #3A2817
+  'muted-foreground': '33.4 45.5% 30.2%', // #70512A
+  'label-secondary': '33.4 45.5% 30.2% / 1',
+  'label-tertiary': '31 34.1% 34.5% / 1',
+  input: '31.9 29% 42%', // #8A6D4C
+  border: '33.5 36.1% 76.7%', // #D9C6AE
+  separator: '29.2 39.4% 19.4% / 0.24',
+  primary: '199.2 77.4% 26.1%', // #0F5576
+  ring: '199.2 77.4% 26.1%',
+  wash: '35.3 68% 95.1%', // no wash
+};
+
 export const SKIN_TOKENS: Record<Skin, SkinTokens> = {
   basic: {
     radius: 10,
@@ -549,6 +674,14 @@ export const SKIN_TOKENS: Record<Skin, SkinTokens> = {
       },
     },
   },
+  oau: {
+    radius: 16,
+    light: OAU_LIGHT,
+    // Light only: LavenderBook has one appearance, and OAU draws it whatever
+    // the device says (skin-provider, _layout).
+    dark: OAU_LIGHT,
+    contrast: { light: OAU_CONTRAST, dark: OAU_CONTRAST },
+  },
 };
 
 /** The colour and the alpha of one palette value. */
@@ -589,7 +722,7 @@ export function skinPalette(skin: Skin, { scheme, elevated, contrast }: SkinVari
     ...(contrast ? tokens.contrast?.[scheme] : null),
     ...(elevated && dark && contrast ? tokens.contrast?.elevated : null),
   };
-  return { ...roleFallbacks(palette), ...palette };
+  return { ...roleFallbacks(palette), ...oauFallbacks(palette), ...palette };
 }
 
 /** A skin's colour as a string, for the APIs that take one rather than a class. */
@@ -625,4 +758,64 @@ export const SKIN_NAV_THEME: Record<Skin, Record<'light' | 'dark', Theme>> = {
   basic: NAV_THEME,
   material: { light: navTheme('material', 'light'), dark: navTheme('material', 'dark') },
   chenfeng: { light: navTheme('chenfeng', 'light'), dark: navTheme('chenfeng', 'dark') },
+  // Light only: the same theme whatever the device says.
+  oau: { light: navTheme('oau', 'light'), dark: navTheme('oau', 'light') },
 };
+
+/**
+ * OAU gives each tab one colour of the trans flag (the guide's section 4.8):
+ * the Map is blue, the Directory white, My Account pink. The skin's own palette
+ * is the Map's; these replace its accent inside the other two tabs, and give
+ * the tab bar each tab's colour for its pill.
+ */
+export type OauTab = 'map' | 'directory' | 'account';
+
+export const OAU_TAB_TINTS: Record<OauTab, Partial<SkinPalette>> = {
+  map: {},
+  directory: {
+    primary: '33.4 45.5% 30.2%', // #70512A ink-2: links, underlined
+    ring: '33.4 45.5% 30.2%',
+    secondary: '0 0% 100%',
+    'secondary-foreground': '29.2 39.4% 19.4%',
+    'switch-on': '33.4 45.5% 30.2%',
+    sticker: '0 0% 100%', // the flag's white
+    'tint-fill': '33.4 45.5% 30.2% / 0.1',
+    'note-rule': '348.2 79.2% 81.2%', // drawn under a blue half: blue over pink
+    wash: '0 0% 100%',
+    'oau-flag': '0 0% 100%',
+    card: '0 0% 100%',
+  },
+  account: {
+    primary: '341.2 53.3% 35.3%', // #8A2A48
+    ring: '341.2 53.3% 35.3%',
+    secondary: '344.3 100% 95.5%', // #FFE8EE
+    'secondary-foreground': '341.2 53.3% 35.3%',
+    'switch-on': '342.3 42.9% 52%', // #B9506F
+    sticker: '347.4 82.6% 86.5%', // #F9C0CC
+    'tint-fill': '341.2 53.3% 35.3% / 0.12',
+    'note-rule': '348.2 79.2% 81.2%', // #F5A9B8, the flag's pink
+    wash: '343.2 80.6% 93.9%', // #FCE3EA
+    'oau-flag': '348.2 79.2% 81.2%',
+  },
+};
+
+/**
+ * The class a tab's screen carries on the website, which the skins'
+ * stylesheet (skin-provider.web.tsx) gives that tab's colours under OAU.
+ */
+export function oauTintClass(tab: OauTab): string {
+  return `lavenderbook-oau-${tab}`;
+}
+
+/** One tab's colours as CSS variables, over the skin's own. */
+export function oauTabVariables(tab: OauTab): Record<string, string> {
+  return paletteVariables(OAU_TAB_TINTS[tab]);
+}
+
+/** One of a tab's colours as a string (the tab bar's pills). */
+export function oauTabColor(tab: OauTab, color: SkinColor): string {
+  const value = OAU_TAB_TINTS[tab][color] ?? skinPalette('oau', { scheme: 'light' })[color];
+  const { color: hsl, alpha } = splitColor(value);
+  const [h, s, l] = hsl.split(' ');
+  return alpha === '1' ? `hsl(${h}, ${s}, ${l})` : `hsla(${h}, ${s}, ${l}, ${alpha})`;
+}

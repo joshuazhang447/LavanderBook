@@ -58,6 +58,39 @@ export const CONTACT_TEXT = {
 } as const;
 
 /**
+ * Who is speaking, where a place card keeps LavenderBook's words and visitors'
+ * apart under headings of their own (OAU's place card; any skin may use them).
+ */
+export const VOICES_TEXT = {
+  fromLavenderBook: 'From LavenderBook',
+  fromVisitors: 'From visitors',
+  visitorsLine: "Visitors' own words, not checked by LavenderBook.",
+  directions: 'Directions',
+  /** Read out for the directions button: where it goes, and what opens. */
+  directionsSpoken: (name: string) => `Directions to ${name} in Google Maps`,
+  getInTouch: 'Get in touch',
+  writeReview: 'Write a review',
+  noReviewsYet: 'No reviews yet',
+  noWritten: 'No written reviews yet',
+  haveYouBeen: 'Have you been? Tell others how it went.',
+  seeChecked: 'See everything we checked',
+  seeAnswers: 'See all answers',
+  /** Read out after the review action when there are new questions. */
+  newSpoken: 'There are new questions for you to answer',
+  /** A place LavenderBook lists as a warning, over its card. */
+  warning: 'LavenderBook lists this place as a warning',
+  warningLine: 'What LavenderBook knows about it is in the note below.',
+  /** A place with no public address: its first contact, as the thing to do. */
+  contactVerb: {
+    website: 'Open website',
+    phone: 'Call',
+    text: 'Send a text',
+    email: 'Email',
+    link: 'Open link',
+  },
+} as const;
+
+/**
  * The way in to what is behind a place: what LavenderBook checked there and
  * what visitors reported. It used to be a small "More details" pill beside the
  * tags, and was mostly missed - so it now says what is inside, and shows the

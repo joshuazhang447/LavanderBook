@@ -1,10 +1,12 @@
-import { LocateFixed, MapPin, Search, type LucideIcon } from 'lucide-react-native';
+import { ChevronRight, LocateFixed, MapPin, Search, type LucideIcon } from 'lucide-react-native';
 import * as React from 'react';
 import { Platform, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CityPicker } from '@/components/city-picker';
 import { BUTTON_LABEL, DIALOG_WIDTH, useDialogMaxHeight } from '@/components/info-dialog';
+import { BookTile } from '@/components/oau/card';
+import { PaperBackdrop } from '@/components/oau/paper';
 import { useIsWideViewport } from '@/components/tab-bar';
 import { Button } from '@/components/ui/button';
 import {
@@ -22,6 +24,7 @@ import {
   openLocationSettings,
   useMapLocation,
 } from '@/lib/map-location';
+import { useSkin } from '@/lib/skin';
 import { cn } from '@/lib/utils';
 
 /**
@@ -67,9 +70,47 @@ type OptionProps = {
   detail: string;
   onPress: () => void;
   disabled?: boolean;
+  /** OAU's circle colour: the three choices in blue, pink and sage. */
+  tone?: 'blue' | 'pink' | 'sage';
 };
 
-function Option({ icon, title, detail, onPress, disabled }: OptionProps) {
+const OAU_TONE = {
+  blue: { circle: 'bg-wash', glyph: 'text-primary' },
+  pink: { circle: 'bg-oau-pink', glyph: 'text-oau-pink-foreground' },
+  sage: { circle: 'bg-positive', glyph: 'text-positive-foreground' },
+} as const;
+
+function Option({ icon, title, detail, onPress, disabled, tone = 'blue' }: OptionProps) {
+  // OAU: a card that presses like a sticker, a tinted circle, a chevron.
+  if (useSkin().skin === 'oau') {
+    return (
+      <Pressable
+        onPress={onPress}
+        disabled={disabled}
+        accessibilityRole="button"
+        accessibilityLabel={`${title}. ${detail}`}
+        className={cn(
+          'flex-row items-center gap-3 rounded-[18px] border border-border bg-card px-4 py-3.5 active:scale-[0.99] active:bg-muted',
+          Platform.select({ web: 'cursor-pointer transition-transform hover:bg-muted/40' }),
+          disabled && 'opacity-50'
+        )}>
+        <View
+          className={cn('size-10 items-center justify-center rounded-full', OAU_TONE[tone].circle)}>
+          <Icon as={icon} className={cn('size-5', OAU_TONE[tone].glyph)} />
+        </View>
+        <View className="flex-1 gap-0.5">
+          <Text oauStyle="subheading" className="text-foreground">
+            {title}
+          </Text>
+          <Text oauStyle="callout" className="text-muted-foreground">
+            {detail}
+          </Text>
+        </View>
+        <Icon as={ChevronRight} className="size-[18px] text-muted-foreground" />
+      </Pressable>
+    );
+  }
+
   return (
     <Pressable
       onPress={onPress}
@@ -145,6 +186,7 @@ export function LocationChoice({ onDone }: LocationChoiceProps) {
           detail="Pick any city by name."
           onPress={() => setPicking(true)}
           disabled={busy}
+          tone="pink"
         />
 
         {area ? (
@@ -161,6 +203,7 @@ export function LocationChoice({ onDone }: LocationChoiceProps) {
               onDone?.();
             }}
             disabled={busy}
+            tone="sage"
           />
         ) : null}
 
@@ -177,6 +220,35 @@ export function LocationChoice({ onDone }: LocationChoiceProps) {
 export function LocationChoiceScreen() {
   const insets = useSafeAreaInsets();
   const { isWide } = useIsWideViewport();
+  const oau = useSkin().skin === 'oau';
+
+  // OAU: the book welcomes, over the Map's blue wash; same choices, same words.
+  if (oau) {
+    return (
+      <View className="flex-1 bg-background">
+        <PaperBackdrop tab="map" washHeight={300} />
+        <ScrollView
+          className="flex-1"
+          contentContainerClassName="grow justify-center"
+          contentContainerStyle={{ paddingTop: isWide ? 0 : insets.top }}>
+          <View className="w-full max-w-md gap-6 self-center px-5 py-10">
+            <View className="items-center gap-4">
+              <BookTile />
+              <View className="items-center gap-1.5">
+                <Text oauStyle="title" role="heading" className="text-center text-foreground">
+                  Where should the map start?
+                </Text>
+                <Text oauStyle="body" className="text-center text-muted-foreground">
+                  Everything works either way, including posting reviews.
+                </Text>
+              </View>
+            </View>
+            <LocationChoice />
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
 
   return (
     <ScrollView
