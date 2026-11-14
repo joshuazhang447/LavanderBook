@@ -348,24 +348,28 @@ function KindHeader({
           <Text oauStyle="title" role="heading" className="text-foreground">
             {label}
           </Text>
-          <Text oauStyle="callout" className="text-muted-foreground">
-            {DIRECTORY_TEXT.count(count)}
-          </Text>
+          {/* "Change" beside the count, not beside the title: there it took
+              the title's room and broke the kind's name inside a word. */}
+          <View className="flex-row flex-wrap items-center gap-x-1.5">
+            <Text oauStyle="callout" className="text-muted-foreground">
+              {DIRECTORY_TEXT.count(count)} ·
+            </Text>
+            <Pressable
+              onPress={onChange}
+              accessibilityRole="button"
+              accessibilityLabel={DIRECTORY_TEXT.changeSpoken(label)}
+              hitSlop={8}
+              className={cn(
+                'flex-row items-center gap-0.5 active:opacity-60',
+                Platform.select({ web: 'cursor-pointer' })
+              )}>
+              <Text oauStyle="callout" className="font-semibold text-primary">
+                {DIRECTORY_TEXT.change}
+              </Text>
+              <Icon as={ChevronsUpDown} className="size-3.5 text-primary" />
+            </Pressable>
+          </View>
         </View>
-        <Pressable
-          onPress={onChange}
-          accessibilityRole="button"
-          accessibilityLabel={DIRECTORY_TEXT.changeSpoken(label)}
-          hitSlop={8}
-          className={cn(
-            'flex-row items-center gap-1 rounded-full py-1 pl-1 active:opacity-60',
-            Platform.select({ web: 'cursor-pointer' })
-          )}>
-          <Text oauStyle="label" className="text-primary">
-            {DIRECTORY_TEXT.change}
-          </Text>
-          <Icon as={ChevronsUpDown} className="size-4 text-primary" />
-        </Pressable>
       </View>
       {kind?.description ? (
         <Text oauStyle="body" className="text-foreground">

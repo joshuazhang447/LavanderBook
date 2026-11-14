@@ -130,7 +130,19 @@ function fontRules(): string[] {
       ([weight, module]) =>
         `@font-face { font-family: 'LavenderBook Halant'; font-style: normal; font-weight: ${weight}; font-display: swap; src: url('${Asset.fromModule(module).uri}') format('truetype'); }`
     ),
-    `:root[data-skin='oau'] [class*='css-text']:not(.${UNSKINNED} *, .gm-style *) { font-family: ${OAU_FONT}; }`
+    `:root[data-skin='oau'] [class*='css-text']:not(.${UNSKINNED} *, .gm-style *) { font-family: ${OAU_FONT}; }`,
+    // OAU's scrollbars: a slim rounded thumb in the fields' brown on a clear
+    // track, no arrow buttons - the browser's grey bar with arrows looked out
+    // of place on the paper. Chromium and Safari take the ::-webkit rules;
+    // Firefox, which has none of them, the standard thin bar in the same colour
+    // (Chromium would let the standard ones override the rounded thumb).
+    `:root[data-skin='oau'] *:not(.${UNSKINNED} *, .gm-style *)::-webkit-scrollbar { width: 10px; height: 10px; background: transparent; }`,
+    `:root[data-skin='oau'] *:not(.${UNSKINNED} *, .gm-style *)::-webkit-scrollbar-track { background: transparent; }`,
+    `:root[data-skin='oau'] *:not(.${UNSKINNED} *, .gm-style *)::-webkit-scrollbar-button { display: none; width: 0; height: 0; }`,
+    `:root[data-skin='oau'] *:not(.${UNSKINNED} *, .gm-style *)::-webkit-scrollbar-corner { background: transparent; }`,
+    `:root[data-skin='oau'] *:not(.${UNSKINNED} *, .gm-style *)::-webkit-scrollbar-thumb { background-color: hsl(var(--input) / 0.4); border-radius: 999px; border: 3px solid transparent; background-clip: padding-box; }`,
+    `:root[data-skin='oau'] *:not(.${UNSKINNED} *, .gm-style *)::-webkit-scrollbar-thumb:hover { background-color: hsl(var(--input) / 0.7); }`,
+    `@supports not selector(::-webkit-scrollbar) { :root[data-skin='oau'] *:not(.${UNSKINNED} *, .gm-style *) { scrollbar-width: thin; scrollbar-color: hsl(var(--input) / 0.5) transparent; } }`
   );
   return faces;
 }

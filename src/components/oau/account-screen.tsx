@@ -478,8 +478,8 @@ function ReviewRow({
         }${status ? `. ${status}` : ''}`}
         accessibilityHint="Opens the review to edit it."
         className={cn(
-          'flex-1 gap-1 py-3.5 pl-4 pr-3 active:bg-muted',
-          Platform.select({ web: 'cursor-pointer transition-colors hover:bg-muted/60' })
+          'flex-1 gap-1 py-3.5 pl-4 pr-3 active:opacity-70',
+          Platform.select({ web: 'cursor-pointer transition-opacity hover:opacity-80' })
         )}>
         <View className="flex-row items-center gap-2">
           <Text oauStyle="subheading" numberOfLines={1} className="shrink text-foreground">

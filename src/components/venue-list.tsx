@@ -184,8 +184,8 @@ function OauPlaceRow({ row, first, listed, onSelect, onLocate }: PlaceRowCardPro
           .filter(Boolean)
           .join(', ')}
         className={cn(
-          'flex-1 flex-row items-start gap-3 py-3.5 pl-4 pr-3 active:bg-muted',
-          Platform.select({ web: 'cursor-pointer transition-colors hover:bg-muted/60' })
+          'flex-1 flex-row items-start gap-3 py-3.5 pl-4 pr-3 active:opacity-70',
+          Platform.select({ web: 'cursor-pointer transition-opacity hover:opacity-80' })
         )}>
         <KindBadge
           tag={lead}
