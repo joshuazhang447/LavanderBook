@@ -7,7 +7,8 @@ import { Linking, Platform, Text as NestedText } from 'react-native';
 import { linkify } from '@/lib/linkify';
 import { cn } from '@/lib/utils';
 
-function openLink(href: string) {
+/** Opens a website, a mail draft or the dialler - whatever the link is. */
+export function openLink(href: string) {
   if (Platform.OS === 'web') {
     // A new tab, and no referrer: the page we send someone to does not need to
     // learn they came from LavenderBook.

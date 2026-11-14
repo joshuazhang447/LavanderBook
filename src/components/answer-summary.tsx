@@ -1,7 +1,9 @@
+import { Check } from 'lucide-react-native';
 import * as React from 'react';
 import { Pressable, View } from 'react-native';
 
 import { StarRating } from '@/components/star-rating';
+import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import {
   configNumber,
@@ -97,39 +99,58 @@ function SplitBar({ segments }: { segments: { count: number; className: string }
   );
 }
 
-/** One row of a list: label, a bar filled to its share, the count. */
-function CountRow({ label, count, total, muted }: { label: string; count: number; total: number; muted?: boolean }) {
+/** An option's words, whole: wrapped, never cut to fit beside a bar. */
+function OptionLabel({ children }: React.PropsWithChildren) {
+  const cf = useChenfeng();
+  return (
+    <Text
+      textStyle={cf ? 'subheadline' : undefined}
+      className={cf ? 'flex-1 text-foreground' : 'flex-1 text-sm leading-5 text-foreground'}>
+      {children}
+    </Text>
+  );
+}
+
+/**
+ * An option several people picked: its words on a line of their own with
+ * "2 of 3" beside them, and the bar under both, the full width of the card.
+ * The bar used to share the line with the words, which left the words two
+ * fifths of it - "Trans and non-bi..." - and the words are the answer.
+ */
+function OptionRow({ label, count, total }: { label: string; count: number; total: number }) {
   const cf = useChenfeng();
   const share = total === 0 ? 0 : count / total;
-  if (cf) {
-    return (
-      <View className="flex-row items-center gap-2.5">
+  return (
+    <View className="gap-1">
+      <View className="flex-row items-start gap-3">
+        <OptionLabel>{label}</OptionLabel>
         <Text
-          textStyle="subheadline"
-          numberOfLines={1}
-          className={cn('w-2/5', muted ? 'text-label-secondary' : 'text-foreground')}>
-          {label}
-        </Text>
-        <View className="h-[5px] flex-1 overflow-hidden rounded-full bg-fill-tertiary">
-          <View className="h-full rounded-full bg-primary" style={{ width: `${share * 100}%` }} />
-        </View>
-        <Text textStyle="footnote" className="w-6 text-right text-label-secondary" style={TABULAR}>
-          {count}
+          textStyle={cf ? 'footnote' : undefined}
+          className={cf ? 'pt-px text-label-secondary' : 'pt-0.5 text-xs text-muted-foreground'}
+          style={TABULAR}>
+          {count} of {total}
         </Text>
       </View>
-    );
-  }
-  return (
-    <View className="flex-row items-center gap-2">
-      <Text
-        numberOfLines={1}
-        className={cn('w-2/5 text-sm', muted ? 'text-muted-foreground' : 'text-foreground')}>
-        {label}
-      </Text>
-      <View className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+      <View
+        className={cn(
+          'overflow-hidden rounded-full',
+          cf ? 'h-[5px] bg-fill-tertiary' : 'h-1.5 bg-muted'
+        )}>
         <View className="h-full rounded-full bg-primary" style={{ width: `${share * 100}%` }} />
       </View>
-      <Text className="w-6 text-right text-xs text-muted-foreground">{count}</Text>
+    </View>
+  );
+}
+
+/**
+ * An option the one person who answered picked. A tick, not a bar: one
+ * person's answer drawn as a full bar reads like everyone agreeing.
+ */
+function CheckRow({ label }: { label: string }) {
+  return (
+    <View className="flex-row items-start gap-2">
+      <Icon as={Check} className="mt-0.5 size-4 text-primary" />
+      <OptionLabel>{label}</OptionLabel>
     </View>
   );
 }
@@ -163,22 +184,78 @@ function YesNo({ yes, no, unsure }: { yes: number; no: number; unsure?: number }
   );
 }
 
-function Options({ options, respondents, any }: { options: OptionCount[]; respondents: number; any: boolean }) {
+/**
+ * A choice question's answers. What people picked comes first, most picked
+ * first, in full words; what nobody picked is one quiet line at the end, so
+ * the eye does not have to read past empty bars to find the answer.
+ *
+ * - One answer only, and everyone gave the same one: said as the answer, like
+ *   a yes or no ("Monthly").
+ * - Only one person answered: their picks as a checklist.
+ * - Otherwise: each picked option with "2 of 3" and its bar.
+ */
+function Options({
+  options,
+  respondents,
+  several,
+}: {
+  options: OptionCount[];
+  respondents: number;
+  /** Whether a person could pick more than one. */
+  several: boolean;
+}) {
+  const cf = useChenfeng();
+  // Most picked first; a tie keeps the order the question lists them in.
+  const picked = options
+    .map((option, index) => ({ option, index }))
+    .filter(({ option }) => option.count > 0)
+    .sort((a, b) => b.option.count - a.option.count || a.index - b.index)
+    .map(({ option }) => option);
+  const unpicked = options.filter((option) => option.count === 0);
+  if (picked.length === 0) return null;
+
+  const agreed = !several && picked.length === 1;
+
   return (
-    <View className="gap-1.5">
-      <View className="gap-1">
-        {options.map((option) => (
-          <CountRow
-            key={option.optionId}
-            label={option.label}
-            count={option.count}
-            total={respondents}
-            muted={option.count === 0}
-          />
-        ))}
-      </View>
+    <View className="gap-2">
+      {agreed ? (
+        <Headline>{picked[0].label}</Headline>
+      ) : respondents === 1 ? (
+        <View className="gap-1.5">
+          {picked.map((option) => (
+            <CheckRow key={option.optionId} label={option.label} />
+          ))}
+        </View>
+      ) : (
+        <View className="gap-2.5">
+          {picked.map((option) => (
+            <OptionRow
+              key={option.optionId}
+              label={option.label}
+              count={option.count}
+              total={respondents}
+            />
+          ))}
+        </View>
+      )}
+
+      {/* Only where a person could pick several: there, an option left
+          unticked says something. Where they could pick one, it only says
+          they picked another. */}
+      {several && unpicked.length > 0 ? (
+        <Text
+          textStyle={cf ? 'footnote' : undefined}
+          className={cf ? 'text-label-secondary' : 'text-xs leading-4 text-muted-foreground'}>
+          Not mentioned: {unpicked.map((option) => option.label).join(', ')}
+        </Text>
+      ) : null}
+
       <Tally>
-        {any ? `${people(respondents)}, any number of picks` : `from ${people(respondents)}`}
+        {agreed
+          ? `${picked[0].count} of ${respondents} said this`
+          : several && respondents > 1
+            ? `From ${people(respondents)}, each could pick several`
+            : `From ${people(respondents)}`}
       </Tally>
     </View>
   );
@@ -399,9 +476,9 @@ function Body({ row }: { row: AnswerSummaryRow }) {
     case 'yes_no_unsure':
       return <YesNo yes={summary.yes} no={summary.no} unsure={summary.unsure} />;
     case 'single_select':
-      return <Options options={summary.options} respondents={row.respondents} any={false} />;
+      return <Options options={summary.options} respondents={row.respondents} several={false} />;
     case 'multi_select':
-      return <Options options={summary.options} respondents={row.respondents} any />;
+      return <Options options={summary.options} respondents={row.respondents} several />;
     case 'scale':
       return <Scale row={row} summary={summary} />;
     case 'rating':
@@ -422,40 +499,36 @@ function Body({ row }: { row: AnswerSummaryRow }) {
 
 // ---------------------------------------------------------------------------
 
+/**
+ * The question, quiet, and the answer under it, which is what stands out.
+ *
+ * No help text: it is written to the person answering ("Tick everything you
+ * saw"), and read here, under the answers, it reads as an instruction to
+ * someone who has nothing to tick.
+ */
 export function AnswerSummaryCard({ row }: { row: AnswerSummaryRow }) {
   const cf = useChenfeng();
   if (cf) {
-    // The question is the row's title, quiet; the answer is what stands out.
     return (
       <View className="gap-2">
-        <View className="gap-0.5">
-          <Text textStyle="subheadline" className="text-label-secondary">
-            {row.prompt}
-            {row.archived ? <Text textStyle="footnote"> · earlier wording</Text> : null}
-          </Text>
-          {row.helpText ? (
-            <Text textStyle="footnote" className="text-label-secondary">
-              {row.helpText}
-            </Text>
-          ) : null}
-        </View>
+        <Text textStyle="subheadline" className="text-label-secondary">
+          {row.prompt}
+          {row.archived ? <Text textStyle="footnote"> · earlier wording</Text> : null}
+        </Text>
         <Body row={row} />
       </View>
     );
   }
   return (
     <View className="gap-2">
-      <View className="gap-0.5">
-        <Text className="text-sm font-medium text-foreground">
-          {row.prompt}
-          {row.archived ? (
-            // Superseded: shown in the words people were actually asked, and
-            // said so, rather than quietly filed under the new wording.
-            <Text className="text-xs font-normal text-muted-foreground"> · earlier wording</Text>
-          ) : null}
-        </Text>
-        {row.helpText ? <Text className="text-xs text-muted-foreground">{row.helpText}</Text> : null}
-      </View>
+      <Text className="text-sm text-muted-foreground">
+        {row.prompt}
+        {row.archived ? (
+          // Superseded: shown in the words people were actually asked, and
+          // said so, rather than quietly filed under the new wording.
+          <Text className="text-xs text-muted-foreground"> · earlier wording</Text>
+        ) : null}
+      </Text>
       <Body row={row} />
     </View>
   );

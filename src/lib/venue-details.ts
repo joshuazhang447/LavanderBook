@@ -9,6 +9,7 @@ import {
 } from '@/lib/questionnaire';
 import { supabase } from '@/lib/supabase';
 import type { NearbyVenue } from '@/lib/use-nearby-venues';
+import { contactsFromText, isContactKind, type VenueContact } from '@/lib/venue-contacts';
 import { venueTags } from '@/lib/venue-tags';
 
 export type VenueReview = {
@@ -62,15 +63,29 @@ export function bathroomConsensus(ratings: Ratings): { label: string; tally: str
 
 /**
  * Everything the place card shows, fetched once: the ratings, everyone's
- * reviews, what LavenderBook checked, what visitors reported, and - for a
- * signed-in author - how many new questions are waiting. Shared by every
- * skin's card, so they can never disagree about a place.
+ * reviews, what LavenderBook says the place is and what it checked there,
+ * what visitors reported, and - for a signed-in author - how many new
+ * questions are waiting. Shared by every skin's card, so they can never
+ * disagree about a place.
  */
 export function useVenueDetails(venue: NearbyVenue) {
   const { session } = useAuth();
   const [ratings, setRatings] = React.useState<Ratings | null>(null);
   const [reviews, setReviews] = React.useState<VenueReview[] | null>(null);
   const [notes, setNotes] = React.useState<Note[]>([]);
+  // Kept with the venue it was fetched for: the card can be handed another
+  // place while it is open, and one place's description under another's name
+  // is worse than none for a moment.
+  const [fetchedDescription, setFetchedDescription] = React.useState<{
+    venueId: string;
+    text: string | null;
+  } | null>(null);
+  // Kept with its venue for the same reason. An empty list is an answer;
+  // nothing fetched yet, or a server from before the table, is no entry.
+  const [fetchedContacts, setFetchedContacts] = React.useState<{
+    venueId: string;
+    list: VenueContact[];
+  } | null>(null);
   const [summary, setSummary] = React.useState<AnswerSummaryRow[]>([]);
   const [newQuestions, setNewQuestions] = React.useState(0);
   /** Bumped to ask again, after a report changes what this reader sees. */
@@ -122,6 +137,41 @@ export function useVenueDetails(venue: NearbyVenue) {
         if (active) setNotes((data as Note[] | null) ?? []);
       });
 
+    // What LavenderBook says this place is. Public, like the notes. A server
+    // from before the column answers with an error, which is read as "none"
+    // rather than shown: the card is complete without it.
+    supabase
+      .from('venues')
+      .select('description')
+      .eq('id', venue.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (active && !error) {
+          setFetchedDescription({ venueId: venue.id, text: data?.description ?? null });
+        }
+      });
+
+    // How to reach the place. Public, like the notes; a server from before the
+    // table answers with an error, and the contacts written into the notes
+    // stand in for it below.
+    supabase
+      .from('venue_contacts')
+      .select('id, kind, value, label')
+      .eq('venue_id', venue.id)
+      .order('sort_order', { ascending: true })
+      .then(({ data, error }) => {
+        if (!active || error) return;
+        const list: VenueContact[] = [];
+        for (const row of data ?? []) {
+          // A kind this app does not know yet is one it cannot open: skip it
+          // rather than offer a row that does nothing.
+          if (isContactKind(row.kind)) {
+            list.push({ id: row.id, kind: row.kind, value: row.value, label: row.label });
+          }
+        }
+        setFetchedContacts({ venueId: venue.id, list });
+      });
+
     // Same reasoning as the notes: whether anyone has answered anything is what
     // decides whether the tag pill opens a page at all.
     fetchAnswerSummary(venue.id)
@@ -162,9 +212,24 @@ export function useVenueDetails(venue: NearbyVenue) {
   const tags = venueTags(venue);
   const nudge = userId ? newQuestions : 0;
   const hasTagPage = notes.length > 0 || summary.length > 0;
+  // The fetched one once it is in; until then whatever the row came with (a
+  // list row has it, a map marker does not).
+  const description =
+    (fetchedDescription?.venueId === venue.id
+      ? fetchedDescription.text
+      : (venue.description ?? null)) || null;
+  // The place's own contacts when an admin has written any; until then the
+  // websites, numbers and addresses its notes mention, so a place listed before
+  // contacts existed still has a way to reach it.
+  const contacts = React.useMemo(() => {
+    const own = fetchedContacts?.venueId === venue.id ? fetchedContacts.list : [];
+    return own.length > 0 ? own : contactsFromText(notes.map((note) => note.body));
+  }, [fetchedContacts, venue.id, notes]);
 
   return {
     reviews,
+    description,
+    contacts,
     notes,
     summary,
     average,

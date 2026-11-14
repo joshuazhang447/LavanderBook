@@ -1,11 +1,20 @@
-import { Ellipsis, Eye, EyeOff, Flag, Route, SquarePen } from 'lucide-react-native';
+import {
+  Ellipsis,
+  Eye,
+  EyeOff,
+  Flag,
+  ListChecks,
+  Route,
+  SquarePen,
+} from 'lucide-react-native';
 import * as React from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 
 import { AnswerSummaryCard } from '@/components/answer-summary';
 import { ChenfengReportSheet } from '@/components/chenfeng/report-sheet';
+import { CONTACT_ICONS, contactSpoken } from '@/components/contact-list';
 import { openDirections } from '@/components/directions-button';
-import { LinkedText } from '@/components/linked-text';
+import { LinkedText, openLink } from '@/components/linked-text';
 import { StarRating } from '@/components/star-rating';
 import { TagPill } from '@/components/tag-pill';
 import { Button } from '@/components/ui/button';
@@ -22,12 +31,19 @@ import {
 } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import type { VenueSheetProps } from '@/components/venue-sheet';
+import { ABOUT_TEXT, CONTACT_TEXT, DETAILS_TEXT, detailsTeaser } from '@/lib/directory-text';
 import { lightImpact } from '@/lib/haptics';
 import { MASK_TEXT, moderationStatus, REPORT_TEXT, spokenMasked, STATUS_TEXT } from '@/lib/moderation-text';
 import type { AnswerSummaryRow } from '@/lib/questionnaire';
 import { postedLabel } from '@/lib/review-dates';
 import { isMapped } from '@/lib/use-nearby-venues';
 import { cn } from '@/lib/utils';
+import {
+  contactDisplay,
+  contactHref,
+  contactTitle,
+  type VenueContact,
+} from '@/lib/venue-contacts';
 import { useVenueDetails, type Note, type VenueReview } from '@/lib/venue-details';
 
 /**
@@ -46,6 +62,8 @@ export function ChenfengVenueSheet({ venue, onClose, onWriteReview }: VenueSheet
   const [popToken, setPopToken] = React.useState(0);
   /** The review being reported, in a sheet of its own beside this one. */
   const [reporting, setReporting] = React.useState<VenueReview | null>(null);
+  /** The whole description, in a sheet of its own stacked on this one. */
+  const [about, setAbout] = React.useState(false);
 
   return (
     <>
@@ -74,6 +92,7 @@ export function ChenfengVenueSheet({ venue, onClose, onWriteReview }: VenueSheet
               }
               onWriteReview={onWriteReview}
               onMoreDetails={() => setPushed(true)}
+              onAbout={() => setAbout(true)}
               onReport={setReporting}
             />
           }
@@ -104,7 +123,86 @@ export function ChenfengVenueSheet({ venue, onClose, onWriteReview }: VenueSheet
           onSent={details.refetch}
         />
       ) : null}
+
+      {about && (details.description || details.contacts.length > 0) ? (
+        <AboutSheet
+          name={venue.name}
+          description={details.description}
+          contacts={details.contacts}
+          onClose={() => setAbout(false)}
+        />
+      ) : null}
     </>
+  );
+}
+
+/**
+ * A place's description in full and how to reach it, in a sheet stacked on
+ * its card (the Learn More pattern): the description with its attribution as
+ * the section's footer, then a Contact section - a row per website, number,
+ * address and service link, what it is above the value, as Contacts lays them
+ * out. Opens at full height: at medium the contacts, which are what most
+ * people open it for, start below the fold.
+ */
+function AboutSheet({
+  name,
+  description,
+  contacts,
+  onClose,
+}: {
+  name: string;
+  description: string | null;
+  contacts: readonly VenueContact[];
+  onClose: () => void;
+}) {
+  return (
+    <Sheet
+      name="chenfeng-about-sheet"
+      detents={['large']}
+      grouped
+      accessibilityLabel={name}
+      onClose={onClose}
+      toolbar={<SheetToolbar leading={<SheetCloseButton />} title={name} />}>
+      <SheetScrollView contentContainerClassName="pb-12 pt-3">
+        <List>
+          {description ? (
+            <Section footer={ABOUT_TEXT.attribution}>
+              <Row
+                title={
+                  <Text textStyle="body" className="text-foreground">
+                    <LinkedText text={description} linkClassName="text-primary" />
+                  </Text>
+                }
+              />
+            </Section>
+          ) : null}
+
+          <Section
+            header={CONTACT_TEXT.headingTitle}
+            footer={contacts.length > 0 ? undefined : CONTACT_TEXT.none}>
+            {contacts.map((contact) => (
+              <Row
+                key={contact.id}
+                icon={CONTACT_ICONS[contact.kind]}
+                title={
+                  <Text textStyle="footnote" numberOfLines={1} className="text-label-secondary">
+                    {contactTitle(contact)}
+                  </Text>
+                }
+                subtitle={
+                  <Text textStyle="body" numberOfLines={1} className="text-primary">
+                    {contactDisplay(contact)}
+                  </Text>
+                }
+                accessibilityRole="link"
+                accessibilityLabel={contactSpoken(contact)}
+                onPress={() => openLink(contactHref(contact))}
+              />
+            ))}
+          </Section>
+        </List>
+      </SheetScrollView>
+    </Sheet>
   );
 }
 
@@ -116,6 +214,7 @@ function PlaceCard({
   onDirections,
   onWriteReview,
   onMoreDetails,
+  onAbout,
   onReport,
 }: {
   details: Details;
@@ -124,9 +223,25 @@ function PlaceCard({
   onDirections?: () => void;
   onWriteReview: () => void;
   onMoreDetails: () => void;
+  /** Opens the whole description. */
+  onAbout: () => void;
   onReport: (review: VenueReview) => void;
 }) {
-  const { reviews, average, count, bathroom, hasOwnReview, tags, nudge, hasTagPage } = details;
+  const {
+    reviews,
+    description,
+    contacts,
+    notes,
+    summary,
+    average,
+    count,
+    bathroom,
+    hasOwnReview,
+    tags,
+    nudge,
+    hasTagPage,
+  } = details;
+  const teaser = detailsTeaser(notes, summary[0]?.answeredReviews ?? 0);
   // "New" means asked since this author last saved - not merely unanswered,
   // which would nag anyone who skipped an optional one.
   const action =
@@ -156,9 +271,13 @@ function PlaceCard({
           {/* No stars before anyone has rated it: an empty row reads as zero
               out of five, not as "not rated yet". */}
           {count === 0 ? (
-            <Text textStyle="subheadline" className="text-label-secondary">
-              Listed by LavenderBook · no reviews yet
-            </Text>
+            // With a description, that is what goes under the name: it says
+            // what the place is, and the list below says nobody has reviewed it.
+            description ? null : (
+              <Text textStyle="subheadline" className="text-label-secondary">
+                Listed by LavenderBook · no reviews yet
+              </Text>
+            )
           ) : (
             <View
               className="flex-row items-center gap-2"
@@ -185,6 +304,32 @@ function PlaceCard({
               ({bathroom.tally})
             </Text>
           ) : null}
+          {/* Two lines of what the place is, cut with an ellipsis, and "More"
+              in the tint: the whole of it opens in a sheet of its own. */}
+          {description ? (
+            <Pressable
+              onPress={onAbout}
+              accessibilityRole="button"
+              accessibilityLabel={`${description} ${ABOUT_TEXT.moreSpoken}`}
+              className="active:opacity-60">
+              <Text textStyle="subheadline" numberOfLines={2} className="text-foreground">
+                {description}
+              </Text>
+              <Text textStyle="subheadline" emphasized className="text-primary">
+                {ABOUT_TEXT.moreTitle}
+              </Text>
+            </Pressable>
+          ) : contacts.length > 0 ? (
+            // No description, but a way to reach them: the way in alone.
+            <Pressable
+              onPress={onAbout}
+              accessibilityRole="button"
+              className="self-start active:opacity-60">
+              <Text textStyle="subheadline" emphasized className="text-primary">
+                {ABOUT_TEXT.contactOnlyTitle}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
         <SheetCloseButton />
       </View>
@@ -210,15 +355,34 @@ function PlaceCard({
 
       <List>
         {/* The same way in as the tag's chevron, gated on the same thing, so
-            the two can never disagree about whether there is a page. */}
+            the two can never disagree about whether there is a page. A bare
+            "More Details" row was mostly passed over, so this one carries a
+            tinted tile, says what is inside, and shows the first two things
+            we checked as headlines. */}
         {hasTagPage ? (
           <Section>
             <Row
-              title="More Details"
+              tile={{ icon: ListChecks, className: 'bg-primary' }}
               accessory="chevron"
-              accessibilityHint="What LavenderBook checked, and what visitors reported."
-              onPress={onMoreDetails}
-            />
+              accessibilityLabel={`${DETAILS_TEXT.spoken}. ${teaser.line}`}
+              onPress={onMoreDetails}>
+              <Text textStyle="headline" className="text-foreground">
+                {DETAILS_TEXT.titleTitle}
+              </Text>
+              <Text textStyle="footnote" className="text-label-secondary">
+                {teaser.line}
+              </Text>
+              {teaser.points.map((point, index) => (
+                <Text
+                  key={index}
+                  textStyle="subheadline"
+                  numberOfLines={1}
+                  className="mt-0.5 text-foreground">
+                  {'\u2022 '}
+                  {point}
+                </Text>
+              ))}
+            </Row>
           </Section>
         ) : null}
 
@@ -461,26 +625,19 @@ function DetailsPage({
                 </Text>
               </View>
               {groups.map((group) => (
-                <View key={group.key} className="gap-2">
-                  {groups.length > 1 || !group.tag ? (
-                    <View className="flex-row px-4">
-                      {group.tag ? (
-                        <TagPill tag={group.tag} />
-                      ) : (
-                        <Text textStyle="footnote" className="text-label-secondary">
-                          No longer asked here
-                        </Text>
-                      )}
-                    </View>
-                  ) : null}
-                  <Section>
-                    {group.rows.map((row) => (
-                      <Row key={row.questionId} className="py-3.5">
-                        <AnswerSummaryCard row={row} />
-                      </Row>
-                    ))}
-                  </Section>
-                </View>
+                <Section
+                  key={group.key}
+                  header={
+                    groups.length > 1 || !group.tag
+                      ? (group.tag?.label ?? 'No Longer Asked Here')
+                      : undefined
+                  }>
+                  {group.rows.map((row) => (
+                    <Row key={row.questionId} className="py-3.5">
+                      <AnswerSummaryCard row={row} />
+                    </Row>
+                  ))}
+                </Section>
               ))}
             </View>
           ) : null}

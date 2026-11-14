@@ -385,6 +385,61 @@ export type Database = {
           },
         ]
       }
+      venue_contacts: {
+        Row: {
+          id: string
+          kind: string
+          label: string | null
+          sort_order: number
+          updated_at: string
+          updated_by: string | null
+          value: string
+          venue_id: string
+        }
+        Insert: {
+          id?: string
+          kind: string
+          label?: string | null
+          sort_order?: number
+          updated_at?: string
+          updated_by?: string | null
+          value: string
+          venue_id: string
+        }
+        Update: {
+          id?: string
+          kind?: string
+          label?: string | null
+          sort_order?: number
+          updated_at?: string
+          updated_by?: string | null
+          value?: string
+          venue_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "venue_contacts_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "venue_contacts_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venue_ratings"
+            referencedColumns: ["venue_id"]
+          },
+          {
+            foreignKeyName: "venue_contacts_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       venue_notes: {
         Row: {
           body: string
@@ -501,6 +556,7 @@ export type Database = {
         Row: {
           address: string | null
           created_at: string
+          description: string | null
           google_place_id: string | null
           id: string
           last_synced_at: string | null
@@ -512,6 +568,7 @@ export type Database = {
         Insert: {
           address?: string | null
           created_at?: string
+          description?: string | null
           google_place_id?: string | null
           id?: string
           last_synced_at?: string | null
@@ -523,6 +580,7 @@ export type Database = {
         Update: {
           address?: string | null
           created_at?: string
+          description?: string | null
           google_place_id?: string | null
           id?: string
           last_synced_at?: string | null
@@ -838,6 +896,7 @@ export type Database = {
       admin_list_venues: {
         Args: {
           p_desc?: boolean
+          p_description?: string
           p_limit?: number
           p_notes?: string
           p_offset?: number
@@ -852,6 +911,7 @@ export type Database = {
           address: string
           avg_stars: number
           created_at: string
+          description: string
           google_place_id: string
           id: string
           lat: number
@@ -888,6 +948,10 @@ export type Database = {
         Returns: undefined
       }
       admin_reorder_tags: { Args: { p_ids: string[] }; Returns: undefined }
+      admin_set_venue_contacts: {
+        Args: { p_contacts: Json; p_venue_id: string }
+        Returns: undefined
+      }
       admin_reorder_venue_notes: {
         Args: { p_ids: string[]; p_venue_id: string }
         Returns: undefined
@@ -1007,9 +1071,14 @@ export type Database = {
         Args: { p_body: string; p_id: string }
         Returns: undefined
       }
+      admin_update_venue: {
+        Args: { p_description?: string; p_id: string; p_name: string }
+        Returns: undefined
+      }
       admin_upsert_venue: {
         Args: {
           p_address?: string
+          p_description?: string
           p_google_place_id?: string
           p_lat?: number
           p_lng?: number
@@ -1195,6 +1264,27 @@ export type Database = {
           stars: number
           status: string
           unmasked_body: string
+        }[]
+      }
+      venues_directory: {
+        Args: {
+          p_lat: number
+          p_limit?: number
+          p_lng: number
+          p_radius_meters?: number
+        }
+        Returns: {
+          avg_stars: number
+          description: string
+          distance_meters: number
+          google_place_id: string
+          id: string
+          lat: number
+          latest_review_body: string
+          lng: number
+          name: string
+          review_count: number
+          tags: Json
         }[]
       }
       venues_near: {
