@@ -4,6 +4,7 @@ import { ActivityIndicator, Platform, Pressable, ScrollView, View } from 'react-
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DistanceMeter } from '@/components/distance-meter';
+import { ListFilterControl } from '@/components/list-filter';
 import { useLeaveNowReserve } from '@/components/leave-now';
 import { MAP_CONTROLS_CLEARANCE } from '@/components/map-controls';
 import { StarRating } from '@/components/star-rating';
@@ -20,7 +21,8 @@ import {
   type ArrangedPlaces,
   type PlaceRow,
 } from '@/lib/directory';
-import { LIST_TEXT, ONLINE_TEXT } from '@/lib/directory-text';
+import { LIST_FILTER_TEXT, LIST_TEXT, ONLINE_TEXT } from '@/lib/directory-text';
+import { countByFilter, passesListFilter, useListFilter } from '@/lib/list-filter';
 import { useSearchDistance } from '@/lib/search-distance';
 import type { Coords } from '@/lib/use-location';
 import { isMapped, type NearbyVenue } from '@/lib/use-nearby-venues';
@@ -238,18 +240,37 @@ export function PlaceSearchField({
  */
 export function useListRows(origin: Coords | null, query: string, refreshKey: string) {
   const km = useSearchDistance();
+  const filter = useListFilter();
   const area = useAreaVenues(origin, km * 1000, refreshKey);
 
   const trimmed = query.trim();
   const searching = trimmed.length > 0;
 
-  const places = React.useMemo<ArrangedPlaces | null>(() => {
+  // Within the distance and matching the search, before the filter: what the
+  // filter's counts are counted from, so each says what choosing it would show.
+  const narrowed = React.useMemo<ArrangedPlaces | null>(() => {
     if (!area.venues) return null;
     const all = arrangePlaces(area.venues, origin, km * 1000);
     return searching
       ? { nearby: matching(all.nearby, trimmed), online: matching(all.online, trimmed) }
       : all;
   }, [area.venues, origin, km, searching, trimmed]);
+
+  const counts = React.useMemo(
+    () =>
+      narrowed
+        ? countByFilter([...narrowed.nearby, ...narrowed.online])
+        : { all: 0, listed: 0, reviewed: 0 },
+    [narrowed]
+  );
+
+  const places = React.useMemo<ArrangedPlaces | null>(() => {
+    if (!narrowed || filter === 'all') return narrowed;
+    return {
+      nearby: narrowed.nearby.filter((row) => passesListFilter(row, filter)),
+      online: narrowed.online.filter((row) => passesListFilter(row, filter)),
+    };
+  }, [narrowed, filter]);
 
   // A failed load with nothing to show is an error; with rows already on
   // screen it is only a refresh that did not happen.
@@ -258,6 +279,8 @@ export function useListRows(origin: Coords | null, query: string, refreshKey: st
   return {
     places,
     km,
+    filter,
+    counts,
     loading: places === null && !failed,
     failed,
     retry: area.retry,
@@ -293,7 +316,7 @@ export function VenueList({ origin, refreshKey, onSelectVenue, onLocateVenue }: 
   // ones run under the notch, so the screen pays its own inset.
   const { isWide } = useIsWideViewport();
   const [query, setQuery] = React.useState('');
-  const { places, km, loading, failed, retry, searching, trimmed } = useListRows(
+  const { places, km, filter, counts, loading, failed, retry, searching, trimmed } = useListRows(
     origin,
     query,
     refreshKey
@@ -307,6 +330,7 @@ export function VenueList({ origin, refreshKey, onSelectVenue, onLocateVenue }: 
         style={{ paddingTop: (isWide ? 0 : insets.top) + MAP_CONTROLS_CLEARANCE + leaveNow.top }}>
         <PlaceSearchField value={query} onChangeText={setQuery} placeholder={LIST_TEXT.search} />
         <DistanceMeter />
+        <ListFilterControl counts={counts} />
       </View>
 
       {loading ? (
@@ -336,7 +360,17 @@ export function VenueList({ origin, refreshKey, onSelectVenue, onLocateVenue }: 
         </ScrollView>
       ) : (
         <View className="gap-2 px-8 py-10">
-          {searching ? (
+          {filter !== 'all' && counts.all > 0 ? (
+            // There are places here; the filter is what hides them.
+            <>
+              <Text className="text-center text-sm text-muted-foreground">
+                {LIST_FILTER_TEXT.empty(filter, km)}
+              </Text>
+              <Text className="text-center text-sm text-muted-foreground">
+                {LIST_FILTER_TEXT.emptyHint}
+              </Text>
+            </>
+          ) : searching ? (
             <>
               <Text className="text-center text-sm text-muted-foreground">
                 No place within {km} km matches “{trimmed}”.

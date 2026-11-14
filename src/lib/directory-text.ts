@@ -178,6 +178,10 @@ export const DIRECTORY_TEXT = {
   everyLead: 'Every listed place, nearest first',
   back: 'All kinds',
   backTitle: 'All Kinds',
+  /** On the open kind's header, which goes back to choosing one. */
+  change: 'Change',
+  changeTitle: 'Change',
+  changeSpoken: (label: string) => `${label}. Choose another kind`,
   count: (n: number) => (n === 1 ? '1 place' : `${n} places`),
   found: (n: number, query: string) =>
     n === 1 ? `1 place matches “${query}”` : `${n} places match “${query}”`,
@@ -192,4 +196,18 @@ export const DIRECTORY_TEXT = {
   failedTitle: 'Could not load the directory',
   failedTitleTitle: 'Couldn’t Load the Directory',
   failed: 'Check your connection and try again.',
+} as const;
+
+/** The list's filter: every place, the ones LavenderBook lists, or the reviewed ones. */
+export const LIST_FILTER_TEXT = {
+  label: 'Show',
+  all: { label: 'All', title: 'All', spoken: 'All places' },
+  listed: { label: 'Listed', title: 'Listed', spoken: 'Listed by LavenderBook' },
+  reviewed: { label: 'Reviewed', title: 'Reviewed', spoken: 'Reviewed by visitors' },
+  /** When the filter, not the distance, is what empties the list. */
+  empty: (filter: 'listed' | 'reviewed', km: number) =>
+    filter === 'reviewed'
+      ? `Nobody has reviewed a place within ${km} km yet.`
+      : `LavenderBook lists no places within ${km} km yet.`,
+  emptyHint: 'Choose All to see every place here.',
 } as const;

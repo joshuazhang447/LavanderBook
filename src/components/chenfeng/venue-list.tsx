@@ -11,6 +11,7 @@ import Animated, {
 
 import { useChenfengControlsBottom } from '@/components/chenfeng/map-chrome';
 import { DistanceMeter } from '@/components/distance-meter';
+import { ListFilterControl } from '@/components/list-filter';
 import { ScrollEdge } from '@/components/chenfeng/large-title-screen';
 import { SwipeRow } from '@/components/chenfeng/swipe-row';
 import { StarRating } from '@/components/star-rating';
@@ -22,7 +23,7 @@ import { Menu, measureAnchor, type MenuAnchor } from '@/components/ui/menu';
 import { Text } from '@/components/ui/text';
 import { formatDistance, useListRows } from '@/components/venue-list';
 import type { PlaceRow } from '@/lib/directory';
-import { LIST_TEXT, ONLINE_TEXT } from '@/lib/directory-text';
+import { LIST_FILTER_TEXT, LIST_TEXT, ONLINE_TEXT } from '@/lib/directory-text';
 import { lightImpact } from '@/lib/haptics';
 import type { Coords } from '@/lib/use-location';
 import { isMapped, type NearbyVenue } from '@/lib/use-nearby-venues';
@@ -59,7 +60,7 @@ export function ChenfengVenueList({
 }: ChenfengVenueListProps) {
   const top = useChenfengControlsBottom() + 12;
   const tabBarOverlap = useTabBarOverlap();
-  const { places, km, loading, failed, retry, searching, trimmed } = useListRows(
+  const { places, km, filter, counts, loading, failed, retry, searching, trimmed } = useListRows(
     origin,
     query,
     refreshKey
@@ -86,7 +87,10 @@ export function ChenfengVenueList({
         }>
         {/* How far the list looks: the same meter as the Directory's, and the
             same choice - move one and the other has moved. */}
-        <DistanceMeter className="px-4 pb-4" />
+        <View className="gap-4 px-4 pb-4">
+          <DistanceMeter />
+          <ListFilterControl counts={counts} />
+        </View>
         {loading ? (
           <View className="items-center py-10">
             <ActivityIndicator />
@@ -121,6 +125,13 @@ export function ChenfengVenueList({
               />
             ) : null}
           </View>
+        ) : filter !== 'all' && counts.all > 0 ? (
+          // There are places here; the filter is what hides them.
+          <EmptyState
+            icon={MapPinOff}
+            title={LIST_FILTER_TEXT.empty(filter, km)}
+            description={LIST_FILTER_TEXT.emptyHint}
+          />
         ) : searching ? (
           // Listed and reviewed places only, and free; finding one nobody has
           // reviewed is the map's search, a billed call - so say where to look.
