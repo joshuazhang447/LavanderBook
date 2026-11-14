@@ -567,6 +567,11 @@ export type Database = {
           lng: number | null
           name: string
           pending_name: string | null
+          serves_city: string | null
+          serves_lat: number | null
+          serves_lng: number | null
+          serves_province: string | null
+          serves_scope: string | null
         }
         Insert: {
           address?: string | null
@@ -579,6 +584,11 @@ export type Database = {
           lng?: number | null
           name: string
           pending_name?: string | null
+          serves_city?: string | null
+          serves_lat?: number | null
+          serves_lng?: number | null
+          serves_province?: string | null
+          serves_scope?: string | null
         }
         Update: {
           address?: string | null
@@ -591,6 +601,11 @@ export type Database = {
           lng?: number | null
           name?: string
           pending_name?: string | null
+          serves_city?: string | null
+          serves_lat?: number | null
+          serves_lng?: number | null
+          serves_province?: string | null
+          serves_scope?: string | null
         }
         Relationships: []
       }
@@ -1078,6 +1093,17 @@ export type Database = {
         Args: { p_body: string; p_id: string }
         Returns: undefined
       }
+      admin_set_venue_serves: {
+        Args: {
+          p_city?: string
+          p_id: string
+          p_lat?: number
+          p_lng?: number
+          p_province?: string
+          p_scope: string
+        }
+        Returns: undefined
+      }
       admin_update_venue: {
         Args: { p_description?: string; p_id: string; p_name: string }
         Returns: undefined
@@ -1278,6 +1304,7 @@ export type Database = {
           p_lat: number
           p_limit?: number
           p_lng: number
+          p_province?: string
           p_radius_meters?: number
         }
         Returns: {
@@ -1291,6 +1318,11 @@ export type Database = {
           lng: number
           name: string
           review_count: number
+          serves_city: string
+          serves_lat: number
+          serves_lng: number
+          serves_province: string
+          serves_scope: string
           tags: Json
         }[]
       }

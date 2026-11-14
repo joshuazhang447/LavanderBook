@@ -112,11 +112,18 @@ export function detailsTeaser(
   };
 }
 
-/** Over the organisations with no place to visit, in the list and the Directory. */
+/**
+ * Over the organisations with no public address, in the list and the Directory:
+ * online groups, and shelters that keep their address private. Only the ones
+ * that serve where the reader is (20261114130000).
+ */
 export const ONLINE_TEXT = {
   heading: 'Online and by phone',
   headingTitle: 'Online and by Phone',
-  lead: 'No place to visit: reach them from anywhere.',
+  lead: 'No public address: reach them by phone or online.',
+  /** Under the first few, when the section is folded. */
+  showAll: (count: number) => `Show all ${count} online and by phone`,
+  showAllTitle: (count: number) => `Show All ${count}`,
 } as const;
 
 /**

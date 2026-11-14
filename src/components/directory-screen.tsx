@@ -21,7 +21,7 @@ import { useIsWideViewport } from '@/components/tab-bar';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
-import { OnlineHeading, PlaceGroup, PlaceSearchField } from '@/components/venue-list';
+import { OnlineSection, PlaceGroup, PlaceSearchField } from '@/components/venue-list';
 import {
   directoryLead,
   EVERY_KIND,
@@ -276,10 +276,16 @@ function Places({ directory, onSelect, onLocate }: BodyProps) {
         <PlaceGroup rows={places.nearby} listed onSelect={onSelect} onLocate={onLocate} />
       ) : null}
       {places.online.length > 0 ? (
-        <View className="gap-2">
-          {onlineKind ? null : <OnlineHeading />}
-          <PlaceGroup rows={places.online} listed onSelect={onSelect} onLocate={onLocate} />
-        </View>
+        <OnlineSection
+          rows={places.online}
+          // Folded only over every kind at once: a search, or a kind somebody
+          // chose, shows all it found.
+          open={directory.kind !== null || directory.view === 'search'}
+          heading={!onlineKind}
+          listed
+          onSelect={onSelect}
+          onLocate={onLocate}
+        />
       ) : null}
     </View>
   );
