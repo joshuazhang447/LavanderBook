@@ -22,9 +22,9 @@ import { useOnAdmin } from '@/lib/safety';
  * second is "Material".
  *
  * Kept on this device and nowhere else, like where the map opens - nothing
- * about it belongs on an account. Until someone picks, each platform gets the
- * one that looks at home on it. "Leave now" wipes the device's storage, which
- * takes the choice with it.
+ * about it belongs on an account. Until someone picks, the website gets OAU and
+ * each phone the one that looks at home on it. "Leave now" wipes the device's
+ * storage, which takes the choice with it.
  *
  * Two things never change with it: the safety notice with "Leave now", and the
  * admin panel. The root layout keeps both outside the skin.
@@ -40,11 +40,15 @@ export const SKINS: readonly { id: Skin; label: string }[] = [
   { id: 'chenfeng', label: 'Chenfeng' },
 ];
 
-/** Until someone picks: the one that looks at home on this platform. */
+/**
+ * Until someone picks: OAU on the website, and in the phone apps the one that
+ * looks at home there - web first; the apps move to OAU by a later decision.
+ * Anyone who has picked keeps their choice.
+ */
 export const DEFAULT_SKIN: Skin = Platform.select<Skin>({
   android: 'material',
   ios: 'chenfeng',
-  default: 'basic',
+  default: 'oau',
 });
 
 type State = {
