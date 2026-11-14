@@ -4,12 +4,8 @@ import {
   CircleUser,
   Eye,
   EyeOff,
-  ExternalLink,
   Flag,
-  Globe,
   ListChecks,
-  Mail,
-  Phone,
   X,
 } from 'lucide-react-native';
 import * as React from 'react';
@@ -23,9 +19,10 @@ import Animated, {
 
 import { AnswerSummaryCard } from '@/components/answer-summary';
 import { ChenfengVenueSheet } from '@/components/chenfeng/venue-sheet';
+import { ContactList } from '@/components/contact-list';
 import { DirectionsButton } from '@/components/directions-button';
 import { BUTTON_LABEL, DIALOG_WIDTH, useDialogMaxHeight } from '@/components/info-dialog';
-import { LinkedText, openLink } from '@/components/linked-text';
+import { LinkedText } from '@/components/linked-text';
 import { ReportReviewPage } from '@/components/report-review';
 import { StarRating } from '@/components/star-rating';
 import { TagPill } from '@/components/tag-pill';
@@ -42,21 +39,15 @@ import {
 import { Icon } from '@/components/ui/icon';
 import { Separator } from '@/components/ui/separator';
 import { Text } from '@/components/ui/text';
-import {
-  ABOUT_TEXT,
-  DETAILS_TEXT,
-  detailsTeaser,
-  placeLinks,
-  type PlaceLink,
-} from '@/lib/directory-text';
+import { ABOUT_TEXT, CONTACT_TEXT, DETAILS_TEXT, detailsTeaser } from '@/lib/directory-text';
 import { MASK_TEXT, moderationStatus, REPORT_TEXT, spokenMasked, STATUS_TEXT } from '@/lib/moderation-text';
 import type { AnswerSummaryRow } from '@/lib/questionnaire';
 import { postedLabel } from '@/lib/review-dates';
 import { useSkin } from '@/lib/skin';
 import { isMapped, type NearbyVenue } from '@/lib/use-nearby-venues';
 import { cn } from '@/lib/utils';
+import type { VenueContact } from '@/lib/venue-contacts';
 import { useVenueDetails, type Note, type VenueReview } from '@/lib/venue-details';
-import type { VenueTag } from '@/lib/venue-tags';
 
 function ReviewRow({ review, onReport }: { review: VenueReview; onReport: () => void }) {
   // A period ("A few weeks ago"), or the day when the author shows dates. The
@@ -297,119 +288,58 @@ function DetailsCard({
   );
 }
 
-const LINK_ICON = { web: Globe, email: Mail, phone: Phone } as const;
-
-/** One of a place's links, as a row to press rather than a word to find. */
-function LinkRow({ link }: { link: PlaceLink }) {
-  return (
-    <Pressable
-      onPress={() => openLink(link.href)}
-      accessibilityRole="link"
-      accessibilityLabel={link.text}
-      className={cn(
-        'flex-row items-center gap-3 rounded-md px-2 py-2.5 active:bg-accent',
-        Platform.select({ web: 'cursor-pointer transition-colors hover:bg-accent' })
-      )}>
-      <Icon as={LINK_ICON[link.kind]} className="size-4 text-muted-foreground" />
-      <Text numberOfLines={1} className="flex-1 text-sm text-foreground underline">
-        {link.text}
-      </Text>
-      {link.kind === 'web' ? (
-        <Icon as={ExternalLink} className="size-3.5 text-muted-foreground" />
-      ) : null}
-    </Pressable>
-  );
-}
-
 type AboutDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   name: string;
-  tags: VenueTag[];
-  description: string;
-  notes: Note[];
-  /** Whether there is anything behind "What visitors reported". */
-  hasVisitorAnswers: boolean;
-  onSeeVisitors: () => void;
+  description: string | null;
+  contacts: readonly VenueContact[];
 };
 
 /**
- * Everything LavenderBook says about a place, in one window: the whole
- * description (the card shows two lines of it), what we checked there, and
- * every website, address and number in either as a row to press.
+ * A place's description in full (the card shows two lines of it) and how to
+ * reach the place: its website, phone, text line, email and the links to its
+ * own services, as rows to press. What LavenderBook checked there stays on the
+ * card's Good to know - this window is for what the place is and how to get
+ * in touch, and is kept short enough to read at a glance.
  *
  * A dialog rather than another page inside the sheet: it opens from the
  * card's header, which stays put under it, and it is read and closed - there
  * is nothing in it to come back to. Sized like the app's other windows
- * (info-dialog), whose middle scrolls while the title and buttons stay.
+ * (info-dialog), whose middle scrolls while the title and button stay.
  */
-function AboutDialog({
-  open,
-  onOpenChange,
-  name,
-  tags,
-  description,
-  notes,
-  hasVisitorAnswers,
-  onSeeVisitors,
-}: AboutDialogProps) {
+function AboutDialog({ open, onOpenChange, name, description, contacts }: AboutDialogProps) {
   const maxHeight = useDialogMaxHeight();
-  const links = placeLinks([description, ...notes.map((note) => note.body)]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={DIALOG_WIDTH} style={{ maxHeight }}>
+      <DialogContent className={cn(DIALOG_WIDTH, 'gap-3')} style={{ maxHeight }}>
         <DialogHeader>
           {/* Clear of the window's own close button, top right. */}
           <DialogTitle className="pr-6 leading-6">{name}</DialogTitle>
-          {tags.length > 0 ? (
-            <View className="flex-row flex-wrap gap-x-2 gap-y-1">
-              {tags.map((tag) => (
-                <TagPill key={tag.slug} tag={tag} />
-              ))}
-            </View>
-          ) : null}
         </DialogHeader>
 
-        <ScrollView className="shrink grow-0" contentContainerClassName="gap-5">
-          <Text className="text-sm leading-5 text-foreground">
-            <LinkedText text={description} />
-          </Text>
-
-          {notes.length > 0 ? (
-            <View className="gap-2">
-              <Text className="text-sm font-medium text-foreground">{DETAILS_TEXT.title}</Text>
-              {notes.map((note) => (
-                <View key={note.id} className="flex-row gap-2">
-                  <Text className="text-sm leading-5 text-muted-foreground">{'\u2022'}</Text>
-                  <Text className="flex-1 text-sm leading-5 text-foreground">
-                    <LinkedText text={note.body} />
-                  </Text>
-                </View>
-              ))}
+        <ScrollView className="shrink grow-0" contentContainerClassName="gap-4">
+          {description ? (
+            <View className="gap-1.5">
+              <Text className="text-sm leading-5 text-foreground">
+                <LinkedText text={description} />
+              </Text>
+              <Text className="text-xs text-muted-foreground">{ABOUT_TEXT.attribution}</Text>
             </View>
           ) : null}
 
-          {links.length > 0 ? (
-            <View className="gap-1">
-              <Text className="text-sm font-medium text-foreground">{ABOUT_TEXT.links}</Text>
-              <View className="-mx-2">
-                {links.map((link) => (
-                  <LinkRow key={link.href} link={link} />
-                ))}
-              </View>
-            </View>
-          ) : null}
-
-          <Text className="text-xs text-muted-foreground">{ABOUT_TEXT.attribution}</Text>
+          <View className="gap-2">
+            <Text className="text-sm font-medium text-foreground">{CONTACT_TEXT.heading}</Text>
+            {contacts.length > 0 ? (
+              <ContactList contacts={contacts} />
+            ) : (
+              <Text className="text-sm text-muted-foreground">{CONTACT_TEXT.none}</Text>
+            )}
+          </View>
         </ScrollView>
 
         <DialogFooter>
-          {hasVisitorAnswers ? (
-            <Button variant="outline" onPress={onSeeVisitors}>
-              <Text className={BUTTON_LABEL}>{ABOUT_TEXT.visitors}</Text>
-            </Button>
-          ) : null}
           <Button onPress={() => onOpenChange(false)}>
             <Text className={BUTTON_LABEL}>{ABOUT_TEXT.done}</Text>
           </Button>
@@ -437,6 +367,7 @@ function BasicVenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
   const {
     reviews,
     description,
+    contacts,
     notes,
     summary,
     average,
@@ -555,8 +486,10 @@ function BasicVenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
             ) : null}
 
             {/* Two lines of what the place is, cut with an ellipsis, and the
-                way in to the rest. One pressable: the words are the button,
-                and "Read more" is there so that it looks like one. */}
+                way in to the rest and to how to reach them. One pressable:
+                the words are the button, and "Read more" is there so that it
+                looks like one. A place with contacts and no description gets
+                the way in alone. */}
             {description ? (
               <Pressable
                 onPress={() => setAboutOpen(true)}
@@ -575,6 +508,19 @@ function BasicVenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
                   </Text>
                   <Icon as={ChevronRight} className="size-3.5 text-foreground" />
                 </View>
+              </Pressable>
+            ) : contacts.length > 0 ? (
+              <Pressable
+                onPress={() => setAboutOpen(true)}
+                accessibilityRole="button"
+                className={cn(
+                  'flex-row items-center gap-0.5 self-start active:opacity-70',
+                  Platform.select({ web: 'cursor-pointer' })
+                )}>
+                <Text className="text-xs font-semibold text-foreground underline">
+                  {ABOUT_TEXT.contactOnly}
+                </Text>
+                <Icon as={ChevronRight} className="size-3.5 text-foreground" />
               </Pressable>
             ) : null}
 
@@ -687,19 +633,13 @@ function BasicVenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
 
       {/* A window of its own, through the dialog's portal: where it sits in
           this tree does not matter, only that it lives as long as the sheet. */}
-      {description ? (
+      {description || contacts.length > 0 ? (
         <AboutDialog
           open={aboutOpen}
           onOpenChange={setAboutOpen}
           name={venue.name}
-          tags={tags}
           description={description}
-          notes={notes}
-          hasVisitorAnswers={summary.length > 0}
-          onSeeVisitors={() => {
-            setAboutOpen(false);
-            if (page === 'reviews') openTagPage();
-          }}
+          contacts={contacts}
         />
       ) : null}
     </BottomSheet>

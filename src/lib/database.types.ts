@@ -385,6 +385,61 @@ export type Database = {
           },
         ]
       }
+      venue_contacts: {
+        Row: {
+          id: string
+          kind: string
+          label: string | null
+          sort_order: number
+          updated_at: string
+          updated_by: string | null
+          value: string
+          venue_id: string
+        }
+        Insert: {
+          id?: string
+          kind: string
+          label?: string | null
+          sort_order?: number
+          updated_at?: string
+          updated_by?: string | null
+          value: string
+          venue_id: string
+        }
+        Update: {
+          id?: string
+          kind?: string
+          label?: string | null
+          sort_order?: number
+          updated_at?: string
+          updated_by?: string | null
+          value?: string
+          venue_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "venue_contacts_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "venue_contacts_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venue_ratings"
+            referencedColumns: ["venue_id"]
+          },
+          {
+            foreignKeyName: "venue_contacts_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       venue_notes: {
         Row: {
           body: string
@@ -893,6 +948,10 @@ export type Database = {
         Returns: undefined
       }
       admin_reorder_tags: { Args: { p_ids: string[] }; Returns: undefined }
+      admin_set_venue_contacts: {
+        Args: { p_contacts: Json; p_venue_id: string }
+        Returns: undefined
+      }
       admin_reorder_venue_notes: {
         Args: { p_ids: string[]; p_venue_id: string }
         Returns: undefined

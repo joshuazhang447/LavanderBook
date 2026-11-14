@@ -3,10 +3,7 @@ import {
   Eye,
   EyeOff,
   Flag,
-  Globe,
   ListChecks,
-  Mail,
-  Phone,
   Route,
   SquarePen,
 } from 'lucide-react-native';
@@ -15,6 +12,7 @@ import { ActivityIndicator, Pressable, View } from 'react-native';
 
 import { AnswerSummaryCard } from '@/components/answer-summary';
 import { ChenfengReportSheet } from '@/components/chenfeng/report-sheet';
+import { CONTACT_ICONS, contactSpoken } from '@/components/contact-list';
 import { openDirections } from '@/components/directions-button';
 import { LinkedText, openLink } from '@/components/linked-text';
 import { StarRating } from '@/components/star-rating';
@@ -33,15 +31,20 @@ import {
 } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import type { VenueSheetProps } from '@/components/venue-sheet';
-import { ABOUT_TEXT, DETAILS_TEXT, detailsTeaser, placeLinks } from '@/lib/directory-text';
+import { ABOUT_TEXT, CONTACT_TEXT, DETAILS_TEXT, detailsTeaser } from '@/lib/directory-text';
 import { lightImpact } from '@/lib/haptics';
 import { MASK_TEXT, moderationStatus, REPORT_TEXT, spokenMasked, STATUS_TEXT } from '@/lib/moderation-text';
 import type { AnswerSummaryRow } from '@/lib/questionnaire';
 import { postedLabel } from '@/lib/review-dates';
 import { isMapped } from '@/lib/use-nearby-venues';
 import { cn } from '@/lib/utils';
+import {
+  contactDisplay,
+  contactHref,
+  contactTitle,
+  type VenueContact,
+} from '@/lib/venue-contacts';
 import { useVenueDetails, type Note, type VenueReview } from '@/lib/venue-details';
-import type { VenueTag } from '@/lib/venue-tags';
 
 /**
  * Chenfeng's place card (guideline section 14.3): a sheet at medium height with
@@ -121,12 +124,11 @@ export function ChenfengVenueSheet({ venue, onClose, onWriteReview }: VenueSheet
         />
       ) : null}
 
-      {about && details.description ? (
+      {about && (details.description || details.contacts.length > 0) ? (
         <AboutSheet
           name={venue.name}
-          tags={details.tags}
           description={details.description}
-          notes={details.notes}
+          contacts={details.contacts}
           onClose={() => setAbout(false)}
         />
       ) : null}
@@ -134,29 +136,25 @@ export function ChenfengVenueSheet({ venue, onClose, onWriteReview }: VenueSheet
   );
 }
 
-const LINK_ICON = { web: Globe, email: Mail, phone: Phone } as const;
-
 /**
- * Everything LavenderBook says about a place, in a sheet stacked on its card
- * (the Learn More pattern): the whole description - the card shows two lines
- * of it - then what we checked there, then every website, address and number
- * in either as a row to press. Its footer says who wrote it.
+ * A place's description in full and how to reach it, in a sheet stacked on
+ * its card (the Learn More pattern): the description with its attribution as
+ * the section's footer, then a Contact section - a row per website, number,
+ * address and service link, what it is above the value, as Contacts lays them
+ * out. Opens at full height: at medium the contacts, which are what most
+ * people open it for, start below the fold.
  */
 function AboutSheet({
   name,
-  tags,
   description,
-  notes,
+  contacts,
   onClose,
 }: {
   name: string;
-  tags: VenueTag[];
-  description: string;
-  notes: Note[];
+  description: string | null;
+  contacts: readonly VenueContact[];
   onClose: () => void;
 }) {
-  const links = placeLinks([description, ...notes.map((note) => note.body)]);
-
   return (
     <Sheet
       name="chenfeng-about-sheet"
@@ -167,53 +165,41 @@ function AboutSheet({
       toolbar={<SheetToolbar leading={<SheetCloseButton />} title={name} />}>
       <SheetScrollView contentContainerClassName="pb-12 pt-3">
         <List>
-          {tags.length > 0 ? (
-            <View className="flex-row flex-wrap gap-x-2 gap-y-1 px-4">
-              {tags.map((tag) => (
-                <TagPill key={tag.slug} tag={tag} />
-              ))}
-            </View>
+          {description ? (
+            <Section footer={ABOUT_TEXT.attribution}>
+              <Row
+                title={
+                  <Text textStyle="body" className="text-foreground">
+                    <LinkedText text={description} linkClassName="text-primary" />
+                  </Text>
+                }
+              />
+            </Section>
           ) : null}
 
-          <Section footer={ABOUT_TEXT.attribution}>
-            <Row
-              title={
-                <Text textStyle="body" className="text-foreground">
-                  <LinkedText text={description} linkClassName="text-primary" />
-                </Text>
-              }
-            />
+          <Section
+            header={CONTACT_TEXT.headingTitle}
+            footer={contacts.length > 0 ? undefined : CONTACT_TEXT.none}>
+            {contacts.map((contact) => (
+              <Row
+                key={contact.id}
+                icon={CONTACT_ICONS[contact.kind]}
+                title={
+                  <Text textStyle="footnote" numberOfLines={1} className="text-label-secondary">
+                    {contactTitle(contact)}
+                  </Text>
+                }
+                subtitle={
+                  <Text textStyle="body" numberOfLines={1} className="text-primary">
+                    {contactDisplay(contact)}
+                  </Text>
+                }
+                accessibilityRole="link"
+                accessibilityLabel={contactSpoken(contact)}
+                onPress={() => openLink(contactHref(contact))}
+              />
+            ))}
           </Section>
-
-          {notes.length > 0 ? (
-            <Section header={DETAILS_TEXT.titleTitle}>
-              {notes.map((note) => (
-                <Row
-                  key={note.id}
-                  title={
-                    <Text textStyle="body" className="text-foreground">
-                      <LinkedText text={note.body} linkClassName="text-primary" />
-                    </Text>
-                  }
-                />
-              ))}
-            </Section>
-          ) : null}
-
-          {links.length > 0 ? (
-            <Section header={ABOUT_TEXT.links}>
-              {links.map((link) => (
-                <Row
-                  key={link.href}
-                  icon={LINK_ICON[link.kind]}
-                  title={link.text}
-                  tone="tint"
-                  accessibilityRole="link"
-                  onPress={() => openLink(link.href)}
-                />
-              ))}
-            </Section>
-          ) : null}
         </List>
       </SheetScrollView>
     </Sheet>
@@ -244,6 +230,7 @@ function PlaceCard({
   const {
     reviews,
     description,
+    contacts,
     notes,
     summary,
     average,
@@ -330,6 +317,16 @@ function PlaceCard({
               </Text>
               <Text textStyle="subheadline" emphasized className="text-primary">
                 {ABOUT_TEXT.moreTitle}
+              </Text>
+            </Pressable>
+          ) : contacts.length > 0 ? (
+            // No description, but a way to reach them: the way in alone.
+            <Pressable
+              onPress={onAbout}
+              accessibilityRole="button"
+              className="self-start active:opacity-60">
+              <Text textStyle="subheadline" emphasized className="text-primary">
+                {ABOUT_TEXT.contactOnlyTitle}
               </Text>
             </Pressable>
           ) : null}

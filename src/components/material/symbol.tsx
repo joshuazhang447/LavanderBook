@@ -48,6 +48,7 @@ export const MATERIAL_SYMBOLS = {
   health_and_safety: 0xe1d5,
   info: 0xe88e,
   language: 0xe894,
+  link: 0xe157,
   list: 0xe896,
   location_disabled: 0xe1b6,
   location_off: 0xe0c7,

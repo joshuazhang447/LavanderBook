@@ -9,6 +9,7 @@ import {
 } from '@/lib/questionnaire';
 import { supabase } from '@/lib/supabase';
 import type { NearbyVenue } from '@/lib/use-nearby-venues';
+import { contactsFromText, isContactKind, type VenueContact } from '@/lib/venue-contacts';
 import { venueTags } from '@/lib/venue-tags';
 
 export type VenueReview = {
@@ -79,6 +80,12 @@ export function useVenueDetails(venue: NearbyVenue) {
     venueId: string;
     text: string | null;
   } | null>(null);
+  // Kept with its venue for the same reason. An empty list is an answer;
+  // nothing fetched yet, or a server from before the table, is no entry.
+  const [fetchedContacts, setFetchedContacts] = React.useState<{
+    venueId: string;
+    list: VenueContact[];
+  } | null>(null);
   const [summary, setSummary] = React.useState<AnswerSummaryRow[]>([]);
   const [newQuestions, setNewQuestions] = React.useState(0);
   /** Bumped to ask again, after a report changes what this reader sees. */
@@ -144,6 +151,27 @@ export function useVenueDetails(venue: NearbyVenue) {
         }
       });
 
+    // How to reach the place. Public, like the notes; a server from before the
+    // table answers with an error, and the contacts written into the notes
+    // stand in for it below.
+    supabase
+      .from('venue_contacts')
+      .select('id, kind, value, label')
+      .eq('venue_id', venue.id)
+      .order('sort_order', { ascending: true })
+      .then(({ data, error }) => {
+        if (!active || error) return;
+        const list: VenueContact[] = [];
+        for (const row of data ?? []) {
+          // A kind this app does not know yet is one it cannot open: skip it
+          // rather than offer a row that does nothing.
+          if (isContactKind(row.kind)) {
+            list.push({ id: row.id, kind: row.kind, value: row.value, label: row.label });
+          }
+        }
+        setFetchedContacts({ venueId: venue.id, list });
+      });
+
     // Same reasoning as the notes: whether anyone has answered anything is what
     // decides whether the tag pill opens a page at all.
     fetchAnswerSummary(venue.id)
@@ -190,10 +218,18 @@ export function useVenueDetails(venue: NearbyVenue) {
     (fetchedDescription?.venueId === venue.id
       ? fetchedDescription.text
       : (venue.description ?? null)) || null;
+  // The place's own contacts when an admin has written any; until then the
+  // websites, numbers and addresses its notes mention, so a place listed before
+  // contacts existed still has a way to reach it.
+  const contacts = React.useMemo(() => {
+    const own = fetchedContacts?.venueId === venue.id ? fetchedContacts.list : [];
+    return own.length > 0 ? own : contactsFromText(notes.map((note) => note.body));
+  }, [fetchedContacts, venue.id, notes]);
 
   return {
     reviews,
     description,
+    contacts,
     notes,
     summary,
     average,
