@@ -1207,6 +1207,27 @@ export type Database = {
           unmasked_body: string
         }[]
       }
+      venues_directory: {
+        Args: {
+          p_lat: number
+          p_limit?: number
+          p_lng: number
+          p_radius_meters?: number
+        }
+        Returns: {
+          avg_stars: number
+          description: string
+          distance_meters: number
+          google_place_id: string
+          id: string
+          lat: number
+          latest_review_body: string
+          lng: number
+          name: string
+          review_count: number
+          tags: Json
+        }[]
+      }
       venues_near: {
         Args: {
           p_lat: number

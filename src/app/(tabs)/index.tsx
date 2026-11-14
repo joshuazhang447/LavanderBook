@@ -104,8 +104,17 @@ export default function MapScreen() {
   // Non-zero only under a tab bar floating over the map.
   const tabBarOverlap = useTabBarOverlap();
 
-  // Set by Locate on a review over in the account tab.
+  // Set by Locate on a review over in the account tab, and by "Show on map"
+  // in the Directory.
   const focus = useMapFocus();
+  // A place to show is a place to show on the map: if this tab was left on its
+  // list, the request would otherwise arrive at a list. Done during render,
+  // like the start key below, so the list is never drawn first.
+  const [shownFocus, setShownFocus] = React.useState(focus?.token ?? 0);
+  if (focus && focus.token !== shownFocus) {
+    setShownFocus(focus.token);
+    setMode('map');
+  }
   const goTo = React.useMemo(
     () => (focus ? { latitude: focus.latitude, longitude: focus.longitude } : null),
     [focus]
@@ -350,13 +359,13 @@ export default function MapScreen() {
         />
       ) : chenfeng ? (
         <ChenfengVenueList
-          venues={venues}
           origin={
             following
               ? (followPosition ?? (location.status === 'granted' ? location : fetchRegion))
               : fetchRegion
           }
           query={listQuery}
+          refreshKey={String(savedCount)}
           onSelectVenue={setViewingVenue}
           onLocateVenue={locateVenue}
           refreshing={refreshing}
@@ -364,15 +373,15 @@ export default function MapScreen() {
         />
       ) : (
         <VenueList
-          // Already fetched for the visible region: opening the list is free.
-          venues={venues}
-          // Distances from the user themselves while following, otherwise from
-          // the middle of the map. Exact, and used only on the device.
+          // Everything around the user themselves while following, otherwise
+          // around the middle of the map - and measured from there, exactly,
+          // on the device. What is sent is only the square it falls in.
           origin={
             following
               ? (followPosition ?? (location.status === 'granted' ? location : fetchRegion))
               : fetchRegion
           }
+          refreshKey={String(savedCount)}
           onSelectVenue={setViewingVenue}
           onLocateVenue={locateVenue}
         />

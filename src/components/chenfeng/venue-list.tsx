@@ -1,4 +1,4 @@
-import { Map as MapIcon, MapPinOff, Search } from 'lucide-react-native';
+import { Map as MapIcon, MapPinOff, Search, TriangleAlert } from 'lucide-react-native';
 import * as React from 'react';
 import { ActivityIndicator, RefreshControl, View } from 'react-native';
 import Animated, {
@@ -10,26 +10,30 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { useChenfengControlsBottom } from '@/components/chenfeng/map-chrome';
+import { DistanceMeter } from '@/components/distance-meter';
 import { ScrollEdge } from '@/components/chenfeng/large-title-screen';
 import { SwipeRow } from '@/components/chenfeng/swipe-row';
 import { StarRating } from '@/components/star-rating';
 import { useTabBarOverlap } from '@/components/tab-bar';
 import { TagPill } from '@/components/tag-pill';
+import { Button } from '@/components/ui/button';
 import { EmptyState, Row, Section } from '@/components/ui/list';
 import { Menu, measureAnchor, type MenuAnchor } from '@/components/ui/menu';
 import { Text } from '@/components/ui/text';
-import { formatDistance, useVenueRows } from '@/components/venue-list';
+import { formatDistance, useListRows } from '@/components/venue-list';
+import type { PlaceRow } from '@/lib/directory';
+import { LIST_TEXT, ONLINE_TEXT } from '@/lib/directory-text';
 import { lightImpact } from '@/lib/haptics';
 import type { Coords } from '@/lib/use-location';
 import { isMapped, type NearbyVenue } from '@/lib/use-nearby-venues';
-import { venueTags } from '@/lib/venue-tags';
 
 type ChenfengVenueListProps = {
-  venues: NearbyVenue[];
-  /** Where distances are measured from, on the device. See VenueList. */
+  /** Where the list looks around and measures from, on the device. See VenueList. */
   origin: Coords | null;
   /** Typed into the tab bar's search field. */
   query: string;
+  /** Changes when the list should ask again. */
+  refreshKey: string;
   onSelectVenue: (venue: NearbyVenue) => void;
   onLocateVenue: (venue: NearbyVenue) => void;
   /** Pull to refresh. */
@@ -39,14 +43,15 @@ type ChenfengVenueListProps = {
 
 /**
  * Chenfeng's List mode (guideline section 14.2): a plain list edge to edge
- * under the map's controls, nearest first. Tapping a row opens the place;
- * "Show on Map" is a swipe away and in the row's menu, rather than a button on
- * every row. The same reviewed places, the same free search, as VenueList.
+ * under the map's controls, nearest first, then the online organisations under
+ * a header of their own. Tapping a row opens the place; "Show on Map" is a
+ * swipe away and in the row's menu, rather than a button on every row. The
+ * same places, the same free search, as VenueList (useListRows).
  */
 export function ChenfengVenueList({
-  venues,
   origin,
   query,
+  refreshKey,
   onSelectVenue,
   onLocateVenue,
   refreshing,
@@ -54,8 +59,12 @@ export function ChenfengVenueList({
 }: ChenfengVenueListProps) {
   const top = useChenfengControlsBottom() + 12;
   const tabBarOverlap = useTabBarOverlap();
-  const { rows, loading, searching, trimmed } = useVenueRows(venues, origin, query);
-  const [menu, setMenu] = React.useState<{ venue: NearbyVenue; anchor: MenuAnchor } | null>(null);
+  const { places, km, loading, failed, retry, searching, trimmed } = useListRows(
+    origin,
+    query,
+    refreshKey
+  );
+  const any = !!places && places.nearby.length + places.online.length > 0;
   const scrollY = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler((event) => {
     scrollY.set(event.contentOffset.y);
@@ -75,55 +84,56 @@ export function ChenfengVenueList({
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} progressViewOffset={top} />
         }>
+        {/* How far the list looks: the same meter as the Directory's, and the
+            same choice - move one and the other has moved. */}
+        <DistanceMeter className="px-4 pb-4" />
         {loading ? (
           <View className="items-center py-10">
             <ActivityIndicator />
           </View>
-        ) : rows && rows.length > 0 ? (
-          <Section plain>
-            {rows.map(({ venue, distance }) => {
-              const row = (
-                <VenueRow
-                  venue={venue}
-                  distance={distance}
-                  onPress={() => onSelectVenue(venue)}
-                  onLocate={isMapped(venue) ? () => onLocateVenue(venue) : undefined}
-                  onLongPress={async (target) => {
-                    const anchor = await measureAnchor(target);
-                    if (!anchor) return;
-                    lightImpact();
-                    setMenu({ venue, anchor });
-                  }}
-                />
-              );
-              // An online organisation has no place on the map, so no swipe
-              // action to show it there.
-              return isMapped(venue) ? (
-                <SwipeRow
-                  key={venue.id}
-                  actions={[
-                    { label: 'Show on Map', icon: MapIcon, tone: 'tint', onPress: () => onLocateVenue(venue) },
-                  ]}>
-                  {row}
-                </SwipeRow>
-              ) : (
-                <React.Fragment key={venue.id}>{row}</React.Fragment>
-              );
-            })}
-          </Section>
+        ) : failed ? (
+          <EmptyState
+            icon={TriangleAlert}
+            title={LIST_TEXT.failedTitle}
+            description={LIST_TEXT.failed}
+            action={
+              <Button variant="secondary" onPress={retry}>
+                <Text>{LIST_TEXT.retryTitle}</Text>
+              </Button>
+            }
+          />
+        ) : any && places ? (
+          <View className="gap-7">
+            {places.nearby.length > 0 ? (
+              <ChenfengPlaceRows
+                rows={places.nearby}
+                onSelect={onSelectVenue}
+                onLocate={onLocateVenue}
+              />
+            ) : null}
+            {places.online.length > 0 ? (
+              <ChenfengPlaceRows
+                header={ONLINE_TEXT.headingTitle}
+                footer={ONLINE_TEXT.lead}
+                rows={places.online}
+                onSelect={onSelectVenue}
+                onLocate={onLocateVenue}
+              />
+            ) : null}
+          </View>
         ) : searching ? (
-          // Reviewed places only, and free; finding one nobody has reviewed is
-          // the map's search, a billed call - so say where to look.
+          // Listed and reviewed places only, and free; finding one nobody has
+          // reviewed is the map's search, a billed call - so say where to look.
           <EmptyState
             icon={Search}
             title={`No Results for “${trimmed}”`}
-            description="Search for it on the map to add the first review."
+            description={`Nothing within ${km} km matches. Search for it on the map to add the first review.`}
           />
         ) : (
           <EmptyState
             icon={MapPinOff}
-            title="No Reviewed Places Here"
-            description="Pan the map or zoom out to find some."
+            title={LIST_TEXT.emptyTitle}
+            description={`${LIST_TEXT.empty(km)} ${LIST_TEXT.emptyHint}`}
           />
         )}
       </Animated.ScrollView>
@@ -142,6 +152,75 @@ export function ChenfengVenueList({
           <ScrollEdge position="bottom" tone="bg-background" />
         </View>
       ) : null}
+    </View>
+  );
+}
+
+type ChenfengPlaceRowsProps = {
+  rows: PlaceRow[];
+  /**
+   * Edge to edge on the plain page (the list), or an inset rounded section on
+   * the grouped one (the Directory).
+   */
+  plain?: boolean;
+  header?: string;
+  footer?: string;
+  /** In the Directory, where every row is a listed place. See PlaceRowCard. */
+  listed?: boolean;
+  onSelect: (venue: NearbyVenue) => void;
+  onLocate: (venue: NearbyVenue) => void;
+};
+
+/**
+ * A run of places as plain rows, with what goes with them: "Show on Map" as a
+ * swipe and in the menu a long press opens. Chenfeng's rows in the list and in
+ * the Directory.
+ */
+export function ChenfengPlaceRows({
+  rows,
+  plain = true,
+  header,
+  footer,
+  listed,
+  onSelect,
+  onLocate,
+}: ChenfengPlaceRowsProps) {
+  const [menu, setMenu] = React.useState<{ venue: NearbyVenue; anchor: MenuAnchor } | null>(null);
+
+  return (
+    <>
+      <Section plain={plain} header={header} footer={footer}>
+        {rows.map((place) => {
+          const { venue } = place;
+          const row = (
+            <PlaceListRow
+              place={place}
+              listed={listed}
+              onPress={() => onSelect(venue)}
+              onLocate={isMapped(venue) ? () => onLocate(venue) : undefined}
+              onLongPress={async (target) => {
+                const anchor = await measureAnchor(target);
+                if (!anchor) return;
+                lightImpact();
+                setMenu({ venue, anchor });
+              }}
+            />
+          );
+          // An online organisation has no place on the map, so no swipe
+          // action to show it there.
+          return isMapped(venue) ? (
+            <SwipeRow
+              key={venue.id}
+              actions={[
+                { label: 'Show on Map', icon: MapIcon, tone: 'tint', onPress: () => onLocate(venue) },
+              ]}>
+              {row}
+            </SwipeRow>
+          ) : (
+            <React.Fragment key={venue.id}>{row}</React.Fragment>
+          );
+        })}
+      </Section>
 
       <Menu
         anchor={menu?.anchor ?? null}
@@ -152,38 +231,38 @@ export function ChenfengVenueList({
           menu
             ? [
                 [
-                  { label: 'Open', onPress: () => onSelectVenue(menu.venue) },
+                  { label: 'Open', onPress: () => onSelect(menu.venue) },
                   ...(isMapped(menu.venue)
-                    ? [{ label: 'Show on Map', icon: MapIcon, onPress: () => onLocateVenue(menu.venue) }]
+                    ? [{ label: 'Show on Map', icon: MapIcon, onPress: () => onLocate(menu.venue) }]
                     : []),
                 ],
               ]
             : []
         }
       />
-    </View>
+    </>
   );
 }
 
-function VenueRow({
-  venue,
-  distance,
+function PlaceListRow({
+  place,
+  listed,
   onPress,
   onLocate,
   onLongPress,
 }: {
-  venue: NearbyVenue;
-  distance: number | null;
+  place: PlaceRow;
+  listed?: boolean;
   onPress: () => void;
   /** Absent for a venue with no coordinates. */
   onLocate?: () => void;
   onLongPress: (target: View | null) => void;
 }) {
+  const { venue, tags, distance } = place;
   const ref = React.useRef<View>(null);
   const average = Number(venue.avg_stars ?? 0);
   // Listed by us, not yet reviewed: no stars, which would read as zero.
   const unreviewed = venue.review_count === 0;
-  const tags = venueTags(venue);
   const count = venue.review_count === 1 ? '1 review' : `${venue.review_count} reviews`;
   const away = formatDistance(distance);
 
@@ -200,11 +279,14 @@ function VenueRow({
         }
         onPress={onPress}
         onLongPress={() => onLongPress(ref.current)}
-        accessibilityLabel={
-          unreviewed
-            ? `${venue.name}, listed, not yet reviewed${away ? `, ${away}` : ''}`
-            : `${venue.name}, ${average.toFixed(1)} out of 5, ${count}${away ? `, ${away}` : ''}`
-        }
+        accessibilityLabel={[
+          venue.name,
+          unreviewed ? 'listed, not yet reviewed' : `${average.toFixed(1)} out of 5, ${count}`,
+          away,
+          venue.description,
+        ]
+          .filter(Boolean)
+          .join(', ')}
         accessibilityActions={onLocate ? [{ name: 'map', label: 'Show on Map' }] : undefined}
         onAccessibilityAction={(event) => {
           if (event.nativeEvent.actionName === 'map') onLocate?.();
@@ -212,10 +294,17 @@ function VenueRow({
         <Text textStyle="headline" numberOfLines={1} className="text-foreground">
           {venue.name}
         </Text>
-        <View className="mt-0.5 flex-row flex-wrap items-center gap-x-2 gap-y-1">
+        {/* What the place is, in LavenderBook's words: two lines, the rest is
+            on its card. Only rows from venues_directory carry one. */}
+        {venue.description ? (
+          <Text textStyle="subheadline" numberOfLines={2} className="mt-0.5 text-label-secondary">
+            {venue.description}
+          </Text>
+        ) : null}
+        <View className="mt-1 flex-row flex-wrap items-center gap-x-2 gap-y-1">
           {unreviewed ? (
             <Text textStyle="footnote" className="text-label-secondary">
-              Listed by LavenderBook · no reviews yet
+              {listed ? LIST_TEXT.noReviews : LIST_TEXT.listedNoReviews}
             </Text>
           ) : (
             <View className="flex-row items-center gap-1.5">

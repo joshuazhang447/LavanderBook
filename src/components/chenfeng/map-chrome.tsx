@@ -38,6 +38,7 @@ import { EmptyState, Row, Section } from '@/components/ui/list';
 import { Segmented } from '@/components/ui/segmented';
 import { Text } from '@/components/ui/text';
 import { useDisplaySettings } from '@/lib/accessibility';
+import { LIST_TEXT } from '@/lib/directory-text';
 import { closeMapSearch, useMapSearchOpen } from '@/lib/map-search-state';
 import type { PlaceResult } from '@/lib/place-search';
 import { cn } from '@/lib/utils';
@@ -214,7 +215,7 @@ type SearchProps = {
  * opens it, and the field takes the bar's place at the bottom of the screen,
  * rising with the keyboard, with a separate glass ✕ beside it to close. It
  * says what it searches: places anywhere on the map, or - while the list is
- * showing - the reviewed places in it, which it filters in place.
+ * showing - the places in it, which it filters in place.
  *
  * Searching places is the same billed search the other skins' pill makes
  * (usePlaceSearch, with its guards). The last search stays in the field when
@@ -237,7 +238,7 @@ export function ChenfengSearch({ mode, origin, onPickPlace, onClearPlace, listQu
       <SearchField
         value={listQuery}
         onChangeText={onListQuery}
-        placeholder="Search Reviewed Places"
+        placeholder={LIST_TEXT.searchTitle}
         onClear={() => onListQuery('')}
       />
     );

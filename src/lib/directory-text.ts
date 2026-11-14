@@ -121,3 +121,75 @@ export function detailsTeaser(
     points: notes.slice(0, 2).map((note) => noteHeadline(note.body)),
   };
 }
+
+/** Over the organisations with no place to visit, in the list and the Directory. */
+export const ONLINE_TEXT = {
+  heading: 'Online and by phone',
+  headingTitle: 'Online and by Phone',
+  lead: 'No place to visit: reach them from anywhere.',
+} as const;
+
+/**
+ * The distance meter, over the list and the Directory: how far either looks.
+ * One choice for both (src/lib/search-distance.ts).
+ */
+export const DISTANCE_TEXT = {
+  label: 'Distance',
+  labelTitle: 'Distance',
+  within: (km: number) => `Within ${km} km`,
+  /** One stop, read out. */
+  spoken: (km: number) => `Within ${km} kilometres`,
+} as const;
+
+/** The Map tab's list: every listed or reviewed place around the map. */
+export const LIST_TEXT = {
+  search: 'Search the list',
+  searchTitle: 'Search the List',
+  listedNoReviews: 'Listed by LavenderBook · no reviews yet',
+  /** Where every row is a listed place, and saying so on each would be noise. */
+  noReviews: 'No reviews yet',
+  empty: (km: number) => `Nothing is listed or reviewed within ${km} km of here yet.`,
+  emptyTitle: 'No Places Here Yet',
+  emptyHint: 'Move the distance further, or search for a place in Map view to add the first review.',
+  failed: 'Could not load the places around here. Check your connection and try again.',
+  failedTitle: 'Couldn’t Load Places',
+  retry: 'Try again',
+  retryTitle: 'Try Again',
+} as const;
+
+/**
+ * The Directory tab: every place LavenderBook lists around here, by kind - for
+ * somebody new to a city asking where the community centres, the trans
+ * clinics, the shelters and the queer-owned businesses are.
+ */
+export const DIRECTORY_TEXT = {
+  title: 'Directory',
+  /** Under the title. */
+  lead: (where: string) =>
+    `LGBTQ+ community centres, clinics, support groups, shelters and queer-owned places ${where}, checked and listed by LavenderBook.`,
+  nearYou: 'near you',
+  near: (label: string) => `near ${label}`,
+  search: 'Search: trans clinic, youth, bar…',
+  searchLabel: 'Search the directory',
+  /** Over the kinds, where it opens. */
+  question: 'What are you looking for?',
+  questionTitle: 'What Are You Looking For?',
+  every: 'Everything',
+  everyLead: 'Every listed place, nearest first',
+  back: 'All kinds',
+  backTitle: 'All Kinds',
+  count: (n: number) => (n === 1 ? '1 place' : `${n} places`),
+  found: (n: number, query: string) =>
+    n === 1 ? `1 place matches “${query}”` : `${n} places match “${query}”`,
+  nothingFound: (query: string) => `Nothing listed matches “${query}”`,
+  nothingFoundTitle: (query: string) => `No Results for “${query}”`,
+  nothingFoundHint: (km: number) =>
+    `Searched names, descriptions and kinds within ${km} km. Try another word, or move the distance further.`,
+  emptyTitle: 'Nothing listed here yet',
+  emptyTitleTitle: 'Nothing Listed Here Yet',
+  empty: (km: number) =>
+    `LavenderBook lists no places within ${km} km yet. Move the distance further: the directory is built one city at a time.`,
+  failedTitle: 'Could not load the directory',
+  failedTitleTitle: 'Couldn’t Load the Directory',
+  failed: 'Check your connection and try again.',
+} as const;
