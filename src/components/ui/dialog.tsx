@@ -1,5 +1,7 @@
+import { useTabTintProps } from '@/components/oau/tab-tint';
 import { Icon } from '@/components/ui/icon';
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view';
+import { useSkin } from '@/lib/skin';
 import { cn } from '@/lib/utils';
 import * as DialogPrimitive from '@rn-primitives/dialog';
 import { X } from 'lucide-react-native';
@@ -9,6 +11,15 @@ import { FadeIn, FadeOut, ReduceMotion } from 'react-native-reanimated';
 import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens';
 
 const Dialog = DialogPrimitive.Root;
+
+/**
+ * OAU's windows: paper with an ink outline and rounder corners, over a warm
+ * ink dim, the title in Halant on the website (LavenderBookStyle,
+ * oau-style-guide.md, section 13.17). Other skins are untouched.
+ */
+const OAU_CONTENT = 'rounded-[24px] border-[1.5px] border-outline-ink';
+const OAU_DIM = 'bg-[rgba(69,49,30,0.28)]';
+const OAU_TITLE = 'font-oau-display text-oau-heading';
 
 const DialogTrigger = DialogPrimitive.Trigger;
 
@@ -66,21 +77,30 @@ function DialogContent({
   className,
   portalHost,
   children,
+  style,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   portalHost?: string;
 }) {
+  const oau = useSkin().skin === 'oau';
+  // Read here, in the tab, before the window leaves it for the portal host:
+  // OAU's tab colours, so "Got it" in My Account is pink, not the Map's blue.
+  const tint = useTabTintProps();
   return (
     <DialogPortal hostName={portalHost}>
-      <DialogOverlay>
+      <DialogOverlay className={oau ? OAU_DIM : undefined}>
         <DialogPrimitive.Content
           className={cn(
             'bg-background border-border z-50 mx-auto flex w-full max-w-[calc(100%-2rem)] flex-col gap-4 rounded-lg border p-6 shadow-lg shadow-black/5 sm:max-w-lg',
+            oau && OAU_CONTENT,
+            oau && tint.className,
             Platform.select({
               web: 'animate-in fade-in-0 zoom-in-95 duration-200',
             }),
             className
           )}
+          // A phone only: the tint is a class on the website.
+          style={oau && tint.style ? [tint.style, style] : style}
           {...props}>
           <>{children}</>
           <DialogPrimitive.Close
@@ -119,9 +139,14 @@ function DialogFooter({ className, ...props }: ViewProps) {
 }
 
 function DialogTitle({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Title>) {
+  const oau = useSkin().skin === 'oau';
   return (
     <DialogPrimitive.Title
-      className={cn('text-foreground text-lg font-semibold leading-none', className)}
+      className={cn(
+        'text-foreground text-lg font-semibold leading-none',
+        oau && OAU_TITLE,
+        className
+      )}
       {...props}
     />
   );
