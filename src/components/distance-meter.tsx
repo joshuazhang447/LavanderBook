@@ -73,6 +73,8 @@ export function DistanceMeter({ className }: { className?: string }) {
 
   const chenfeng = skin === 'chenfeng';
   const material = skin === 'material';
+  // OAU's is a ruler: an outlined track, ticks at the stops, a sticker thumb.
+  const oau = skin === 'oau';
 
   return (
     <View className={cn('gap-1', className)}>
@@ -83,6 +85,10 @@ export function DistanceMeter({ className }: { className?: string }) {
           </Text>
         ) : material ? (
           <Text type="title-small" className="text-on-surface">
+            {DISTANCE_TEXT.label}
+          </Text>
+        ) : oau ? (
+          <Text oauStyle="label" className="text-foreground">
             {DISTANCE_TEXT.label}
           </Text>
         ) : (
@@ -103,6 +109,13 @@ export function DistanceMeter({ className }: { className?: string }) {
             className="text-on-surface-variant">
             {DISTANCE_TEXT.within(km)}
           </Text>
+        ) : oau ? (
+          <Text
+            oauStyle="callout"
+            accessibilityLiveRegion="polite"
+            className="font-semibold text-foreground">
+            {DISTANCE_TEXT.within(km)}
+          </Text>
         ) : (
           <Text accessibilityLiveRegion="polite" className="text-sm text-muted-foreground">
             {DISTANCE_TEXT.within(km)}
@@ -121,15 +134,19 @@ export function DistanceMeter({ className }: { className?: string }) {
           <View
             pointerEvents="none"
             className={cn(
-              'absolute h-1 rounded-full',
-              chenfeng ? 'bg-fill-secondary' : 'bg-muted'
+              'absolute rounded-full',
+              oau
+                ? 'h-1.5 border border-input bg-muted'
+                : chenfeng
+                  ? 'h-1 bg-fill-secondary'
+                  : 'h-1 bg-muted'
             )}
             style={{ left: STOP_WIDTH / 2, right: STOP_WIDTH / 2 }}
           />
           {/* Filled as far as the chosen stop. */}
           <View
             pointerEvents="none"
-            className="absolute h-1 rounded-full bg-primary"
+            className={cn('absolute rounded-full', oau ? 'h-1.5 bg-switch-on' : 'h-1 bg-primary')}
             style={{
               left: STOP_WIDTH / 2,
               width: width > STOP_WIDTH ? ((width - STOP_WIDTH) * index) / LAST : 0,
@@ -154,9 +171,22 @@ export function DistanceMeter({ className }: { className?: string }) {
                     <View
                       className={cn(
                         'rounded-full',
-                        chenfeng
-                          ? 'size-6 bg-white shadow-md shadow-black/25'
-                          : 'size-5 border-2 border-background bg-primary'
+                        oau
+                          ? cn(
+                              'size-7 border-[1.5px] border-outline-ink bg-card',
+                              Platform.select({ web: 'shadow-[0_2px_5px_rgba(166,134,89,0.32)]' })
+                            )
+                          : chenfeng
+                            ? 'size-6 bg-white shadow-md shadow-black/25'
+                            : 'size-5 border-2 border-background bg-primary'
+                      )}
+                    />
+                  ) : oau ? (
+                    // A tick on the ruler.
+                    <View
+                      className={cn(
+                        'h-3 w-0.5 rounded-full',
+                        at < index ? 'bg-outline-ink' : 'bg-muted-foreground'
                       )}
                     />
                   ) : (
@@ -199,6 +229,14 @@ export function DistanceMeter({ className }: { className?: string }) {
                 type="label-medium"
                 maxFontSizeMultiplier={1.3}
                 className={at === index ? 'text-on-surface' : 'text-on-surface-variant'}
+                style={{ fontVariant: ['tabular-nums'] }}>
+                {step}
+              </Text>
+            ) : oau ? (
+              <Text
+                oauStyle="caption"
+                maxFontSizeMultiplier={1.3}
+                className={at === index ? 'font-semibold text-foreground' : 'text-muted-foreground'}
                 style={{ fontVariant: ['tabular-nums'] }}>
                 {step}
               </Text>

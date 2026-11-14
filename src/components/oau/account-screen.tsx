@@ -20,7 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLeaveNowReserve } from '@/components/leave-now';
 import { LogoImage } from '@/components/logo-image';
 import { statusLine, useMyReviews, type MyReview } from '@/components/my-reviews-list';
-import { IconSticker, OauCard, OauHeading, OauRow } from '@/components/oau/card';
+import { BookTile, IconSticker, OauCard, OauHeading, OauRow } from '@/components/oau/card';
 import { PaperBackdrop } from '@/components/oau/paper';
 import { PrideFlag, PrideRibbon } from '@/components/oau/pride-flag';
 import { OauBadge } from '@/components/oau-badge';
@@ -221,20 +221,6 @@ function ProfileCard() {
         {accountNameNote(profile ? profile.per_place_names : null)}
       </Text>
     </RibbonCard>
-  );
-}
-
-/** The book on its tile: a soft rounded square, turned a little, for welcomes. */
-export function BookTile() {
-  return (
-    <View
-      style={{ transform: [{ rotate: '-4deg' }] }}
-      className={cn(
-        'size-[76px] items-center justify-center rounded-[18px] border-[1.5px] border-outline-ink bg-band',
-        Platform.select({ web: 'shadow-[0_2px_5px_rgba(166,134,89,0.32)]' })
-      )}>
-      <LogoImage logo={BOOK_LARGE} />
-    </View>
   );
 }
 

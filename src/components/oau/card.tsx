@@ -2,8 +2,10 @@ import { ChevronRight, type LucideIcon } from 'lucide-react-native';
 import * as React from 'react';
 import { Platform, Pressable, View } from 'react-native';
 
+import { LogoImage } from '@/components/logo-image';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
+import { BOOK_LARGE } from '@/lib/logos';
 import { cn } from '@/lib/utils';
 
 /**
@@ -193,5 +195,19 @@ export function IconSticker({
         className={cn(size === 48 ? 'size-[22px]' : size === 40 ? 'size-5' : 'size-4', 'text-foreground')}
       />
     </Pressable>
+  );
+}
+
+/** The book on its tile: a soft rounded square, turned a little, for welcomes and empty states. */
+export function BookTile() {
+  return (
+    <View
+      style={{ transform: [{ rotate: '-4deg' }] }}
+      className={cn(
+        'size-[76px] items-center justify-center rounded-[18px] border-[1.5px] border-outline-ink bg-band',
+        Platform.select({ web: 'shadow-[0_2px_5px_rgba(166,134,89,0.32)]' })
+      )}>
+      <LogoImage logo={BOOK_LARGE} />
+    </View>
   );
 }
