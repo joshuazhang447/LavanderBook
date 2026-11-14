@@ -46,6 +46,7 @@ export default function AccountLayout() {
       <Stack.Screen name="names" options={{ title: 'Per-Place Names' }} />
       <Stack.Screen name="dates" options={{ title: 'Hide Exact Dates' }} />
       <Stack.Screen name="appearance" options={{ title: 'Appearance' }} />
+      <Stack.Screen name="privacy" options={{ title: 'Privacy Policy' }} />
     </Stack>
   );
 }

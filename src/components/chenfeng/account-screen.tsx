@@ -9,6 +9,7 @@ import {
   Map as MapIcon,
   Navigation,
   Palette,
+  Lock,
   ShieldAlert,
   SquarePen,
   Trash2,
@@ -223,6 +224,12 @@ function SafetySection() {
         accessory="chevron"
         // The notice itself is the same in every skin.
         onPress={reopenSafetyNotice}
+      />
+      <Row
+        title="Privacy Policy"
+        tile={{ icon: Lock, className: 'bg-system-gray' }}
+        accessory="chevron"
+        onPress={() => router.push('/account/privacy')}
       />
     </Section>
   );
