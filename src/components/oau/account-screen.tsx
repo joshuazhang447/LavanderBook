@@ -4,14 +4,18 @@ import {
   Calendar,
   CalendarOff,
   Check,
+  ChevronRight,
   CircleUser,
   Clock,
   Lock,
+  LogOut,
   MapPin,
+  Palette,
   ShieldAlert,
   SquarePen,
   TriangleAlert,
   VenetianMask,
+  X,
 } from 'lucide-react-native';
 import * as React from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, View } from 'react-native';
@@ -28,6 +32,7 @@ import { LeaveNowSetting, LocationSetting, PrivacySettings } from '@/components/
 import { ReviewSheet } from '@/components/review-sheet';
 import { StarRating } from '@/components/star-rating';
 import { useIsWideViewport, useTabBarOverlap } from '@/components/tab-bar';
+import { BottomSheet } from '@/components/ui/bottom-sheet';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
@@ -37,7 +42,15 @@ import { focusMapOn } from '@/lib/map-focus';
 import { STATUS_TEXT } from '@/lib/moderation-text';
 import { OAU_ACCOUNT_TEXT as T, shownAs } from '@/lib/oau-text';
 import { PAGING_TEXT, REVIEWS_PAGE, usePaging } from '@/lib/paging';
-import { accountNameNote, SIGN_IN_PITCH } from '@/lib/privacy-text';
+import {
+  accountNameNote,
+  DATES_EXPLAINED,
+  LEAVE_NOW_EXPLAINED,
+  LOCATION_EXPLAINED,
+  namesExplained,
+  PRIVACY_TITLES,
+  SIGN_IN_PITCH,
+} from '@/lib/privacy-text';
 import { reopenSafetyNotice } from '@/lib/safety';
 import { chooseSkin, DEFAULT_SKIN, SKINS, useSkinChoice, type Skin } from '@/lib/skin';
 import { skinColor } from '@/lib/theme';
@@ -63,6 +76,10 @@ export function OauAccountScreen() {
   const [error, setError] = React.useState<string | null>(null);
   /** Bumped when turning per-place names on renamed the reviews listed below. */
   const [reviewChanges, setReviewChanges] = React.useState(0);
+  const [explaining, setExplaining] = React.useState(false);
+  const [choosingLook, setChoosingLook] = React.useState(false);
+  const { skin } = useSkinChoice();
+  const skinLabel = SKINS.find((option) => option.id === skin)?.label ?? '';
 
   async function run(action: () => Promise<void>) {
     setError(null);
@@ -116,14 +133,26 @@ export function OauAccountScreen() {
                   )}
                 </View>
               </OauCard>
+              <QuietAction label={T.whyTheseMatter} onPress={() => setExplaining(true)} />
             </View>
-
-            <AppearanceCards />
 
             {session ? <ReviewsSection key={session.user.id} changes={reviewChanges} /> : null}
 
             <View className="gap-3">
-              <OauHeading title={T.more} />
+              <OauCard>
+                <OauRow
+                  first
+                  icon={Palette}
+                  title={T.appearance}
+                  trailing={
+                    <Text oauStyle="callout" className="text-muted-foreground">
+                      {skinLabel}
+                    </Text>
+                  }
+                  chevron
+                  onPress={() => setChoosingLook(true)}
+                />
+              </OauCard>
               <OauCard>
                 <OauRow
                   first
@@ -143,11 +172,10 @@ export function OauAccountScreen() {
             </View>
 
             {session ? (
-              <View className="items-start gap-2">
-                <Button variant="secondary" disabled={busy} onPress={() => run(signOut)}>
-                  <Text>{T.signOut}</Text>
-                </Button>
-              </View>
+              <Button size="lg" variant="secondary" disabled={busy} onPress={() => run(signOut)}>
+                <Icon as={LogOut} className="size-5 text-foreground" />
+                <Text>{T.signOut}</Text>
+              </Button>
             ) : null}
 
             {error ? (
@@ -160,7 +188,109 @@ export function OauAccountScreen() {
           </View>
         </ScrollView>
       )}
+
+      <WhyTheseMatter open={explaining} onOpenChange={setExplaining} />
+      {choosingLook ? <AppearanceSheet onClose={() => setChoosingLook(false)} /> : null}
     </View>
+  );
+}
+
+/** A quiet action in the tab's colour, with a chevron. */
+function QuietAction({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      hitSlop={6}
+      className={cn(
+        'flex-row items-center gap-0.5 self-start px-1 py-1 active:opacity-60',
+        Platform.select({ web: 'cursor-pointer' })
+      )}>
+      <Text oauStyle="label" className="text-primary">
+        {label}
+      </Text>
+      <Icon as={ChevronRight} className="size-4 text-primary" />
+    </Pressable>
+  );
+}
+
+/**
+ * "Why these matter": each setting's reason, together in one sheet - the
+ * first of the four headings every skin's explanation opens with. The
+ * settings' own sheets have the rest.
+ */
+function WhyTheseMatter({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { profile } = useAuth();
+  if (!open) return null;
+  const close = () => onOpenChange(false);
+  const items: { title: string; why: string }[] = [
+    { title: PRIVACY_TITLES.location, why: LOCATION_EXPLAINED.whyItMatters },
+    ...(Platform.OS === 'web'
+      ? [{ title: PRIVACY_TITLES.leaveNow, why: LEAVE_NOW_EXPLAINED.whyItMatters }]
+      : []),
+    ...(profile
+      ? [
+          { title: PRIVACY_TITLES.names, why: namesExplained(profile.display_name).whyItMatters },
+          { title: PRIVACY_TITLES.dates, why: DATES_EXPLAINED.whyItMatters },
+        ]
+      : []),
+  ];
+
+  return (
+    <BottomSheet
+      name="oau-why"
+      onClose={close}
+      accessibilityLabel={T.whyTheseMatter}
+      partial={0.66}
+      header={
+        <View className="flex-row items-center gap-3 px-5 pb-3 pt-1">
+          <Text oauStyle="title" role="heading" className="flex-1 text-foreground">
+            {T.whyTheseMatter}
+          </Text>
+          <IconSticker icon={X} label="Close" onPress={close} />
+        </View>
+      }>
+      <ScrollView className="flex-1" contentContainerClassName="gap-5 px-5 pb-6 pt-1">
+        {items.map((item) => (
+          <View key={item.title} className="gap-1">
+            <Text oauStyle="heading" className="text-foreground">
+              {item.title}
+            </Text>
+            <Text oauStyle="body" className="text-foreground">
+              {item.why}
+            </Text>
+          </View>
+        ))}
+      </ScrollView>
+      <View className="border-t border-border bg-band px-5 pb-6 pt-3.5">
+        <Button size="lg" variant="secondary" onPress={close}>
+          <Text>{T.done}</Text>
+        </Button>
+      </View>
+    </BottomSheet>
+  );
+}
+
+/** Appearance as a sheet of the four previews (section 14.11). */
+function AppearanceSheet({ onClose }: { onClose: () => void }) {
+  return (
+    <BottomSheet
+      name="oau-appearance"
+      onClose={onClose}
+      accessibilityLabel={T.appearance}
+      partial={0.62}
+      header={
+        <View className="flex-row items-center gap-3 px-5 pb-3 pt-1">
+          <Text oauStyle="title" role="heading" className="flex-1 text-foreground">
+            {T.appearance}
+          </Text>
+          <IconSticker icon={X} label="Close" onPress={onClose} />
+        </View>
+      }>
+      <ScrollView className="flex-1" contentContainerClassName="gap-4 px-5 pb-8 pt-1">
+        <AppearanceCards />
+      </ScrollView>
+    </BottomSheet>
   );
 }
 
@@ -275,7 +405,6 @@ function AppearanceCards() {
   const { skin } = useSkinChoice();
   return (
     <View className="gap-3">
-      <OauHeading title={T.look} line={T.lookLine} />
       <View role="radiogroup" aria-label="Appearance" className="flex-row flex-wrap gap-3">
         {SKINS.map((option) => {
           const chosen = option.id === skin;
@@ -311,6 +440,9 @@ function AppearanceCards() {
           );
         })}
       </View>
+      <Text oauStyle="caption" className="text-muted-foreground">
+        {T.lookLine}
+      </Text>
     </View>
   );
 }
@@ -354,14 +486,12 @@ function ReviewRow({
             {review.venue.name}
           </Text>
           {review.status === 'held' || review.status === 'rejected' ? (
-            <View
-              className={cn(
-                'rounded-full px-2 py-0.5',
-                review.status === 'held' ? 'bg-muted' : 'bg-caution'
-              )}>
-              <Text
-                oauStyle="micro"
-                className={review.status === 'held' ? 'text-muted-foreground' : 'text-caution-foreground'}>
+            <View className="flex-row items-center gap-1 rounded-full bg-caution px-2 py-0.5">
+              <Icon
+                as={review.status === 'held' ? Clock : TriangleAlert}
+                className="size-3 text-caution-foreground"
+              />
+              <Text oauStyle="micro" className="text-caution-foreground">
                 {STATUS_TEXT[review.status].label}
               </Text>
             </View>

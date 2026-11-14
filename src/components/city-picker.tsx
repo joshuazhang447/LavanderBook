@@ -1,8 +1,10 @@
-import { MapPin, Search } from 'lucide-react-native';
+import { MapPin, Search, X } from 'lucide-react-native';
 import * as React from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 
 import { DIALOG_WIDTH, useDialogMaxHeight } from '@/components/info-dialog';
+import { IconSticker, OauCard, OauRow } from '@/components/oau/card';
+import { BottomSheet } from '@/components/ui/bottom-sheet';
 import {
   Dialog,
   DialogContent,
@@ -13,8 +15,10 @@ import {
 import { Icon } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
+import { PlaceSearchField } from '@/components/venue-list';
 import { countryName } from '@/lib/general-area';
 import { chooseCity, chooseGeneralArea, useMapLocation, type SavedCity } from '@/lib/map-location';
+import { useSkin } from '@/lib/skin';
 import { cn } from '@/lib/utils';
 
 /** Enough to scan, few enough that every keystroke is instant. */
@@ -92,9 +96,8 @@ type CityPickerProps = {
  * Offers the general area at the top too, so somebody who picked a city can
  * get back to it without knowing where else to look.
  */
-export function CityPicker({ open, onOpenChange, onChosen }: CityPickerProps) {
-  const maxHeight = useDialogMaxHeight();
-  const { height } = useWindowDimensions();
+/** The picker's state and choices, shared by every skin's look of it. */
+function useCityPicker({ open, onOpenChange, onChosen }: CityPickerProps) {
   const { area } = useMapLocation();
   const [cities, setCities] = React.useState<City[] | null>(null);
   const [query, setQuery] = React.useState('');
@@ -119,6 +122,122 @@ export function CityPicker({ open, onOpenChange, onChosen }: CityPickerProps) {
     onOpenChange(false);
     onChosen?.();
   }
+
+  function pickCity(city: City) {
+    void pick(() =>
+      chooseCity({
+        name: city.name,
+        region: city.region,
+        country: city.country,
+        latitude: city.latitude,
+        longitude: city.longitude,
+      })
+    );
+  }
+
+  return { area, cities, query, setQuery, results, pick, pickCity };
+}
+
+export function CityPicker(props: CityPickerProps) {
+  const { skin } = useSkin();
+  // OAU's is a full sheet (oau-style-guide.md, section 14.13); the others keep the window.
+  if (skin === 'oau') return props.open ? <OauCityPicker {...props} /> : null;
+  return <WindowCityPicker {...props} />;
+}
+
+/**
+ * OAU's city picker: a tall paper sheet - the search field, the general area
+ * under "Suggested", the cities as rows on a card - with the GeoNames credit
+ * at its foot, which the licence asks for.
+ */
+function OauCityPicker(props: CityPickerProps) {
+  const { area, cities, query, setQuery, results, pick, pickCity } = useCityPicker(props);
+  const close = () => props.onOpenChange(false);
+
+  return (
+    <BottomSheet
+      name="oau-city-picker"
+      onClose={close}
+      accessibilityLabel="Choose a city"
+      partial={0.88}
+      keyboardAvoiding
+      header={
+        <View className="gap-3 px-5 pb-3 pt-1">
+          <View className="flex-row items-center gap-3">
+            <Text oauStyle="title" role="heading" className="flex-1 text-foreground">
+              Choose a city
+            </Text>
+            <IconSticker icon={X} label="Close" onPress={close} />
+          </View>
+          <Text oauStyle="callout" className="text-muted-foreground">
+            The map opens here. Your choice stays on this phone.
+          </Text>
+          <PlaceSearchField
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search cities"
+            accessibilityLabel="Search cities"
+          />
+        </View>
+      }>
+      <ScrollView
+        className="flex-1"
+        keyboardShouldPersistTaps="handled"
+        contentContainerClassName="gap-3 px-5 pb-8 pt-1">
+        {area && !query.trim() ? (
+          <View className="gap-2">
+            <Text oauStyle="overline" className="px-1 text-muted-foreground">
+              Suggested
+            </Text>
+            <OauCard>
+              <OauRow
+                first
+                icon={MapPin}
+                iconCircle="bg-positive"
+                iconGlyph="text-positive-foreground"
+                title={area.label}
+                detail="From your phone's settings"
+                onPress={() => void pick(chooseGeneralArea)}
+              />
+            </OauCard>
+          </View>
+        ) : null}
+        {cities === null ? (
+          <View className="py-6">
+            <ActivityIndicator />
+          </View>
+        ) : results.length === 0 ? (
+          <Text oauStyle="callout" className="py-6 text-center text-muted-foreground">
+            No city by that name. Try a bigger city nearby.
+          </Text>
+        ) : (
+          <OauCard>
+            {results.map((city, index) => (
+              <OauRow
+                key={`${city.name}|${city.region}|${city.country}|${city.latitude}`}
+                first={index === 0}
+                title={city.name}
+                detail={city.region ? `${city.region}, ${countryName(city.country)}` : countryName(city.country)}
+                onPress={() => pickCity(city)}
+              />
+            ))}
+          </OauCard>
+        )}
+        {/* CC BY 4.0 asks for credit where the data is used. See
+            src/data/geonames/CREDITS.md. */}
+        <Text oauStyle="caption" className="text-center text-muted-foreground">
+          City list © GeoNames (geonames.org), CC BY 4.0
+        </Text>
+      </ScrollView>
+    </BottomSheet>
+  );
+}
+
+function WindowCityPicker(props: CityPickerProps) {
+  const { open, onOpenChange } = props;
+  const maxHeight = useDialogMaxHeight();
+  const { height } = useWindowDimensions();
+  const { area, cities, query, setQuery, results, pick, pickCity } = useCityPicker(props);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -171,17 +290,7 @@ export function CityPicker({ open, onOpenChange, onChosen }: CityPickerProps) {
                 key={`${city.name}|${city.region}|${city.country}|${city.latitude}`}
                 title={city.name}
                 detail={city.region ? `${city.region}, ${countryName(city.country)}` : countryName(city.country)}
-                onPress={() =>
-                  void pick(() =>
-                    chooseCity({
-                      name: city.name,
-                      region: city.region,
-                      country: city.country,
-                      latitude: city.latitude,
-                      longitude: city.longitude,
-                    })
-                  )
-                }
+                onPress={() => pickCity(city)}
               />
             ))
           )}

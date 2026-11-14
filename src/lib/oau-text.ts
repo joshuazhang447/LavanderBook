@@ -14,6 +14,9 @@ export const OAU_ACCOUNT_TEXT = {
   /** Under "Your privacy": the switches open their explanations. */
   privacyLine: 'Tap a setting to read what it does and what it cannot hide.',
   look: 'Look',
+  appearance: 'Appearance',
+  whyTheseMatter: 'Why these matter',
+  done: 'Done',
   lookLine: 'How buttons, switches and the tab bar look on this device.',
   reviews: 'Your reviews',
   noReviews: 'No reviews yet',

@@ -13,6 +13,14 @@
  * control is how people get hurt by one.
  */
 
+/** The four settings' names, as their switches say them (privacy-settings.tsx). */
+export const PRIVACY_TITLES = {
+  location: 'Use my location',
+  leaveNow: 'Leave now button',
+  names: 'Per-place names',
+  dates: 'Hide exact dates',
+} as const;
+
 export type Explained = {
   lead: string;
   whyItMatters: string;

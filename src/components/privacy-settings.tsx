@@ -3,16 +3,19 @@ import {
   DoorOpen,
   Info,
   LocateFixed,
+  X,
   TriangleAlert,
   VenetianMask,
   type LucideIcon,
 } from 'lucide-react-native';
 import * as React from 'react';
-import { Platform, Pressable, View, type ViewStyle } from 'react-native';
+import { Platform, Pressable, ScrollView, View, type ViewStyle } from 'react-native';
 
 import { CityPicker } from '@/components/city-picker';
 import { BUTTON_LABEL, InfoDialog, InfoPoint } from '@/components/info-dialog';
 import { LocationBlockedNotice } from '@/components/location-choice';
+import { IconSticker, OauCard } from '@/components/oau/card';
+import { CautionPaper } from '@/components/oau/caution';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,6 +26,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { BottomSheet } from '@/components/ui/bottom-sheet';
+import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Switch } from '@/components/ui/switch';
 import { Text } from '@/components/ui/text';
@@ -103,6 +108,84 @@ function Explanation({ open, onOpenChange, icon, title, explained }: Explanation
       </InfoPoint>
       <InfoPoint title={EXPLANATION_HEADINGS.sentence.ifTurnedOff}>{explained.ifTurnedOff}</InfoPoint>
     </InfoDialog>
+  );
+}
+
+/**
+ * OAU's explanation (LavenderBookStyle/oau-style-guide.md, section 14.10): a
+ * sheet rather than a centred window, with the setting's own switch repeated
+ * at the top so it can be changed while reading; the same four headings and
+ * words as every skin, the last on caution paper while the setting is off on
+ * its less private side; Done in the dock.
+ */
+export function OauExplanation({
+  open,
+  onOpenChange,
+  title,
+  explained,
+  control,
+  warned,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: string;
+  explained: Explained;
+  /** The setting's own row, switch and all; none in a sheet of several. */
+  control?: React.ReactNode;
+  /** Off, on its less private side: "If turned off" goes on caution paper. */
+  warned?: boolean;
+}) {
+  if (!open) return null;
+  const close = () => onOpenChange(false);
+  const point = (heading: string, body: string) => (
+    <View className="gap-1">
+      <Text oauStyle="heading" className="text-foreground">
+        {heading}
+      </Text>
+      <Text oauStyle="body" className="text-foreground">
+        {body}
+      </Text>
+    </View>
+  );
+
+  return (
+    <BottomSheet
+      name="oau-explanation"
+      onClose={close}
+      accessibilityLabel={title}
+      partial={0.66}
+      header={
+        <View className="flex-row items-center gap-3 px-5 pb-3 pt-1">
+          <Text oauStyle="title" role="heading" className="flex-1 text-foreground">
+            {title}
+          </Text>
+          <IconSticker icon={X} label="Close" onPress={close} />
+        </View>
+      }>
+      <ScrollView className="flex-1" contentContainerClassName="gap-5 px-5 pb-6 pt-1">
+        {control}
+        <Text oauStyle="body" className="text-muted-foreground">
+          {explained.lead}
+        </Text>
+        {point(EXPLANATION_HEADINGS.sentence.whyItMatters, explained.whyItMatters)}
+        {point(EXPLANATION_HEADINGS.sentence.whatItDoes, explained.whatItDoes)}
+        {point(EXPLANATION_HEADINGS.sentence.whatItCantHide, explained.whatItCantHide)}
+        {warned ? (
+          <CautionPaper title={EXPLANATION_HEADINGS.sentence.ifTurnedOff}>
+            <Text oauStyle="body" className="text-foreground">
+              {explained.ifTurnedOff}
+            </Text>
+          </CautionPaper>
+        ) : (
+          point(EXPLANATION_HEADINGS.sentence.ifTurnedOff, explained.ifTurnedOff)
+        )}
+      </ScrollView>
+      <View className="border-t border-border bg-band px-5 pb-6 pt-3.5">
+        <Button size="lg" variant="secondary" onPress={close}>
+          <Text>Done</Text>
+        </Button>
+      </View>
+    </BottomSheet>
   );
 }
 
@@ -301,13 +384,45 @@ function PrivacyToggle({
         </View>
       </View>
 
-      <Explanation
-        open={explaining}
-        onOpenChange={setExplaining}
-        icon={icon}
-        title={title}
-        explained={explained}
-      />
+      {oau ? (
+        <OauExplanation
+          open={explaining}
+          onOpenChange={setExplaining}
+          title={title}
+          explained={explained}
+          warned={warned}
+          control={
+            <OauCard className="flex-row items-center gap-3 px-4 py-3.5">
+              <View className="flex-1 gap-0.5">
+                <Text oauStyle="subheading" className="text-foreground">
+                  {title}
+                </Text>
+                <Text
+                  oauStyle="callout"
+                  className={warned ? 'text-destructive' : 'text-muted-foreground'}>
+                  {warned ? offWarning : summary}
+                </Text>
+              </View>
+              <Switch
+                checked={enabled}
+                disabled={busy}
+                accessibilityLabel={title}
+                onCheckedChange={(next) =>
+                  next || !confirmOff ? void apply(next) : setConfirmingOff(true)
+                }
+              />
+            </OauCard>
+          }
+        />
+      ) : (
+        <Explanation
+          open={explaining}
+          onOpenChange={setExplaining}
+          icon={icon}
+          title={title}
+          explained={explained}
+        />
+      )}
 
       {confirmOff ? (
         <AlertDialog open={confirmingOff} onOpenChange={setConfirmingOff}>
