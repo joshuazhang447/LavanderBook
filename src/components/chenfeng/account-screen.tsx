@@ -34,6 +34,7 @@ import { Text } from '@/components/ui/text';
 import { useAuth } from '@/lib/auth';
 import { lightImpact } from '@/lib/haptics';
 import { focusMapOn } from '@/lib/map-focus';
+import { PAGING_TEXT, REVIEWS_PAGE, usePaging } from '@/lib/paging';
 import { useMapLocation } from '@/lib/map-location';
 import {
   accountNameNote,
@@ -315,6 +316,9 @@ function ReviewsSection() {
   const { reviews, refetch } = useMyReviews();
   const [open, setOpen] = React.useState<MyReview | null>(null);
   const [menu, setMenu] = React.useState<{ review: MyReview; anchor: MenuAnchor } | null>(null);
+  // A page at a time, with "Show 20 More" as the section's last row: a
+  // hundred reviews would bury everything under them.
+  const page = usePaging(reviews, REVIEWS_PAGE);
   const [error, setError] = React.useState<string | null>(null);
 
   function showOnMap(review: MyReview) {
@@ -345,7 +349,7 @@ function ReviewsSection() {
     refetch();
   }
 
-  if (reviews === null) {
+  if (reviews === null || page.shown === null) {
     return (
       <Section header="Reviews">
         <View className="items-center py-6">
@@ -374,9 +378,12 @@ function ReviewsSection() {
       <Section
         header="Reviews"
         headerTrailing={String(reviews.length)}
-        footer={error ?? undefined}
-        footerTone="destructive">
-        {reviews.map((review) => {
+        footer={
+          error ??
+          (page.remaining > 0 ? PAGING_TEXT.showing(page.shown.length, page.total) : undefined)
+        }
+        footerTone={error ? 'destructive' : 'default'}>
+        {page.shown.map((review) => {
           const located = review.venue.lat !== null && review.venue.lng !== null;
           return (
             <SwipeRow
@@ -402,6 +409,14 @@ function ReviewsSection() {
             </SwipeRow>
           );
         })}
+        {page.remaining > 0 ? (
+          <Row
+            key="show-more"
+            title={PAGING_TEXT.moreTitle(page.next)}
+            tone="tint"
+            onPress={page.showMore}
+          />
+        ) : null}
       </Section>
 
       <Menu

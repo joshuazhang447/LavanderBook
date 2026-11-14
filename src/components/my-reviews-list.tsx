@@ -11,13 +11,15 @@ import {
 } from 'lucide-react-native';
 import * as React from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
+import Animated, { FadeIn, LinearTransition } from 'react-native-reanimated';
 
 import { ReviewSheet } from '@/components/review-sheet';
 import { StarRating } from '@/components/star-rating';
+import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { focusMapOn } from '@/lib/map-focus';
+import { PAGING_TEXT, REVIEWS_PAGE, usePaging } from '@/lib/paging';
 import {
   moderationStatus,
   rejectedLine,
@@ -131,8 +133,11 @@ export function MyReviewsList({ changes = 0 }: MyReviewsListProps) {
   const { switchTab } = useTabTrigger({ name: 'map' });
   const { reviews, refetch } = useMyReviews(changes);
   const [open, setOpen] = React.useState<MyReview | null>(null);
+  // A page at a time: a hundred rows would push everything under them out of
+  // reach, and render all at once.
+  const page = usePaging(reviews, REVIEWS_PAGE);
 
-  if (reviews === null) {
+  if (reviews === null || page.shown === null) {
     return (
       <View className="items-center py-8">
         <ActivityIndicator />
@@ -159,14 +164,14 @@ export function MyReviewsList({ changes = 0 }: MyReviewsListProps) {
           // Rows settle into place when one is deleted instead of jumping.
           layout={LinearTransition.duration(220)}
           className="overflow-hidden rounded-lg border border-border">
-          {reviews.map((review, index) => (
+          {page.shown.map((review, index) => (
             // The row and Locate are siblings, not nested pressables:
             // react-native-web renders each as a <button>, and a button inside a
-            // button is invalid HTML that breaks hydration.
+            // button is invalid HTML that breaks hydration. No staggered
+            // entrance: with each row a little later than the last, the
+            // hundredth arrived seconds after the first.
             <Animated.View
               key={review.venue.id}
-              // Staggered so the list arrives as a sequence, not a slab.
-              entering={FadeInDown.duration(220).delay(index * 45)}
               layout={LinearTransition.duration(220)}
               className={`flex-row items-center bg-card ${
                 index > 0 ? 'border-t border-border' : ''
@@ -250,6 +255,17 @@ export function MyReviewsList({ changes = 0 }: MyReviewsListProps) {
           ))}
         </Animated.View>
       )}
+
+      {page.remaining > 0 ? (
+        <View className="items-center gap-1.5">
+          <Button variant="outline" onPress={page.showMore}>
+            <Text>{PAGING_TEXT.more(page.next)}</Text>
+          </Button>
+          <Text className="text-xs text-muted-foreground">
+            {PAGING_TEXT.showing(page.shown.length, page.total)}
+          </Text>
+        </View>
+      ) : null}
 
       {open ? (
         <ReviewSheet
