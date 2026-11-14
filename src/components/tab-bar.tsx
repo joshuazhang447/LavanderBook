@@ -277,9 +277,19 @@ function OauTopTab({
   );
 }
 
+/**
+ * OAU's header row needs about 825 points with the app's name and 925 with the
+ * credit's words as well, and the website's "Leave now" holds its end:
+ * narrower than that, the name and then the words wait, rather than push the
+ * row under the way out.
+ */
+const OAU_NAME_FROM = 860;
+const OAU_CREDIT_WORDS_FROM = 960;
+
 /** Wide screens: the book and its name in Halant, OAU's credit, then the tabs. */
 function OauTopBar({ trailing }: { trailing?: ReactNode }) {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
 
   return (
     <View
@@ -293,11 +303,13 @@ function OauTopBar({ trailing }: { trailing?: ReactNode }) {
         <View className="flex-row items-center gap-3">
           <View className="flex-row items-center gap-2">
             <LogoImage logo={BOOK_MARK} />
-            <Text oauStyle="heading" className="text-foreground">
-              LavenderBook
-            </Text>
+            {width >= OAU_NAME_FROM ? (
+              <Text oauStyle="heading" className="text-foreground">
+                LavenderBook
+              </Text>
+            ) : null}
           </View>
-          <OauHeaderCredit />
+          <OauHeaderCredit wordsFrom={OAU_CREDIT_WORDS_FROM} />
         </View>
         <View className="flex-row items-center gap-1">
           {TABS.map((tab) => (

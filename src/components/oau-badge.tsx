@@ -59,10 +59,11 @@ export function OauBadge({ className }: { className?: string }) {
  * as LavenderBook's own logo.
  *
  * The header starts at 768 wide, where the words would run into the tabs: until
- * there is room, the leaves alone, still read out in full.
+ * there is room, the leaves alone, still read out in full. OAU's header holds
+ * more (its tabs carry their names), so it asks for the words later.
  */
-export function OauHeaderCredit() {
-  const roomy = useWindowDimensions().width >= 900;
+export function OauHeaderCredit({ wordsFrom = 900 }: { wordsFrom?: number }) {
+  const roomy = useWindowDimensions().width >= wordsFrom;
   return (
     <View className="flex-row items-center gap-3">
       <View className="h-5 w-px bg-border" />
