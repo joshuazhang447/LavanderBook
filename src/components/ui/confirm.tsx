@@ -19,6 +19,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { OauToastHost } from '@/components/oau/toast';
 import { useIsWideViewport } from '@/components/tab-bar';
 import { useElevatedSurface } from '@/components/skin-provider';
 import { Button } from '@/components/ui/button';
@@ -149,7 +150,9 @@ export function ConfirmHost() {
     () => null
   );
   const { skin } = useSkin();
-  if (!request) return null;
+  // OAU's toasts appear from here too, so the root layout needs no host of its own.
+  const toasts = skin === 'oau' ? <OauToastHost /> : null;
+  if (!request) return toasts;
 
   const answer = (index: number | null) => {
     show(null);
@@ -157,6 +160,8 @@ export function ConfirmHost() {
   };
 
   return (
+    <>
+    {toasts}
     <Portal name="chenfeng-confirm">
       {skin === 'oau' ? (
         <OauConfirm request={request} onAnswer={answer} />
@@ -166,6 +171,7 @@ export function ConfirmHost() {
         <DrawnActionSheet request={request} onAnswer={answer} />
       )}
     </Portal>
+    </>
   );
 }
 

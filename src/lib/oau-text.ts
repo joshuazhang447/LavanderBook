@@ -51,6 +51,13 @@ export const OAU_REVIEW_TEXT = {
   delete: 'Delete review',
   deleteMessage: "This review will be removed from LavenderBook. This can't be undone.",
   failed: (existing: boolean) => (existing ? "Couldn't save the review" : "Couldn't post the review"),
+  discardTitle: 'Discard your review?',
+  discard: 'Discard',
+  keepEditing: 'Keep editing',
+  posted: 'Review posted',
+  saved: 'Review saved',
+  deleted: 'Review deleted',
+  thanks: 'Thank you for looking out for others.',
   signIn: 'Sign in to write a review',
 } as const;
 

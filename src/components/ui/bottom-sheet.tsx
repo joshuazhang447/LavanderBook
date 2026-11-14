@@ -48,6 +48,12 @@ type BottomSheetProps = {
   children: React.ReactNode;
   /** Lift the sheet over the keyboard (a form). */
   keyboardAvoiding?: boolean;
+  /**
+   * Asked before any way of closing it - a drag, the dim, back, Escape - goes
+   * through; resolving false keeps the sheet open (a form with changes). Its
+   * own close button should ask the same.
+   */
+  confirmClose?: () => Promise<boolean>;
 };
 
 /**
@@ -76,6 +82,7 @@ export function BottomSheet({
   header,
   children,
   keyboardAvoiding,
+  confirmClose,
 }: BottomSheetProps) {
   const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -118,6 +125,19 @@ export function BottomSheet({
     [atFull, fullHeight, partialHeight, height, noBounce]
   );
 
+  // Every way out goes through here, so a form can ask first.
+  const attemptClose = React.useCallback(() => {
+    if (!confirmClose) {
+      onClose();
+      return;
+    }
+    void confirmClose().then((ok) => {
+      if (ok) onClose();
+      // Kept: back to where it was, from wherever a drag left it.
+      else goTo(atFull.get());
+    });
+  }, [confirmClose, onClose, goTo, atFull]);
+
   // The window changed size (rotation, the browser): stay at the same height.
   React.useEffect(() => {
     height.set(atFull.get() ? fullHeight : partialHeight);
@@ -128,19 +148,19 @@ export function BottomSheet({
   React.useEffect(() => {
     if (Platform.OS === 'android') {
       const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-        onClose();
+        attemptClose();
         return true;
       });
       return () => subscription.remove();
     }
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       const onKey = (event: KeyboardEvent) => {
-        if (event.key === 'Escape') onClose();
+        if (event.key === 'Escape') attemptClose();
       };
       window.addEventListener('keydown', onKey);
       return () => window.removeEventListener('keydown', onKey);
     }
-  }, [onClose]);
+  }, [attemptClose]);
 
   const drag = Gesture.Pan()
     .activeOffsetY([-6, 6])
@@ -159,7 +179,7 @@ export function BottomSheet({
       if (projected < partialHeight * 0.55 || (event.velocityY > 1300 && now < partialHeight + 24)) {
         height.set(
           withTiming(0, { duration: 180 }, (done) => {
-            if (done) runOnJS(onClose)();
+            if (done) runOnJS(attemptClose)();
           })
         );
         return;
@@ -254,7 +274,7 @@ export function BottomSheet({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Close"
-            onPress={onClose}
+            onPress={attemptClose}
             className={cn(
               'flex-1',
               material ? 'bg-black/[0.32]' : oau ? 'bg-[rgba(69,49,30,0.28)]' : 'bg-black/50'

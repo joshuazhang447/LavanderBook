@@ -6,6 +6,7 @@ import { InfoBullets, InfoDialog, InfoPoint } from '@/components/info-dialog';
 import { CautionPaper } from '@/components/oau/caution';
 import { IconSticker, OauCard } from '@/components/oau/card';
 import { OauSegments } from '@/components/oau/segments';
+import { showToast } from '@/components/oau/toast';
 import { QuestionField } from '@/components/question-field';
 import type { ReviewSheetProps } from '@/components/review-sheet';
 import { StarRating, STAR_HINT } from '@/components/star-rating';
@@ -140,30 +141,74 @@ function TagQuestions({
  */
 export function OauReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: ReviewSheetProps) {
   const { session, signInWithGoogle } = useAuth();
-  const form = useReviewForm({ poi, venueId: knownVenueId, onSaved });
+  // What the last press asked for, so the toast says what happened.
+  const pressed = React.useRef<'post' | 'save' | 'delete'>('post');
+  const form = useReviewForm({
+    poi,
+    venueId: knownVenueId,
+    onSaved: () => {
+      showToast(
+        pressed.current === 'delete'
+          ? { title: T.deleted }
+          : pressed.current === 'save'
+            ? { title: T.saved }
+            : { title: T.posted, line: T.thanks }
+      );
+      onSaved();
+    },
+  });
   const [explainingBody, setExplainingBody] = React.useState(false);
   const scrollRef = React.useRef<ScrollView>(null);
   const held = form.outcome === 'held';
   const ready = !!session && !form.loading && !held;
+
+  // What the form held once loaded, to tell whether closing loses anything.
+  const current = JSON.stringify([form.stars, form.bathroom, form.body, form.answers]);
+  const [initial, setInitial] = React.useState<string | null>(null);
+  if (ready && initial === null) setInitial(current);
+  const hasChanges = initial !== null && initial !== current;
+
+  // Closing with changes asks first; after a held post there is nothing to lose.
+  const confirmClose =
+    hasChanges && !held
+      ? () =>
+          confirmActionSheet({
+            title: T.discardTitle,
+            actions: [{ label: T.discard, style: 'destructive' }],
+            cancelLabel: T.keepEditing,
+          }).then((choice) => choice === 0)
+      : undefined;
+  const requestClose = () => {
+    if (!confirmClose) onClose();
+    else void confirmClose().then((ok) => ok && onClose());
+  };
 
   async function confirmDelete() {
     const choice = await confirmActionSheet({
       message: T.deleteMessage,
       actions: [{ label: T.delete, style: 'destructive' }],
     });
-    if (choice === 0) await form.remove();
+    if (choice !== 0) return;
+    pressed.current = 'delete';
+    await form.remove();
+  }
+
+  function post() {
+    pressed.current = form.isExisting ? 'save' : 'post';
+    void form.submit();
   }
 
   return (
     <BottomSheet
       name="review-sheet"
       onClose={onClose}
+      confirmClose={confirmClose}
       accessibilityLabel={form.isExisting ? `Your review of ${poi.name}` : `New review of ${poi.name}`}
       partial={0.88}
       keyboardAvoiding
       header={
         <View className="flex-row items-center gap-3 px-5 pb-3 pt-1">
-          <IconSticker icon={X} label="Close" onPress={onClose} />
+          <IconSticker icon={X} label="Close" onPress={requestClose} />
           <View className="flex-1 items-center gap-0.5 pr-8">
             <Text oauStyle="caption" numberOfLines={1} className="text-muted-foreground">
               {poi.name}
@@ -273,15 +318,24 @@ export function OauReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }:
                   </Text>
                 </Pressable>
               </CautionPaper>
-              <Textarea
-                value={form.body}
-                onChangeText={form.setBody}
-                onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })}
-                maxLength={MAX_BODY}
-                placeholder={T.bodyPlaceholder}
-                numberOfLines={5}
-                className="min-h-32 rounded-[12px] border-[1.5px] border-input bg-card text-oau-body"
-              />
+              {/* Lined paper: faint rules every 26 points, the text's own line
+                  height, so the words sit on them. */}
+              <View className="overflow-hidden rounded-[12px] border-[1.5px] border-input bg-card">
+                <View pointerEvents="none" className="absolute bottom-0 left-3.5 right-3.5 top-1.5">
+                  {Array.from({ length: 12 }, (_, line) => (
+                    <View key={line} className="h-[26px] border-b border-border" />
+                  ))}
+                </View>
+                <Textarea
+                  value={form.body}
+                  onChangeText={form.setBody}
+                  onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })}
+                  maxLength={MAX_BODY}
+                  placeholder={T.bodyPlaceholder}
+                  numberOfLines={6}
+                  className="min-h-[164px] rounded-none border-0 bg-transparent px-3.5 pb-2 pt-2 text-oau-body leading-[26px] shadow-none"
+                />
+              </View>
               <Text
                 oauStyle="caption"
                 className={cn('self-end', form.tooLong ? 'text-destructive' : 'text-muted-foreground')}
@@ -344,7 +398,7 @@ export function OauReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }:
               {form.blockingHint}
             </Text>
           ) : null}
-          <Button size="lg" disabled={!form.canSubmit} onPress={form.submit}>
+          <Button size="lg" disabled={!form.canSubmit} onPress={post}>
             {form.busy ? <ActivityIndicator size="small" /> : null}
             <Text>{form.busy ? T.saving : form.isExisting ? T.save : T.post}</Text>
           </Button>
