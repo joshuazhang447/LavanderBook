@@ -11,6 +11,7 @@ import * as React from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 
 import { AnswerSummaryCard } from '@/components/answer-summary';
+import { AboutPill, aboutPillLabel } from '@/components/about-pill';
 import { ChenfengReportSheet } from '@/components/chenfeng/report-sheet';
 import { CONTACT_ICONS, contactSpoken } from '@/components/contact-list';
 import { openDirections } from '@/components/directions-button';
@@ -304,30 +305,27 @@ function PlaceCard({
               ({bathroom.tally})
             </Text>
           ) : null}
-          {/* Two lines of what the place is, cut with an ellipsis, and "More"
-              in the tint: the whole of it opens in a sheet of its own. */}
-          {description ? (
+          {/* Two lines of what the place is, cut with an ellipsis, and the
+              way in to the rest and to how to reach them: one pressable, the
+              pill showing what is behind it. The whole of it opens in a sheet
+              of its own. A place with contacts and no description gets the
+              pill alone. */}
+          {description || contacts.length > 0 ? (
             <Pressable
               onPress={onAbout}
               accessibilityRole="button"
-              accessibilityLabel={`${description} ${ABOUT_TEXT.moreSpoken}`}
-              className="active:opacity-60">
-              <Text textStyle="subheadline" numberOfLines={2} className="text-foreground">
-                {description}
-              </Text>
-              <Text textStyle="subheadline" emphasized className="text-primary">
-                {ABOUT_TEXT.moreTitle}
-              </Text>
-            </Pressable>
-          ) : contacts.length > 0 ? (
-            // No description, but a way to reach them: the way in alone.
-            <Pressable
-              onPress={onAbout}
-              accessibilityRole="button"
-              className="self-start active:opacity-60">
-              <Text textStyle="subheadline" emphasized className="text-primary">
-                {ABOUT_TEXT.contactOnlyTitle}
-              </Text>
+              accessibilityLabel={
+                description
+                  ? `${description} ${ABOUT_TEXT.moreSpoken}`
+                  : aboutPillLabel(contacts, false, false)
+              }
+              className="gap-2 active:opacity-60">
+              {description ? (
+                <Text textStyle="subheadline" numberOfLines={2} className="text-foreground">
+                  {description}
+                </Text>
+              ) : null}
+              <AboutPill contacts={contacts} hasDescription={!!description} />
             </Pressable>
           ) : null}
         </View>
