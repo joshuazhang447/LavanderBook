@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth';
 import type { Database, Json } from '@/lib/database.types';
 import { moderationStatus, type ModerationStatus } from '@/lib/moderation-text';
 import { supabase } from '@/lib/supabase';
+import { isContactKind, type ContactKind, type VenueContact } from '@/lib/venue-contacts';
 
 /**
  * The admin panel's data layer.
@@ -901,6 +902,82 @@ export async function updateVenue(
     p_id: id,
     p_name: draft.name.trim(),
     p_description: draft.description.trim(),
+  });
+  if (error) throw new Error(describe(error));
+}
+
+/** A contact as the panel edits it: no id, since a save replaces the list. */
+export type ContactDraft = { kind: ContactKind; value: string; label: string };
+
+/** The server's limit (admin_set_venue_contacts). */
+export const VENUE_CONTACTS_MAX = 12;
+export const CONTACT_LABEL_MAX = 40;
+
+/**
+ * A place's contacts, in order - read from the table, which is public, so the
+ * panel sees exactly what readers see. `null` from a server without the table
+ * (before 20261114100000), so the editor can say so rather than offer a form
+ * whose save would fail.
+ */
+export async function listVenueContacts(venueId: string): Promise<VenueContact[] | null> {
+  const { data, error } = await supabase
+    .from('venue_contacts')
+    .select('id, kind, value, label')
+    .eq('venue_id', venueId)
+    .order('sort_order', { ascending: true });
+  if (error) {
+    // Missing table: PostgREST's schema-cache miss, or Postgres's own.
+    if (error.code === 'PGRST205' || error.code === '42P01') return null;
+    throw new Error(describe(error));
+  }
+  return (data ?? []).flatMap((row) =>
+    isContactKind(row.kind)
+      ? [{ id: row.id, kind: row.kind, value: row.value, label: row.label }]
+      : []
+  );
+}
+
+/**
+ * What is wrong with a contact, in words for the form, or null. The same rules
+ * as the table's constraints, checked first so a typo is pointed at in its row
+ * rather than failing the whole save with Postgres's wording.
+ */
+export function contactProblem(draft: ContactDraft): string | null {
+  const value = draft.value.trim();
+  const label = draft.label.trim();
+  if (value.length === 0) return 'Fill this in, or remove the row.';
+  if (label.length > CONTACT_LABEL_MAX) return `A label takes at most ${CONTACT_LABEL_MAX} characters.`;
+  if (draft.kind === 'link' && label.length === 0) return 'Say what the link is, in the label.';
+  switch (draft.kind) {
+    case 'website':
+    case 'link': {
+      const url = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+      return /^https?:\/\/\S+\.\S+$/i.test(url) && url.length <= 300
+        ? null
+        : 'That does not look like a web address.';
+    }
+    case 'email':
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+        ? null
+        : 'That does not look like an email address.';
+    default: {
+      const digits = value.replace(/[^0-9]/g, '').length;
+      return /^\+?[0-9 ().-]+$/.test(value) && digits >= 10 && digits <= 11
+        ? null
+        : 'A phone number of 10 or 11 digits, like 613-555-0100.';
+    }
+  }
+}
+
+/** Replace a place's contacts with `drafts`, in that order. An empty list clears them. */
+export async function setVenueContacts(venueId: string, drafts: ContactDraft[]): Promise<void> {
+  const { error } = await supabase.rpc('admin_set_venue_contacts', {
+    p_venue_id: venueId,
+    p_contacts: drafts.map((draft) => ({
+      kind: draft.kind,
+      value: draft.value.trim(),
+      label: draft.label.trim() || null,
+    })),
   });
   if (error) throw new Error(describe(error));
 }
