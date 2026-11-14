@@ -10,6 +10,8 @@ import {
   View,
 } from 'react-native';
 import Animated, {
+  FadeIn,
+  SlideInDown,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -19,10 +21,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useIsWideViewport } from '@/components/tab-bar';
 import { useElevatedSurface } from '@/components/skin-provider';
+import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
 import { useDisplaySettings } from '@/lib/accessibility';
 import { spring } from '@/lib/motion';
 import { CONTINUOUS } from '@/lib/shape';
+import { useSkin } from '@/lib/skin';
 import { cn } from '@/lib/utils';
 
 /**
@@ -144,6 +148,7 @@ export function ConfirmHost() {
     () => current,
     () => null
   );
+  const { skin } = useSkin();
   if (!request) return null;
 
   const answer = (index: number | null) => {
@@ -153,12 +158,117 @@ export function ConfirmHost() {
 
   return (
     <Portal name="chenfeng-confirm">
-      {request.kind === 'alert' ? (
+      {skin === 'oau' ? (
+        <OauConfirm request={request} onAnswer={answer} />
+      ) : request.kind === 'alert' ? (
         <DrawnAlert request={request} onAnswer={answer} />
       ) : (
         <DrawnActionSheet request={request} onAnswer={answer} />
       )}
     </Portal>
+  );
+}
+
+/**
+ * OAU's confirmation (LavenderBookStyle/oau-style-guide.md, section 13.17),
+ * for both kinds: a paper sheet at the bottom of a phone, a centred card 400
+ * wide on a wide screen; the title in a heading, the message, then the
+ * stickers stacked full width - the action first, Cancel last. Same words as
+ * every skin; Escape and the dim answer Cancel.
+ */
+function OauConfirm({
+  request,
+  onAnswer,
+}: {
+  request: AlertRequest | SheetRequest;
+  onAnswer: (index: number | null) => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const { isWide } = useIsWideViewport();
+
+  const buttons =
+    request.kind === 'alert'
+      ? request.buttons
+          .map((button, index) => ({
+            label: button.label,
+            style: button.style,
+            answer: button.style === 'cancel' ? null : index,
+          }))
+          .sort((a, b) => Number(a.style === 'cancel') - Number(b.style === 'cancel'))
+      : [
+          ...request.actions.map((action, index) => ({
+            label: action.label,
+            style: action.style,
+            answer: index as number | null,
+          })),
+          { label: request.cancelLabel ?? 'Cancel', style: 'cancel' as const, answer: null },
+        ];
+
+  React.useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onAnswer(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onAnswer]);
+
+  return (
+    <View
+      className={cn('absolute inset-0', isWide ? 'items-center justify-center' : 'justify-end')}
+      pointerEvents="box-none">
+      <Animated.View entering={FadeIn.duration(160)} className="absolute inset-0">
+        <Pressable
+          className="flex-1 bg-[rgba(69,49,30,0.28)]"
+          onPress={() => onAnswer(null)}
+          accessibilityElementsHidden
+          importantForAccessibility="no"
+        />
+      </Animated.View>
+      <Animated.View
+        entering={isWide ? FadeIn.duration(180) : SlideInDown.duration(240)}
+        role="alertdialog"
+        aria-modal
+        aria-label={request.title ?? request.message ?? 'Confirm'}
+        className={cn(
+          'gap-4 bg-background p-5',
+          isWide ? 'w-[400px] max-w-[92%] rounded-[24px]' : 'w-full rounded-t-[28px]',
+          Platform.select({ web: 'shadow-[0_-10px_30px_-12px_rgba(69,49,30,0.3)]' })
+        )}
+        style={isWide ? undefined : { paddingBottom: Math.max(insets.bottom, 0) + 20 }}>
+        {request.title || request.message ? (
+          <View className="gap-1.5">
+            {request.title ? (
+              <Text oauStyle="heading" role="heading" className="text-foreground">
+                {request.title}
+              </Text>
+            ) : null}
+            {request.message ? (
+              <Text oauStyle="body" className="text-foreground">
+                {request.message}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
+        <View className="gap-2.5">
+          {buttons.map((button) => (
+            <Button
+              key={`${button.label}-${button.answer}`}
+              size="lg"
+              variant={
+                button.style === 'destructive'
+                  ? 'destructive'
+                  : button.style === 'cancel'
+                    ? 'secondary'
+                    : 'default'
+              }
+              onPress={() => onAnswer(button.answer)}>
+              <Text>{button.label}</Text>
+            </Button>
+          ))}
+        </View>
+      </Animated.View>
+    </View>
   );
 }
 

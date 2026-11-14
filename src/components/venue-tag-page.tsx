@@ -4,11 +4,16 @@ import { Pressable, ScrollView, View } from 'react-native';
 
 import { AnswerSummaryCard } from '@/components/answer-summary';
 import { LinkedText } from '@/components/linked-text';
+import { OauCard, OauHeading } from '@/components/oau/card';
+import { Note as NotePaper, NoteCheck } from '@/components/oau/note';
 import { TagPill } from '@/components/tag-pill';
+import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Separator } from '@/components/ui/separator';
 import { Text } from '@/components/ui/text';
+import { OAU_DETAILS_TEXT } from '@/lib/oau-text';
 import type { AnswerSummaryRow } from '@/lib/questionnaire';
+import { useSkin } from '@/lib/skin';
 import { cn } from '@/lib/utils';
 import type { Note } from '@/lib/venue-details';
 
@@ -29,7 +34,96 @@ export type TagPageProps = {
  * correctness requirement, not a layout preference. Hence two headings that
  * each say who is speaking, and a rule between them.
  */
-export function TagPage({ notes, summary, reviewCount, onBack }: TagPageProps) {
+export function TagPage(props: TagPageProps) {
+  const { skin } = useSkin();
+  return skin === 'oau' ? <OauTagPage {...props} /> : <BasicTagPage {...props} />;
+}
+
+/** The answers grouped under the tag asking them, the tagless ones last. */
+function groupSummary(summary: AnswerSummaryRow[]) {
+  const groups: { key: string; tag: AnswerSummaryRow['tag']; rows: AnswerSummaryRow[] }[] = [];
+  for (const row of summary) {
+    const key = row.tag?.id ?? 'none';
+    let group = groups.find((g) => g.key === key);
+    if (!group) {
+      group = { key, tag: row.tag, rows: [] };
+      groups.push(group);
+    }
+    group.rows.push(row);
+  }
+  return groups;
+}
+
+/**
+ * OAU's More details (LavenderBookStyle/oau-style-guide.md, section 14.5): the
+ * same two sections as every skin, never mixed - what LavenderBook checked on
+ * its signed note, then what visitors reported on cards, under their ribbons.
+ */
+function OauTagPage({ notes, summary, reviewCount, onBack }: TagPageProps) {
+  const groups = groupSummary(summary);
+  const answered = summary[0]?.answeredReviews ?? 0;
+
+  return (
+    <View className="flex-1">
+      <View className="flex-row items-center px-5 pb-2">
+        <Button variant="secondary" size="sm" onPress={onBack}>
+          <Icon as={ChevronLeft} className="size-4 text-foreground" />
+          <Text>{OAU_DETAILS_TEXT.back}</Text>
+        </Button>
+      </View>
+
+      <ScrollView className="flex-1" contentContainerClassName="gap-6 px-5 pb-6 pt-1">
+        {notes.length > 0 ? (
+          <View className="gap-3">
+            <OauHeading title={OAU_DETAILS_TEXT.checked} />
+            <NotePaper>
+              <View className="gap-2.5">
+                {notes.map((note) => (
+                  <NoteCheck key={note.id}>
+                    <LinkedText text={note.body} />
+                  </NoteCheck>
+                ))}
+              </View>
+            </NotePaper>
+          </View>
+        ) : null}
+
+        {summary.length > 0 ? (
+          <View className="gap-4">
+            <OauHeading
+              title={OAU_DETAILS_TEXT.reported}
+              line={OAU_DETAILS_TEXT.reportedLine(answered, reviewCount)}
+            />
+            {groups.map((group) => (
+              <View key={group.key} className="gap-2.5">
+                {group.tag ? (
+                  <View className="flex-row">
+                    <TagPill tag={group.tag} />
+                  </View>
+                ) : (
+                  <Text oauStyle="caption" className="text-muted-foreground">
+                    {OAU_DETAILS_TEXT.noLongerAsked}
+                  </Text>
+                )}
+                <OauCard className="px-4">
+                  {group.rows.map((row, index) => (
+                    <View
+                      key={row.questionId}
+                      className={cn('py-3.5', index > 0 && 'border-t border-border')}>
+                      <AnswerSummaryCard row={row} />
+                    </View>
+                  ))}
+                </OauCard>
+              </View>
+            ))}
+          </View>
+        ) : null}
+      </ScrollView>
+    </View>
+  );
+}
+
+function BasicTagPage({ notes, summary, reviewCount, onBack }: TagPageProps) {
   // Grouped under the tag currently asking, in the order the server sent them;
   // the tagless group - questions nothing here asks any more - comes last.
   const groups: { key: string; tag: AnswerSummaryRow['tag']; rows: AnswerSummaryRow[] }[] = [];

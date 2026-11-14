@@ -6,6 +6,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { ChenfengReviewSheet } from '@/components/chenfeng/review-sheet';
 import { DirectionsButton } from '@/components/directions-button';
 import { InfoBullets, InfoDialog, InfoPoint } from '@/components/info-dialog';
+import { OauReviewSheet } from '@/components/oau/review-sheet';
 import { QuestionField, type AnswerValue } from '@/components/question-field';
 import { StarRating, STAR_HINT } from '@/components/star-rating';
 import { TagPill } from '@/components/tag-pill';
@@ -138,9 +139,12 @@ export type ReviewSheetProps = {
 export function ReviewSheet(props: ReviewSheetProps) {
   const { skin } = useSkin();
   // Chenfeng's form is a full-height sheet of grouped sections with Post in
-  // its toolbar (its own file); Basic and Material keep this one. Both run on
-  // useReviewForm, so what is checked and saved is the same.
-  return skin === 'chenfeng' ? <ChenfengReviewSheet {...props} /> : <BasicReviewSheet {...props} />;
+  // its toolbar, OAU's a tall paper sheet of question cards (each its own
+  // file); Basic and Material keep this one. All run on useReviewForm, so what
+  // is checked and saved is the same.
+  if (skin === 'chenfeng') return <ChenfengReviewSheet {...props} />;
+  if (skin === 'oau') return <OauReviewSheet {...props} />;
+  return <BasicReviewSheet {...props} />;
 }
 
 function BasicReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }: ReviewSheetProps) {

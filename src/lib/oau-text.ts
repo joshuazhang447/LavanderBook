@@ -29,6 +29,39 @@ export const OAU_ACCOUNT_TEXT = {
   chosen: (label: string) => `${label}, chosen`,
 } as const;
 
+/** OAU's review form. The questions and hints are the shared ones (review-form.ts). */
+export const OAU_REVIEW_TEXT = {
+  newTitle: 'Your review',
+  editTitle: 'Edit your review',
+  rating: 'How LGBTQ+ friendly is this place?',
+  ratingHint: '1 is hostile, 5 is actively welcoming',
+  bathroom: 'Is there a bathroom trans people can use safely?',
+  bathroomHint: 'Pick "Not sure" if you did not check - a guess helps nobody.',
+  body: 'What happened?',
+  optional: '(optional)',
+  bodyPlaceholder: 'Anything worth knowing before someone else walks in.',
+  bodyWarning: 'Leave out names, dates, times and anything that could identify you.',
+  whatToLeaveOut: 'What to leave out',
+  post: 'Post review',
+  save: 'Save changes',
+  saving: 'Saving…',
+  delete: 'Delete review',
+  deleteMessage: "This review will be removed from LavenderBook. This can't be undone.",
+  failed: (existing: boolean) => (existing ? "Couldn't save the review" : "Couldn't post the review"),
+  signIn: 'Sign in to write a review',
+} as const;
+
+/** More details, inside OAU's place card. */
+export const OAU_DETAILS_TEXT = {
+  back: 'Back',
+  checked: 'What LavenderBook checked',
+  reported: 'What visitors reported',
+  /** Coverage, so "7 of 9 said yes" is read against how many answered at all. */
+  reportedLine: (answered: number, total: number) =>
+    `Answers from ${answered} of ${total} ${total === 1 ? 'review' : 'reviews'}. Visitors' own accounts, not checked by LavenderBook.`,
+  noLongerAsked: 'No longer asked here',
+} as const;
+
 /** "Shown as Amber Finch": the name readers see on one of your reviews. */
 export function shownAs(alias: string | null): string {
   return alias ? `Shown as ${alias}` : 'Shown under your account name';
