@@ -39,10 +39,32 @@ export const M3_TYPES = [
   'label-small',
 ] as const;
 
+/**
+ * OAU's type scale, likewise (tailwind.config.js has them as oau-*). Named one
+ * by one: text-oau-pink and text-oau-flag are colours.
+ */
+export const OAU_TYPES = [
+  'display',
+  'title',
+  'heading',
+  'subheading',
+  'body',
+  'callout',
+  'label',
+  'caption',
+  'micro',
+  'overline',
+  'note',
+] as const;
+
 const twMerge = extendTailwindMerge({
   extend: {
     theme: {
-      text: [...TEXT_STYLES, ...M3_TYPES.map((type) => `m3-${type}`)],
+      text: [
+        ...TEXT_STYLES,
+        ...M3_TYPES.map((type) => `m3-${type}`),
+        ...OAU_TYPES.map((type) => `oau-${type}`),
+      ],
     },
   },
 });
