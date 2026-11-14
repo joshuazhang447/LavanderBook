@@ -151,6 +151,9 @@ export function MapControls({
   const groupStyle = useAnimatedStyle(() => ({
     width: groupWidth === 0 ? undefined : groupWidth * (1 - collapse.get()),
     opacity: 1 - collapse.get(),
+    // Clipped only while it is giving way, which is when the clip is needed:
+    // left on, it cut the pills' shadow off square at their left edge.
+    overflow: collapse.get() > 0 ? 'hidden' : 'visible',
   }));
 
   return (
@@ -161,11 +164,11 @@ export function MapControls({
       // No gap: the spacing lives inside the collapsing group as pr-2, so it
       // animates away too rather than leaving the search pill off the margin.
       className="absolute flex-row">
-      {/* py/-my: the clip that makes the collapse work would otherwise cut the
-          pills' own shadow off square, which reads as a grey box behind them.
-          The padding gives the shadow somewhere to land; the matching negative
-          margin keeps the row's geometry exactly as it was. */}
-      <Animated.View style={groupStyle} className="overflow-hidden py-3 -my-3">
+      {/* py/-my: while the group collapses, the clip that makes that work
+          would cut the pills' own shadow off square. The padding gives the
+          shadow somewhere to land; the matching negative margin keeps the
+          row's geometry exactly as it was. */}
+      <Animated.View style={groupStyle} className="py-3 -my-3">
         <View
           onLayout={(event) => {
             const measured = event.nativeEvent.layout.width;
