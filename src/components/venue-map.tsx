@@ -12,6 +12,7 @@ import {
   type GroupItem,
 } from '@/lib/map-layout';
 import type { PlaceResult } from '@/lib/place-search';
+import { useTagIcons } from '@/lib/tag-icons';
 import type { Coords } from '@/lib/use-location';
 import {
   distanceMeters,
@@ -21,6 +22,7 @@ import {
   ZOOM_IN_SLACK,
 } from '@/lib/use-location';
 import type { MapRegion, NearbyVenue } from '@/lib/use-nearby-venues';
+import { venueTags } from '@/lib/venue-tags';
 import type { SelectedPoi } from '@/lib/venues';
 
 /** Long enough to read as movement, short enough that follow steps do not queue. */
@@ -161,6 +163,8 @@ export function VenueMap({
   const [spread, setSpread] = React.useState<{ key: string; zoom: number } | null>(null);
   const open = spread && spread.zoom === zoom ? spread.key : null;
   const items = React.useMemo(() => layoutMarkers(venues, zoom, open), [venues, zoom, open]);
+  // Each tag's chosen icon: part of a marker's key, so a new one is re-captured.
+  const tagIcons = useTagIcons();
 
   const pressGroup = React.useCallback(
     (group: GroupItem) => {
@@ -320,7 +324,12 @@ export function VenueMap({
         item.kind === 'group' ? (
           <GroupMarker key={item.key} item={item} onPress={pressGroup} />
         ) : (
-          <PlaceMarker key={placeMarkerKey(item)} item={item} onPress={onSelectVenue} />
+          <PlaceMarker
+            key={placeMarkerKey(item, tagIcons[venueTags(item.venue)[0]?.slug ?? ''] ?? null)}
+            item={item}
+            icon={tagIcons[venueTags(item.venue)[0]?.slug ?? ''] ?? null}
+            onPress={onSelectVenue}
+          />
         )
       )}
       {/* Last, so it draws over the rating boxes when a searched place happens
