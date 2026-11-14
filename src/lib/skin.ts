@@ -6,8 +6,11 @@ import { useOnAdmin } from '@/lib/safety';
 
 /**
  * The look of the app: its buttons, switches and tab bar, and the colours and
- * corner radius under them. Three, every one of them on every platform:
+ * corner radius under them. Four, every one of them on every platform:
  *
+ *   oau       One Among Us's look: warm paper, brown ink and the trans flag's
+ *             colours, one per tab - specified outside the repository in
+ *             LavenderBookStyle/oau-style-guide.md. Light only.
  *   basic     the original look
  *   material  Material 3
  *   chenfeng  the current iOS look as SwiftUI draws it: grouped grey pages,
@@ -27,10 +30,11 @@ import { useOnAdmin } from '@/lib/safety';
  * admin panel. The root layout keeps both outside the skin.
  */
 
-export type Skin = 'basic' | 'material' | 'chenfeng';
+export type Skin = 'oau' | 'basic' | 'material' | 'chenfeng';
 
 /** In the order the setting lists them. */
 export const SKINS: readonly { id: Skin; label: string }[] = [
+  { id: 'oau', label: 'OAU' },
   { id: 'basic', label: 'Basic' },
   { id: 'material', label: 'Material' },
   { id: 'chenfeng', label: 'Chenfeng' },
@@ -67,7 +71,7 @@ function emit(next: Partial<State>) {
 }
 
 function isSkin(value: unknown): value is Skin {
-  return value === 'basic' || value === 'material' || value === 'chenfeng';
+  return value === 'oau' || value === 'basic' || value === 'material' || value === 'chenfeng';
 }
 
 async function read(): Promise<Skin | null> {

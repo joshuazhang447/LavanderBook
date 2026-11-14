@@ -91,6 +91,47 @@ module.exports = {
         'outline-variant': 'hsl(var(--border))',
         error: 'hsl(var(--destructive))',
         'on-error': 'hsl(var(--destructive-foreground))',
+        // OAU's (src/lib/theme.ts, LavenderBookStyle/oau-style-guide.md 4.3);
+        // in the other skins they fall back on colours those already have.
+        band: 'hsl(var(--band))',
+        sticker: {
+          DEFAULT: 'hsl(var(--sticker))',
+          foreground: 'hsl(var(--sticker-foreground))',
+        },
+        'outline-ink': 'hsl(var(--outline-ink))',
+        note: {
+          DEFAULT: 'hsl(var(--note))',
+          rule: 'hsl(var(--note-rule))',
+        },
+        wash: 'hsl(var(--wash))',
+        caution: {
+          DEFAULT: 'hsl(var(--caution))',
+          stripe: 'hsl(var(--caution-stripe))',
+          foreground: 'hsl(var(--caution-foreground))',
+        },
+        positive: {
+          DEFAULT: 'hsl(var(--positive))',
+          foreground: 'hsl(var(--positive-foreground))',
+        },
+        'oau-pink': {
+          DEFAULT: 'hsl(var(--oau-pink))',
+          foreground: 'hsl(var(--oau-pink-foreground))',
+        },
+        'oau-flag': 'hsl(var(--oau-flag))',
+        'star-foreground': 'hsl(var(--star-foreground))',
+        // The trans flag itself: the same in every skin.
+        'flag-trans': {
+          blue: 'hsl(var(--flag-trans-blue))',
+          pink: 'hsl(var(--flag-trans-pink))',
+          white: 'hsl(var(--flag-trans-white))',
+        },
+      },
+      // OAU's typefaces, served from the app (skin-provider): Halant for titles
+      // and names, Source Sans 3 for everything else. The Text component sets
+      // them through its oauStyle; these are for anything drawn by hand.
+      fontFamily: {
+        'oau-display': ["'LavenderBook Halant'", 'Halant_600SemiBold', 'Georgia', 'serif'],
+        'oau-text': ["'LavenderBook Source Sans'", 'SourceSans3_400Regular', 'system-ui', 'sans-serif'],
       },
       // The iOS text styles at the default text size, for Chenfeng (see the
       // Text component's textStyle). In rem, so the browser's text size and
@@ -126,6 +167,20 @@ module.exports = {
         'm3-label-large': ['0.875rem', { lineHeight: '1.25rem', letterSpacing: '0.1px' }], // 14/20
         'm3-label-medium': ['0.75rem', { lineHeight: '1rem', letterSpacing: '0.5px' }], // 12/16
         'm3-label-small': ['0.6875rem', { lineHeight: '1rem', letterSpacing: '0.5px' }], // 11/16
+        // OAU's type scale (LavenderBookStyle/oau-style-guide.md 5.2), for the
+        // Text component's oauStyle. Line heights fixed so a late font load
+        // does not reflow the page.
+        'oau-display': ['2.125rem', { lineHeight: '2.5rem', letterSpacing: '-0.3px' }], // 34/40
+        'oau-title': ['1.6875rem', { lineHeight: '2rem', letterSpacing: '-0.2px' }], // 27/32
+        'oau-heading': ['1.3125rem', { lineHeight: '1.625rem' }], // 21/26
+        'oau-subheading': ['1.0625rem', { lineHeight: '1.5rem' }], // 17/24
+        'oau-body': ['1.0625rem', { lineHeight: '1.625rem' }], // 17/26
+        'oau-callout': ['0.9375rem', { lineHeight: '1.375rem' }], // 15/22
+        'oau-label': ['1rem', { lineHeight: '1.25rem', letterSpacing: '0.1px' }], // 16/20
+        'oau-caption': ['0.8125rem', { lineHeight: '1.125rem', letterSpacing: '0.1px' }], // 13/18
+        'oau-micro': ['0.75rem', { lineHeight: '1rem', letterSpacing: '0.2px' }], // 12/16
+        'oau-overline': ['0.75rem', { lineHeight: '1rem', letterSpacing: '1.2px' }], // 12/16
+        'oau-note': ['1rem', { lineHeight: '1.375rem' }], // 16/22
       },
       borderRadius: {
         // Tailwind's own xl is 0.75rem, which is exactly --radius + 2px in

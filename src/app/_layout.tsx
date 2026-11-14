@@ -22,9 +22,11 @@ import { SKIN_NAV_THEME } from '@/lib/theme';
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme() === 'dark' ? 'dark' : 'light';
+  const deviceScheme = useColorScheme();
   // Basic on the admin panel whatever is chosen.
   const skin = useAppSkin();
+  // OAU is light only, whatever the device says.
+  const colorScheme = deviceScheme === 'dark' && skin !== 'oau' ? 'dark' : 'light';
   const screens = useBackdrop();
 
   return (
