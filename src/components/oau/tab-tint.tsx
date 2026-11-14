@@ -16,8 +16,10 @@ import { oauTabVariables, oauTintClass, type OauTab } from '@/lib/theme';
  * one in every skin - only OAU's colours are left out of the others. On the
  * website it is a class, which the skins' stylesheet colours under OAU only.
  *
- * Not yet carried into sheets and menus: they render at the portal host,
- * outside the tab (the guide's implementation plan, step 0.5).
+ * Sheets and menus render at the portal host, outside the tab: a sheet reads
+ * its tab with useTabTintProps before it goes and sets the colours, and
+ * OauTabScope, on its own content (BottomSheet does). Menus do not yet (the
+ * guide's implementation plan, step 0.5).
  */
 
 const TabContext = React.createContext<OauTab>('map');
@@ -42,6 +44,27 @@ const PLAIN: Record<OauTab, object> = {
   directory: vars({ '--oau-tab': 'directory' }),
   account: vars({ '--oau-tab': 'account' }),
 };
+
+/**
+ * Says which tab's colours are around, inside a view that renders outside the
+ * tab (a sheet in the portal host), where TabTint's own context cannot reach.
+ */
+export function OauTabScope({ tab, children }: React.PropsWithChildren<{ tab: OauTab }>) {
+  return <TabContext.Provider value={tab}>{children}</TabContext.Provider>;
+}
+
+/**
+ * A tab's colours for a view that renders outside the tab - a sheet or a menu,
+ * which go through the portal host at the app root and so lose the tab around
+ * them. Read where the sheet is opened, in the tab, and spread onto the
+ * sheet's own content view.
+ */
+export function useTabTintProps(): { tab: OauTab; className?: string; style?: object } {
+  const tab = useOauTab();
+  const { skin } = useSkin();
+  if (Platform.OS === 'web') return { tab, className: oauTintClass(tab) };
+  return { tab, style: skin === 'oau' ? TINTED[tab] : PLAIN[tab] };
+}
 
 export function TabTint({ tab, children }: React.PropsWithChildren<{ tab: OauTab }>) {
   const { skin } = useSkin();

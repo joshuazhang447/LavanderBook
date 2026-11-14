@@ -17,6 +17,7 @@ import { DistanceMeter } from '@/components/distance-meter';
 import { KindBadge } from '@/components/kind-badge';
 import { useLeaveNowReserve } from '@/components/leave-now';
 import { LocationChoiceScreen } from '@/components/location-choice';
+import { PaperBackdrop } from '@/components/oau/paper';
 import { useIsWideViewport } from '@/components/tab-bar';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
@@ -59,6 +60,8 @@ export function DirectoryScreen() {
 
 function BasicDirectoryScreen() {
   const insets = useSafeAreaInsets();
+  // OAU draws this screen on its paper, the Directory's white washing in.
+  const oau = useSkin().skin === 'oau';
   const { isWide } = useIsWideViewport();
   // On wide the header row already clears the status bar; on narrow nothing
   // does - and a phone browser's "Leave now" button holds the corner above
@@ -91,6 +94,7 @@ function BasicDirectoryScreen() {
 
   return (
     <View className="flex-1 bg-background" style={{ paddingTop: topInset }}>
+      {oau ? <PaperBackdrop tab="directory" washHeight={240} /> : null}
       {/* Bottom padding only - the tab bar owns the bottom inset itself. */}
       <ScrollView
         ref={scroller}

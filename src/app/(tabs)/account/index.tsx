@@ -14,6 +14,7 @@ import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { MyReviewsList } from '@/components/my-reviews-list';
 import { OauBadge } from '@/components/oau-badge';
+import { PaperBackdrop } from '@/components/oau/paper';
 import { LeaveNowSetting, LocationSetting } from '@/components/privacy-settings';
 import { useIsWideViewport, useTabBarOverlap } from '@/components/tab-bar';
 import { useAuth } from '@/lib/auth';
@@ -29,6 +30,8 @@ export default function AccountScreen() {
 
 function BasicAccountScreen() {
   const { session, loading, signInWithGoogle, signOut } = useAuth();
+  // OAU draws this screen on its paper, with My Account's pink washing in.
+  const oau = useSkin().skin === 'oau';
   const insets = useSafeAreaInsets();
   const { isWide } = useIsWideViewport();
   // On wide the header row already clears the status bar; on narrow nothing
@@ -65,6 +68,7 @@ function BasicAccountScreen() {
 
   return (
     <View className="flex-1 bg-background" style={{ paddingTop: topInset }}>
+      {oau ? <PaperBackdrop tab="account" washHeight={240} /> : null}
       {/* The reviews list grows with every review posted, so this has to scroll.
           Bottom padding only - the tab bar owns the bottom inset itself. */}
       <ScrollView

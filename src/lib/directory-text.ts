@@ -58,6 +58,19 @@ export const CONTACT_TEXT = {
 } as const;
 
 /**
+ * Who is speaking, where a place card keeps LavenderBook's words and visitors'
+ * apart under headings of their own (OAU's place card; any skin may use them).
+ */
+export const VOICES_TEXT = {
+  fromLavenderBook: 'From LavenderBook',
+  fromVisitors: 'From visitors',
+  visitorsLine: "Visitors' own words, not checked by LavenderBook.",
+  directions: 'Directions',
+  /** Read out for the directions button: where it goes, and what opens. */
+  directionsSpoken: (name: string) => `Directions to ${name} in Google Maps`,
+} as const;
+
+/**
  * The way in to what is behind a place: what LavenderBook checked there and
  * what visitors reported. It used to be a small "More details" pill beside the
  * tags, and was mostly missed - so it now says what is inside, and shows the
