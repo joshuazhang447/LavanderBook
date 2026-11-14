@@ -1,4 +1,5 @@
-import { ShieldAlert } from 'lucide-react-native';
+import { router } from 'expo-router';
+import { Lock, ShieldAlert } from 'lucide-react-native';
 import * as React from 'react';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -115,10 +116,18 @@ function BasicAccountScreen() {
 
           {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
 
-          <Button variant="ghost" className="self-center" onPress={reopenSafetyNotice}>
-            <Icon as={ShieldAlert} className="size-4 text-muted-foreground" />
-            <Text className="text-muted-foreground">Read the safety notice again</Text>
-          </Button>
+          {/* Quiet, together: what LavenderBook tells everyone, under everything
+              that is theirs to change. */}
+          <View className="items-center">
+            <Button variant="ghost" onPress={reopenSafetyNotice}>
+              <Icon as={ShieldAlert} className="size-4 text-muted-foreground" />
+              <Text className="text-muted-foreground">Read the safety notice again</Text>
+            </Button>
+            <Button variant="ghost" onPress={() => router.push('/account/privacy')}>
+              <Icon as={Lock} className="size-4 text-muted-foreground" />
+              <Text className="text-muted-foreground">Privacy policy</Text>
+            </Button>
+          </View>
 
           <OauBadge />
         </View>
