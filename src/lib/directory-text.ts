@@ -15,6 +15,9 @@ export const ABOUT_TEXT = {
   moreTitle: 'More',
   /** Read out after the description itself, for the whole pressable. */
   moreSpoken: 'Opens the full description and how to reach them',
+  /** When there are contacts behind it as well: says so, since "more" did not. */
+  withContact: 'Contact & more',
+  withContactTitle: 'Contact & More',
   /** Under the name, when there is no description: the contacts alone. */
   contactOnly: 'How to reach them',
   contactOnlyTitle: 'How to Reach Them',

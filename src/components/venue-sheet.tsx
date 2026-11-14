@@ -17,6 +17,7 @@ import Animated, {
   SlideOutRight,
 } from 'react-native-reanimated';
 
+import { AboutPill, aboutPillLabel } from '@/components/about-pill';
 import { AnswerSummaryCard } from '@/components/answer-summary';
 import { ChenfengVenueSheet } from '@/components/chenfeng/venue-sheet';
 import { ContactList } from '@/components/contact-list';
@@ -500,37 +501,25 @@ function BasicVenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
                 the words are the button, and "Read more" is there so that it
                 looks like one. A place with contacts and no description gets
                 the way in alone. */}
-            {description ? (
+            {description || contacts.length > 0 ? (
               <Pressable
                 onPress={() => setAboutOpen(true)}
                 accessibilityRole="button"
-                accessibilityLabel={`${description} ${ABOUT_TEXT.moreSpoken}`}
+                accessibilityLabel={
+                  description
+                    ? `${description} ${ABOUT_TEXT.moreSpoken}`
+                    : aboutPillLabel(contacts, false, false)
+                }
                 className={cn(
-                  'gap-1 active:opacity-70',
+                  'gap-2 active:opacity-70',
                   Platform.select({ web: 'cursor-pointer' })
                 )}>
-                <Text numberOfLines={2} className="text-sm leading-5 text-foreground">
-                  {description}
-                </Text>
-                <View className="flex-row items-center gap-0.5">
-                  <Text className="text-xs font-semibold text-foreground underline">
-                    {ABOUT_TEXT.more}
+                {description ? (
+                  <Text numberOfLines={2} className="text-sm leading-5 text-foreground">
+                    {description}
                   </Text>
-                  <Icon as={ChevronRight} className="size-3.5 text-foreground" />
-                </View>
-              </Pressable>
-            ) : contacts.length > 0 ? (
-              <Pressable
-                onPress={() => setAboutOpen(true)}
-                accessibilityRole="button"
-                className={cn(
-                  'flex-row items-center gap-0.5 self-start active:opacity-70',
-                  Platform.select({ web: 'cursor-pointer' })
-                )}>
-                <Text className="text-xs font-semibold text-foreground underline">
-                  {ABOUT_TEXT.contactOnly}
-                </Text>
-                <Icon as={ChevronRight} className="size-3.5 text-foreground" />
+                ) : null}
+                <AboutPill contacts={contacts} hasDescription={!!description} />
               </Pressable>
             ) : null}
 
