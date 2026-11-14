@@ -4,6 +4,7 @@ import '@/lib/nativewind-animated';
 
 import { PortalHost } from '@rn-primitives/portal';
 import { Stack, ThemeProvider } from 'expo-router';
+import Head from 'expo-router/head';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { useColorScheme } from 'react-native';
@@ -33,6 +34,11 @@ export default function RootLayout() {
     // Gestures - Chenfeng's sheets, switches and swipe actions - need this
     // around everything. It is a plain full-screen view; nothing else changes.
     <GestureHandlerRootView style={{ flex: 1 }}>
+      {/* The website's tab title, on every page; without it the browser shows
+          the address. Nothing on a phone. */}
+      <Head>
+        <title>LavenderBook</title>
+      </Head>
       <AuthProvider>
         <KeyboardProvider>
           <ThemeProvider value={SKIN_NAV_THEME[skin][colorScheme]}>
