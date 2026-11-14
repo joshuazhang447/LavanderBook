@@ -1,10 +1,18 @@
-import { BookOpen, ChevronLeft, ChevronRight, SearchX, TriangleAlert } from 'lucide-react-native';
+import {
+  BookOpen,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsUpDown,
+  SearchX,
+  TriangleAlert,
+} from 'lucide-react-native';
 import * as React from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChenfengDirectoryScreen } from '@/components/chenfeng/directory-screen';
 import { usePlaceSheets } from '@/components/directory-sheets';
+import { DirectoryTransition } from '@/components/directory-transition';
 import { DistanceMeter } from '@/components/distance-meter';
 import { KindBadge } from '@/components/kind-badge';
 import { useLeaveNowReserve } from '@/components/leave-now';
@@ -109,7 +117,9 @@ function BasicDirectoryScreen() {
             <DistanceMeter className="px-1" />
           </View>
 
-          <DirectoryBody directory={directory} onSelect={open} onLocate={showOnMap} />
+          <DirectoryTransition directory={directory}>
+            <DirectoryBody directory={directory} onSelect={open} onLocate={showOnMap} />
+          </DirectoryTransition>
         </View>
       </ScrollView>
 
@@ -215,7 +225,17 @@ function DirectoryBody({ directory, onSelect, onLocate }: BodyProps) {
         <Text className="text-sm font-medium text-foreground">{DIRECTORY_TEXT.back}</Text>
       </Pressable>
 
-      <View className="flex-row items-center gap-3 px-1">
+      {/* The open kind is itself the way to another: pressing it goes back to
+          the kinds, as "All kinds" above does - a header that looks like a
+          title is where people tap to change what they are looking at. */}
+      <Pressable
+        onPress={directory.back}
+        accessibilityRole="button"
+        accessibilityLabel={DIRECTORY_TEXT.changeSpoken(kind ? kind.tag.label : DIRECTORY_TEXT.every)}
+        className={cn(
+          'flex-row items-center gap-3 rounded-lg p-1 active:bg-accent',
+          Platform.select({ web: 'cursor-pointer transition-colors hover:bg-accent' })
+        )}>
         <KindBadge
           tag={kind?.tag}
           icon={kind ? kindIcon(kind.tag.slug) : EVERY_KIND_ICON}
@@ -229,7 +249,11 @@ function DirectoryBody({ directory, onSelect, onLocate }: BodyProps) {
             {[kind?.description, DIRECTORY_TEXT.count(count)].filter(Boolean).join(' · ')}
           </Text>
         </View>
-      </View>
+        <View className="flex-row items-center gap-1 self-center rounded-full border border-border py-1 pl-2.5 pr-1.5">
+          <Text className="text-xs font-medium text-foreground">{DIRECTORY_TEXT.change}</Text>
+          <Icon as={ChevronsUpDown} className="size-3.5 text-muted-foreground" />
+        </View>
+      </Pressable>
 
       <Places directory={directory} onSelect={onSelect} onLocate={onLocate} />
     </View>

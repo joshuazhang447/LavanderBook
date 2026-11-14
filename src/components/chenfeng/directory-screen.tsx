@@ -1,4 +1,12 @@
-import { BookOpen, ChevronLeft, CircleX, Search, SearchX, TriangleAlert } from 'lucide-react-native';
+import {
+  BookOpen,
+  ChevronLeft,
+  ChevronsUpDown,
+  CircleX,
+  Search,
+  SearchX,
+  TriangleAlert,
+} from 'lucide-react-native';
 import * as React from 'react';
 import {
   ActivityIndicator,
@@ -13,6 +21,7 @@ import { LargeTitleScreen } from '@/components/chenfeng/large-title-screen';
 import { ChenfengLocationChoiceScreen } from '@/components/chenfeng/location-choice';
 import { ChenfengPlaceRows } from '@/components/chenfeng/venue-list';
 import { usePlaceSheets } from '@/components/directory-sheets';
+import { DirectoryTransition } from '@/components/directory-transition';
 import { DistanceMeter } from '@/components/distance-meter';
 import { KindBadge } from '@/components/kind-badge';
 import { Button } from '@/components/ui/button';
@@ -99,7 +108,9 @@ export function ChenfengDirectoryScreen() {
             <DistanceMeter />
           </View>
 
-          <Body directory={directory} onSelect={open} onLocate={showOnMap} />
+          <DirectoryTransition directory={directory}>
+            <Body directory={directory} onSelect={open} onLocate={showOnMap} />
+          </DirectoryTransition>
         </View>
       </LargeTitleScreen>
 
@@ -284,7 +295,18 @@ function Body({
             {DIRECTORY_TEXT.backTitle}
           </Text>
         </Pressable>
-        <View className="flex-row items-center gap-3">
+        {/* The open kind is itself the way to another, as "All Kinds" above
+            is: pressing it goes back to the kinds. */}
+        <Pressable
+          onPress={directory.back}
+          accessibilityRole="button"
+          accessibilityLabel={DIRECTORY_TEXT.changeSpoken(
+            kind ? kind.tag.label : DIRECTORY_TEXT.every
+          )}
+          className={cn(
+            'flex-row items-center gap-3 active:opacity-60',
+            Platform.select({ web: 'cursor-pointer' })
+          )}>
           <KindBadge
             tag={kind?.tag}
             icon={kind ? kindIcon(kind.tag.slug) : EVERY_KIND_ICON}
@@ -299,7 +321,13 @@ function Body({
               {[kind?.description, DIRECTORY_TEXT.count(count)].filter(Boolean).join(' · ')}
             </Text>
           </View>
-        </View>
+          <View className="flex-row items-center gap-0.5 self-center">
+            <Text textStyle="subheadline" className="text-primary">
+              {DIRECTORY_TEXT.changeTitle}
+            </Text>
+            <Icon as={ChevronsUpDown} size={14} weight="semibold" className="text-primary" />
+          </View>
+        </Pressable>
       </View>
       {rows}
     </View>
