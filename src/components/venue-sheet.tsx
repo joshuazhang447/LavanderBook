@@ -212,7 +212,8 @@ function TagPage({ notes, summary, reviewCount, onBack }: TagPageProps) {
               </Text>
             </View>
             {groups.map((group) => (
-              <View key={group.key} className="gap-4">
+              <View key={group.key} className="gap-2">
+                {/* Which kind of place asked these, over the card it heads. */}
                 {group.tag ? (
                   <View className="flex-row">
                     <TagPill tag={group.tag} />
@@ -220,9 +221,18 @@ function TagPage({ notes, summary, reviewCount, onBack }: TagPageProps) {
                 ) : (
                   <Text className="text-xs text-muted-foreground">No longer asked here</Text>
                 )}
-                {group.rows.map((row) => (
-                  <AnswerSummaryCard key={row.questionId} row={row} />
-                ))}
+                {/* One card per kind, a hairline between its questions: each
+                    question reads as a unit, and the kind's run of them as a
+                    set, where a column of them ran together. */}
+                <View className="rounded-xl border border-border bg-card px-4">
+                  {group.rows.map((row, index) => (
+                    <View
+                      key={row.questionId}
+                      className={cn('py-3.5', index > 0 && 'border-t border-border')}>
+                      <AnswerSummaryCard row={row} />
+                    </View>
+                  ))}
+                </View>
               </View>
             ))}
           </View>

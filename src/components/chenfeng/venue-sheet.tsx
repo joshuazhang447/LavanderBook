@@ -625,26 +625,19 @@ function DetailsPage({
                 </Text>
               </View>
               {groups.map((group) => (
-                <View key={group.key} className="gap-2">
-                  {groups.length > 1 || !group.tag ? (
-                    <View className="flex-row px-4">
-                      {group.tag ? (
-                        <TagPill tag={group.tag} />
-                      ) : (
-                        <Text textStyle="footnote" className="text-label-secondary">
-                          No longer asked here
-                        </Text>
-                      )}
-                    </View>
-                  ) : null}
-                  <Section>
-                    {group.rows.map((row) => (
-                      <Row key={row.questionId} className="py-3.5">
-                        <AnswerSummaryCard row={row} />
-                      </Row>
-                    ))}
-                  </Section>
-                </View>
+                <Section
+                  key={group.key}
+                  header={
+                    groups.length > 1 || !group.tag
+                      ? (group.tag?.label ?? 'No Longer Asked Here')
+                      : undefined
+                  }>
+                  {group.rows.map((row) => (
+                    <Row key={row.questionId} className="py-3.5">
+                      <AnswerSummaryCard row={row} />
+                    </Row>
+                  ))}
+                </Section>
               ))}
             </View>
           ) : null}
