@@ -1,6 +1,6 @@
-// Renders the two small logos drawn in the app - the book beside
-// "LavenderBook" in the website's header, and OAU's leaves in the credit - at
-// the exact pixel size of every screen density.
+// Renders the small logos drawn in the app - the book beside "LavenderBook" in
+// the website's header (and larger, in OAU's colophon and empty states), and
+// OAU's leaves in the credit - at the exact pixel size of every screen density.
 //
 // Run with `npm run logos` after changing either drawing or the size it is
 // shown at. The outputs are committed; this is not part of the build.
@@ -33,6 +33,20 @@ function file(name, height) {
     const sized = svg.replace('width="798" height="970"', `width="${width}" height="${height}"`);
     await sharp(Buffer.from(sized)).png().toFile(file('book-mark', height));
     console.log(`book-mark ${width}x${height}`);
+  }
+}
+
+// The same book, larger: OAU's colophon at the foot of My Account and the book
+// on its tile in OAU's empty states. 40 x 48 points.
+{
+  const BOOK = { width: 40, height: 48 };
+  const svg = readFileSync('favicon.svg', 'utf8');
+  for (const scale of SCALES) {
+    const width = Math.round(BOOK.width * scale);
+    const height = Math.round(BOOK.height * scale);
+    const sized = svg.replace('width="798" height="970"', `width="${width}" height="${height}"`);
+    await sharp(Buffer.from(sized)).png().toFile(file('book-large', height));
+    console.log(`book-large ${width}x${height}`);
   }
 }
 

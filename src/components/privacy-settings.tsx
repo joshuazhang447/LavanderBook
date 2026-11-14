@@ -3,6 +3,7 @@ import {
   DoorOpen,
   Info,
   LocateFixed,
+  TriangleAlert,
   VenetianMask,
   type LucideIcon,
 } from 'lucide-react-native';
@@ -50,6 +51,7 @@ import {
   type Explained,
 } from '@/lib/privacy-text';
 import { setLeaveNowButton, useSafety } from '@/lib/safety';
+import { useSkin } from '@/lib/skin';
 import { cn } from '@/lib/utils';
 
 /**
@@ -156,6 +158,10 @@ function PrivacyToggle({
   const [confirmingOff, setConfirmingOff] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  // OAU draws the switches as rows of one card (the screen's), not a box each;
+  // what they do and what they ask is the same.
+  const oau = useSkin().skin === 'oau';
+  const warned = !enabled && !!offWarning;
 
   async function apply(next: boolean) {
     setError(null);
@@ -180,39 +186,73 @@ function PrivacyToggle({
           invalid HTML on the web and breaks hydration. */}
       {/* bg-card: in Basic the same colour as the page, so nothing changes; in
           the other skins the box takes their card colour, like their cards. */}
-      <View className="rounded-lg border border-border bg-card">
+      <View className={oau ? 'border-b border-border' : 'rounded-lg border border-border bg-card'}>
         <Pressable
           onPress={() => setExplaining(true)}
           accessibilityRole="button"
           accessibilityLabel={`What is "${title}"?`}
           className={cn(
-            'absolute inset-0 rounded-lg active:bg-accent',
-            Platform.select({ web: 'cursor-pointer hover:bg-accent/50' })
+            oau ? 'absolute inset-0 active:bg-muted' : 'absolute inset-0 rounded-lg active:bg-accent',
+            Platform.select({
+              web: oau ? 'cursor-pointer hover:bg-muted/60' : 'cursor-pointer hover:bg-accent/50',
+            })
           )}
         />
-        <View className="gap-3 p-4" style={PASS_THROUGH}>
+        <View className={oau ? 'gap-2.5 px-4 py-3.5' : 'gap-3 p-4'} style={PASS_THROUGH}>
           <View className="flex-row items-center gap-3" style={PASS_THROUGH}>
             <View className="flex-1 flex-row items-center gap-3" style={IGNORE_TOUCHES}>
-              <View
-                className={cn(
-                  'size-9 items-center justify-center rounded-full',
-                  enabled ? 'bg-primary' : 'bg-muted'
-                )}>
-                <Icon
-                  as={icon}
+              {oau ? (
+                <View
                   className={cn(
-                    'size-5',
-                    enabled ? 'text-primary-foreground' : 'text-muted-foreground'
-                  )}
-                />
-              </View>
+                    'size-9 items-center justify-center rounded-full',
+                    warned ? 'bg-caution' : enabled ? 'bg-wash' : 'bg-muted'
+                  )}>
+                  <Icon
+                    as={icon}
+                    className={cn(
+                      'size-[18px]',
+                      warned
+                        ? 'text-caution-foreground'
+                        : enabled
+                          ? 'text-primary'
+                          : 'text-muted-foreground'
+                    )}
+                  />
+                </View>
+              ) : (
+                <View
+                  className={cn(
+                    'size-9 items-center justify-center rounded-full',
+                    enabled ? 'bg-primary' : 'bg-muted'
+                  )}>
+                  <Icon
+                    as={icon}
+                    className={cn(
+                      'size-5',
+                      enabled ? 'text-primary-foreground' : 'text-muted-foreground'
+                    )}
+                  />
+                </View>
+              )}
 
               <View className="flex-1 gap-0.5">
                 <View className="flex-row items-center gap-1.5">
-                  <Text className="font-medium text-foreground">{title}</Text>
+                  {oau ? (
+                    <Text oauStyle="subheading" className="text-foreground">
+                      {title}
+                    </Text>
+                  ) : (
+                    <Text className="font-medium text-foreground">{title}</Text>
+                  )}
                   <Icon as={Info} className="size-4 text-muted-foreground" />
                 </View>
-                <Text className="text-xs text-muted-foreground">{summary}</Text>
+                {oau ? (
+                  <Text oauStyle="callout" className="text-muted-foreground">
+                    {summary}
+                  </Text>
+                ) : (
+                  <Text className="text-xs text-muted-foreground">{summary}</Text>
+                )}
               </View>
             </View>
 
@@ -230,15 +270,31 @@ function PrivacyToggle({
 
           {extra}
 
-          {(!enabled && offWarning) || error ? (
-            <View className="gap-3" style={IGNORE_TOUCHES}>
-              {!enabled && offWarning ? (
-                <Text className="text-xs text-destructive">{offWarning}</Text>
+          {warned || error ? (
+            <View className={oau ? 'gap-2' : 'gap-3'} style={IGNORE_TOUCHES}>
+              {warned ? (
+                oau ? (
+                  // Brick red with the warning glyph, under the row it is about.
+                  <View className="flex-row items-start gap-2">
+                    <Icon as={TriangleAlert} className="mt-0.5 size-4 text-destructive" />
+                    <Text oauStyle="callout" className="flex-1 text-destructive">
+                      {offWarning}
+                    </Text>
+                  </View>
+                ) : (
+                  <Text className="text-xs text-destructive">{offWarning}</Text>
+                )
               ) : null}
               {error ? (
-                <Text className="text-xs text-destructive" accessibilityRole="alert">
-                  {error}
-                </Text>
+                oau ? (
+                  <Text oauStyle="callout" className="text-destructive" accessibilityRole="alert">
+                    {error}
+                  </Text>
+                ) : (
+                  <Text className="text-xs text-destructive" accessibilityRole="alert">
+                    {error}
+                  </Text>
+                )
               ) : null}
             </View>
           ) : null}
@@ -391,6 +447,7 @@ type PrivacySettingsProps = {
  */
 export function PrivacySettings({ onReviewsChanged }: PrivacySettingsProps) {
   const { profile, setPerPlaceNames, setHideDates } = useAuth();
+  const oau = useSkin().skin === 'oau';
 
   // Nothing to show until the profile arrives: a switch drawn "off" while the
   // real value is in flight would claim the reviews are exposed when they are not.
@@ -399,7 +456,7 @@ export function PrivacySettings({ onReviewsChanged }: PrivacySettingsProps) {
   const name = profile.display_name;
 
   return (
-    <View className="gap-3">
+    <View className={oau ? undefined : 'gap-3'}>
       <LocationSetting />
       <LeaveNowSetting />
 

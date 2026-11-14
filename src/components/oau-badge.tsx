@@ -28,7 +28,10 @@ function openOau() {
  * call to action.
  */
 export function OauBadge({ className }: { className?: string }) {
-  const chenfeng = useSkin().skin === 'chenfeng';
+  const { skin } = useSkin();
+  const chenfeng = skin === 'chenfeng';
+  // OAU writes the credit in its hand.
+  const oau = skin === 'oau';
 
   return (
     <Pressable
@@ -45,7 +48,10 @@ export function OauBadge({ className }: { className?: string }) {
       <LogoImage logo={OAU_LEAVES} />
       <Text
         textStyle={chenfeng ? 'footnote' : undefined}
-        className={chenfeng ? 'text-label-secondary' : 'text-xs text-muted-foreground'}>
+        oauStyle={oau ? 'note' : undefined}
+        className={
+          chenfeng ? 'text-label-secondary' : oau ? 'text-muted-foreground' : 'text-xs text-muted-foreground'
+        }>
         {CREDIT}
       </Text>
     </Pressable>
