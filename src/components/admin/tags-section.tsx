@@ -12,6 +12,7 @@ import { ActivityIndicator, Platform, ScrollView, View } from 'react-native';
 import { TagChip } from '@/components/admin/tag-chip';
 import { TagDialog } from '@/components/admin/tag-dialog';
 import { TagQuestions } from '@/components/admin/tag-questions';
+import { KindBadge } from '@/components/kind-badge';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,6 +40,8 @@ import {
   setTagArchived,
   type AdminTag,
 } from '@/lib/admin';
+import { kindIcon } from '@/lib/kind-icons';
+import { useTagIcons } from '@/lib/tag-icons';
 import { cn } from '@/lib/utils';
 
 function usage(tag: AdminTag): string {
@@ -71,6 +74,7 @@ function TagRow({
   onQuestionsChanged,
 }: TagRowProps) {
   const [expanded, setExpanded] = React.useState(false);
+  const tagIcons = useTagIcons();
   // Fields no longer hold a tag down: detaching them cascades and they survive
   // in the bank. Only a venue still carrying the tag blocks a delete.
   const inUse = tag.venueCount > 0;
@@ -118,7 +122,9 @@ function TagRow({
 
         <View className="flex-1 gap-1">
           <View className="flex-row items-center gap-2">
-            {/* The list is its own colour preview - no separate swatch needed. */}
+            {/* The list is its own preview - icon and colours as the Directory
+                draws them, no separate swatch needed. */}
+            <KindBadge tag={tag} icon={kindIcon(tag.slug, tagIcons[tag.slug])} size={24} />
             <TagChip label={tag.label} color={tag.color} textColor={tag.textColor} />
             <Text className="font-mono text-xs text-muted-foreground">{tag.slug}</Text>
             {tag.textColor ? (

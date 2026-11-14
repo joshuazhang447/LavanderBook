@@ -345,6 +345,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           description: string | null
+          icon: string | null
           id: string
           label: string
           slug: string
@@ -357,6 +358,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           description?: string | null
+          icon?: string | null
           id?: string
           label: string
           slug: string
@@ -369,6 +371,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           description?: string | null
+          icon?: string | null
           id?: string
           label?: string
           slug?: string
@@ -948,6 +951,10 @@ export type Database = {
         Returns: undefined
       }
       admin_reorder_tags: { Args: { p_ids: string[] }; Returns: undefined }
+      admin_set_tag_icon: {
+        Args: { p_icon: string; p_tag_id: string }
+        Returns: undefined
+      }
       admin_set_venue_contacts: {
         Args: { p_contacts: Json; p_venue_id: string }
         Returns: undefined

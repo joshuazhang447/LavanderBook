@@ -17,7 +17,7 @@ import {
   type MarkerGeometry,
   type PlaceItem,
 } from '@/lib/map-layout';
-import { kindIcon } from '@/lib/kind-icons';
+import { kindIcon, kindIconKey } from '@/lib/kind-icons';
 import { deriveTagColors } from '@/lib/tag-colors';
 import type { NearbyVenue } from '@/lib/use-nearby-venues';
 import { venueTags } from '@/lib/venue-tags';
@@ -86,8 +86,8 @@ function tagFingerprint(venue: NearbyVenue): string {
  * The kind's own symbol in white, as the Directory draws it; a star for a
  * place only visitors have added, which has a rating and no kind.
  */
-function kindGlyph(slug: string | null) {
-  return React.createElement(slug ? kindIcon(slug) : Star, {
+function kindGlyph(slug: string | null, chosen: string | null) {
+  return React.createElement(slug ? kindIcon(slug, chosen) : Star, {
     color: '#ffffff',
     size: 15,
     strokeWidth: 2.4,
@@ -96,6 +96,8 @@ function kindGlyph(slug: string | null) {
 
 type PlaceMarkerProps = {
   item: PlaceItem;
+  /** The tag's chosen icon key, from useTagIcons(). Part of the marker's key. */
+  icon: string | null;
   onPress: (venue: NearbyVenue) => void;
 };
 
@@ -104,7 +106,7 @@ type PlaceMarkerProps = {
  * (map-layout.ts). The parent keys it by its layout, so a label that moves or
  * grows remounts the marker, which is what re-captures Android's bitmap.
  */
-function PlaceMarkerImpl({ item, onPress }: PlaceMarkerProps) {
+function PlaceMarkerImpl({ item, icon, onPress }: PlaceMarkerProps) {
   const tracksViewChanges = useTracksViewChanges(CAPTURE_MS);
   const markerRef = React.useRef<React.ComponentRef<typeof Marker>>(null);
   const { venue } = item;
@@ -164,7 +166,7 @@ function PlaceMarkerImpl({ item, onPress }: PlaceMarkerProps) {
         />
         <View
           style={[styles.head, { left: geometry.pin.x, top: geometry.pin.y, backgroundColor: fill }]}>
-          {kindGlyph(tag?.slug ?? null)}
+          {kindGlyph(tag?.slug ?? null, icon)}
         </View>
 
         {geometry.label ? (
@@ -281,6 +283,7 @@ export const PlaceMarker = React.memo(
   PlaceMarkerImpl,
   (a, b) =>
     a.onPress === b.onPress &&
+    a.icon === b.icon &&
     a.item.z === b.item.z &&
     a.item.venue.id === b.item.venue.id &&
     a.item.venue.name === b.item.venue.name &&
@@ -304,12 +307,15 @@ export const GroupMarker = React.memo(
 );
 
 /**
- * The key a place's marker is mounted under: its layout as well as its id,
- * since a label that moved or grew is a different bitmap.
+ * The key a place's marker is mounted under: its layout and its icon as well
+ * as its id, since a label that moved or grew, or a tag given a new icon, is
+ * a different bitmap - and remounting is what re-captures it on Android.
  */
-export function placeMarkerKey(item: PlaceItem): string {
+export function placeMarkerKey(item: PlaceItem, icon: string | null): string {
   const label = item.label ? `${item.label.side}-${item.label.size}-${item.label.width}` : 'pin';
-  return `${item.key}:${label}:${Math.round(item.offset.x)},${Math.round(item.offset.y)}`;
+  const tag = venueTags(item.venue)[0];
+  const symbol = tag ? kindIconKey(tag.slug, icon) : 'star';
+  return `${item.key}:${label}:${Math.round(item.offset.x)},${Math.round(item.offset.y)}:${symbol}`;
 }
 
 // StyleSheet rather than NativeWind for the same snapshot-timing reason as

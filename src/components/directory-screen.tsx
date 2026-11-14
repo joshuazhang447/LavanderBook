@@ -32,6 +32,7 @@ import {
 } from '@/lib/directory';
 import { DIRECTORY_TEXT } from '@/lib/directory-text';
 import { EVERY_KIND_ICON, kindIcon } from '@/lib/kind-icons';
+import { useTagIcons } from '@/lib/tag-icons';
 import { useSkin } from '@/lib/skin';
 import { cn } from '@/lib/utils';
 
@@ -135,6 +136,8 @@ type BodyProps = {
 };
 
 function DirectoryBody({ directory, onSelect, onLocate }: BodyProps) {
+  // Each kind's chosen icon (tags.icon); its slug's default until they load.
+  const tagIcons = useTagIcons();
   if (directory.failed) {
     return (
       <Notice icon={TriangleAlert} title={DIRECTORY_TEXT.failedTitle} text={DIRECTORY_TEXT.failed}>
@@ -238,7 +241,7 @@ function DirectoryBody({ directory, onSelect, onLocate }: BodyProps) {
         )}>
         <KindBadge
           tag={kind?.tag}
-          icon={kind ? kindIcon(kind.tag.slug) : EVERY_KIND_ICON}
+          icon={kind ? kindIcon(kind.tag.slug, tagIcons[kind.tag.slug]) : EVERY_KIND_ICON}
           size={44}
         />
         <View className="flex-1 gap-0.5">
@@ -302,6 +305,7 @@ function KindRow({
   first?: boolean;
   onPress: () => void;
 }) {
+  const tagIcons = useTagIcons();
   return (
     <Pressable
       onPress={onPress}
@@ -312,7 +316,10 @@ function KindRow({
         !first && 'border-t border-border',
         Platform.select({ web: 'cursor-pointer transition-colors hover:bg-accent' })
       )}>
-      <KindBadge tag={kind?.tag} icon={kind ? kindIcon(kind.tag.slug) : EVERY_KIND_ICON} />
+      <KindBadge
+        tag={kind?.tag}
+        icon={kind ? kindIcon(kind.tag.slug, tagIcons[kind.tag.slug]) : EVERY_KIND_ICON}
+      />
       <View className="flex-1 gap-0.5">
         <Text className="font-medium text-foreground">{label}</Text>
         {description ? (

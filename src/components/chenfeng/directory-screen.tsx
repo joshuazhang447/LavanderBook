@@ -32,6 +32,7 @@ import { Text } from '@/components/ui/text';
 import { directoryLead, EVERY_KIND, ONLINE_KIND, useDirectory, type Directory } from '@/lib/directory';
 import { DIRECTORY_TEXT, ONLINE_TEXT } from '@/lib/directory-text';
 import { EVERY_KIND_ICON, kindIcon } from '@/lib/kind-icons';
+import { useTagIcons } from '@/lib/tag-icons';
 import { cn } from '@/lib/utils';
 import type { NearbyVenue } from '@/lib/use-nearby-venues';
 
@@ -156,6 +157,8 @@ function Body({
   onSelect: (venue: NearbyVenue) => void;
   onLocate: (venue: NearbyVenue) => void;
 }) {
+  // Each kind's chosen icon (tags.icon); its slug's default until they load.
+  const tagIcons = useTagIcons();
   if (directory.failed) {
     return (
       <EmptyState
@@ -255,7 +258,12 @@ function Body({
             <Row
               key={entry.tag.slug}
               leading={
-                <KindBadge tag={entry.tag} icon={kindIcon(entry.tag.slug)} size={TILE} square />
+                <KindBadge
+                  tag={entry.tag}
+                  icon={kindIcon(entry.tag.slug, tagIcons[entry.tag.slug])}
+                  size={TILE}
+                  square
+                />
               }
               leadingWidth={TILE}
               title={entry.tag.label}
@@ -309,7 +317,7 @@ function Body({
           )}>
           <KindBadge
             tag={kind?.tag}
-            icon={kind ? kindIcon(kind.tag.slug) : EVERY_KIND_ICON}
+            icon={kind ? kindIcon(kind.tag.slug, tagIcons[kind.tag.slug]) : EVERY_KIND_ICON}
             size={44}
             square
           />

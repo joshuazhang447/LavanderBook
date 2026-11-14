@@ -2,7 +2,9 @@ import { Check } from 'lucide-react-native';
 import * as React from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, View } from 'react-native';
 
+import { IconPickerDialog } from '@/components/admin/icon-picker';
 import { TagChipPreview } from '@/components/admin/tag-chip';
+import { KindBadge } from '@/components/kind-badge';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -18,7 +20,9 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Text } from '@/components/ui/text';
 import { Textarea } from '@/components/ui/textarea';
-import { createTag, updateTag, type AdminTag, type TagDraft } from '@/lib/admin';
+import { createTag, setTagIcon, updateTag, type AdminTag, type TagDraft } from '@/lib/admin';
+import { defaultKindIconKey, kindIcon, kindIconEntry, kindIconKey } from '@/lib/kind-icons';
+import { refreshTagIcons, useTagIcons, useTagIconsSupported } from '@/lib/tag-icons';
 import { isValidHex, TAG_COLOR_PRESETS } from '@/lib/tag-colors';
 import { cn } from '@/lib/utils';
 
@@ -62,6 +66,15 @@ export function TagDialog({ tag, onClose, onSaved }: TagDialogProps) {
   const [textColor, setTextColor] = React.useState(tag?.textColor ?? '#FFFFFF');
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  // The icon as stored arrives with the app's tag icons, possibly after this
+  // window opens - so the field holds only a change, and shows the stored one
+  // until there is one. Undefined: unchanged; null: back to the default.
+  const tagIcons = useTagIcons();
+  const iconsSupported = useTagIconsSupported();
+  const storedIcon = tag ? (tagIcons[tag.slug] ?? null) : null;
+  const [chosenIcon, setChosenIcon] = React.useState<string | null | undefined>(undefined);
+  const icon = chosenIcon === undefined ? storedIcon : chosenIcon;
+  const [pickingIcon, setPickingIcon] = React.useState(false);
 
   function onLabelChange(next: string) {
     setLabel(next);
@@ -75,6 +88,13 @@ export function TagDialog({ tag, onClose, onSaved }: TagDialogProps) {
   const slugValid = /^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug) && slug.length >= 2;
   const canSave =
     !busy && label.trim().length >= 2 && colorValid && textValid && (!isNew || slugValid);
+  /** The tag as the Directory would draw it, from what is typed so far. */
+  const previewTag = {
+    slug: slug || 'tag',
+    label: label.trim() || 'this tag',
+    color: colorValid ? color : '#71717A',
+    textColor: textValid ? effectiveTextColor : null,
+  };
 
   async function save() {
     if (!canSave) return;
@@ -90,8 +110,14 @@ export function TagDialog({ tag, onClose, onSaved }: TagDialogProps) {
     };
 
     try {
-      if (isNew) await createTag(slug, draft);
-      else await updateTag(tag.id, draft);
+      const id = isNew ? await createTag(slug, draft) : tag.id;
+      if (!isNew) await updateTag(tag.id, draft);
+      // After the tag itself, so a server without icons still saves the rest.
+      // A new tag's default needs no row: null already means its slug's default.
+      if (chosenIcon !== undefined && chosenIcon !== storedIcon) {
+        await setTagIcon(id, chosenIcon);
+        await refreshTagIcons();
+      }
       onSaved();
       onClose();
     } catch (cause) {
@@ -139,6 +165,44 @@ export function TagDialog({ tag, onClose, onSaved }: TagDialogProps) {
                 ? 'Lower case, dashes for spaces. Cannot be changed later.'
                 : 'Fixed once created — anything holding a reference keys off it. Retire the tag and make a new one instead.'}
             </Text>
+          </View>
+
+          {/* Which symbol the kind is drawn with, in its colours, as the
+              Directory draws it. Its window lists them all, searchable. */}
+          <View className="gap-1.5">
+            <Label nativeID="tag-icon">Icon</Label>
+            {iconsSupported === false ? (
+              <Text className="text-xs text-muted-foreground">
+                The database does not have tag icons yet. They need the newest migration (npx
+                supabase db push); until then each tag keeps the icon its slug gives it.
+              </Text>
+            ) : (
+              <View className="flex-row items-center gap-3 rounded-lg border border-border p-2.5">
+                <KindBadge
+                  tag={previewTag}
+                  icon={kindIcon(slug || 'tag', icon)}
+                  size={40}
+                />
+                <View className="flex-1">
+                  <Text className="text-sm font-medium text-foreground">
+                    {kindIconEntry(kindIconKey(slug, icon))?.label ?? 'Tag'}
+                  </Text>
+                  <Text className="text-xs text-muted-foreground">
+                    {icon === null || icon === defaultKindIconKey(slug)
+                      ? 'The default for this tag. Shown on its map pins and in the Directory.'
+                      : 'Shown on its map pins and in the Directory.'}
+                  </Text>
+                </View>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  aria-labelledby="tag-icon"
+                  disabled={busy || iconsSupported !== true}
+                  onPress={() => setPickingIcon(true)}>
+                  <Text>Change</Text>
+                </Button>
+              </View>
+            )}
           </View>
 
           <View className="gap-1.5">
@@ -247,6 +311,17 @@ export function TagDialog({ tag, onClose, onSaved }: TagDialogProps) {
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      {/* Mounted only while open, so each opening starts from what is set now. */}
+      {pickingIcon ? (
+        <IconPickerDialog
+          open
+          onOpenChange={(next) => !next && setPickingIcon(false)}
+          tag={previewTag}
+          value={icon}
+          onChoose={setChosenIcon}
+        />
+      ) : null}
     </Dialog>
   );
 }

@@ -26,6 +26,7 @@ import {
   type PlaceItem,
 } from '@/lib/map-layout';
 import { kindIcon } from '@/lib/kind-icons';
+import { useTagIcons } from '@/lib/tag-icons';
 import type { PlaceResult } from '@/lib/place-search';
 import { lookupPlace } from '@/lib/place-search';
 import { useSkin } from '@/lib/skin';
@@ -238,8 +239,8 @@ function onEnterOrSpace(action: () => void) {
  * The kind's own symbol in white, as the Directory draws it; a star for a
  * place only visitors have added, which has a rating and no kind.
  */
-function kindGlyph(slug: string | null) {
-  return React.createElement(slug ? kindIcon(slug) : Star, {
+function kindGlyph(slug: string | null, chosen: string | null) {
+  return React.createElement(slug ? kindIcon(slug, chosen) : Star, {
     color: '#ffffff',
     size: 15,
     strokeWidth: 2.4,
@@ -247,7 +248,16 @@ function kindGlyph(slug: string | null) {
 }
 
 /** One place: a pin on its spot, and its label where the layout found room. */
-function PlaceMarker({ item, onSelect }: { item: PlaceItem; onSelect: (venue: NearbyVenue) => void }) {
+function PlaceMarker({
+  item,
+  icon,
+  onSelect,
+}: {
+  item: PlaceItem;
+  /** The tag's chosen icon key, from useTagIcons(). */
+  icon: string | null;
+  onSelect: (venue: NearbyVenue) => void;
+}) {
   const shown = useShown();
   const { venue } = item;
   const geometry = placeGeometry(item);
@@ -290,7 +300,7 @@ function PlaceMarker({ item, onSelect }: { item: PlaceItem; onSelect: (venue: Ne
           }}
         />
         <div style={{ ...headStyle, left: geometry.pin.x, top: geometry.pin.y, backgroundColor: fill }}>
-          {kindGlyph(tag?.slug ?? null)}
+          {kindGlyph(tag?.slug ?? null, icon)}
         </div>
 
         {geometry.label ? (
@@ -381,6 +391,7 @@ type PlaceMarkersProps = {
  */
 function PlaceMarkers({ venues, onSelect, flyingRef }: PlaceMarkersProps) {
   const map = useMap();
+  const tagIcons = useTagIcons();
   const [zoom, setZoom] = React.useState<number | null>(null);
   // A group fanned out because zooming could not part it - for the zoom it
   // was opened at only: any zoom since lays the map out afresh.
@@ -461,7 +472,12 @@ function PlaceMarkers({ venues, onSelect, flyingRef }: PlaceMarkersProps) {
     item.kind === 'group' ? (
       <GroupMarker key={item.key} item={item} onPress={pressGroup} />
     ) : (
-      <PlaceMarker key={item.key} item={item} onSelect={onSelect} />
+      <PlaceMarker
+        key={item.key}
+        item={item}
+        icon={tagIcons[venueTags(item.venue)[0]?.slug ?? ""] ?? null}
+        onSelect={onSelect}
+      />
     )
   );
 }
