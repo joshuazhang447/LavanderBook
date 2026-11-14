@@ -49,13 +49,6 @@ const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY;
  */
 const mapId = process.env.EXPO_PUBLIC_GOOGLE_MAPS_MAP_ID || 'DEMO_MAP_ID';
 
-/**
- * OAU's warm base map (oau-style-guide.md, section 10) is a Map ID's style,
- * set in the Google Cloud console, not in code. Until one is set the map keeps
- * the ordinary Map ID and OAU's stickers carry the look.
- */
-const oauMapId = process.env.EXPO_PUBLIC_GOOGLE_MAPS_MAP_ID_OAU || null;
-
 /** Ground resolution at zoom 0 on the equator, in metres per pixel. */
 const EQUATOR_METERS_PER_PIXEL = 156543.03392;
 
@@ -999,8 +992,6 @@ export function VenueMap({
 }: VenueMapProps) {
   const programmaticRef = React.useRef(false);
   const flyingRef = React.useRef(false);
-  // A Map ID cannot change on a live map; switching skin remounts it (keyed below).
-  const shownMapId = useSkin().skin === 'oau' && oauMapId ? oauMapId : mapId;
   // The span last handed to onSpanChanged.
   const reportedSpanRef = React.useRef<number | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
@@ -1082,9 +1073,8 @@ export function VenueMap({
     <View className="flex-1">
       <APIProvider apiKey={apiKey}>
         <Map
-          key={shownMapId}
           style={{ width: '100%', height: '100%' }}
-          mapId={shownMapId}
+          mapId={mapId}
           defaultCenter={{ lat: center.latitude, lng: center.longitude }}
           defaultZoom={zoomForRadius(center.latitude, initialRadiusMeters)}
           // A raster map rounds every zoom to a whole level unless told not to:

@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Dimensions, Platform, StyleSheet } from 'react-native';
+import { Dimensions, StyleSheet } from 'react-native';
 import MapView from 'react-native-maps';
 
 import { SearchMarker } from '@/components/search-marker';
@@ -11,7 +11,6 @@ import {
   zoomOfRegion,
   type GroupItem,
 } from '@/lib/map-layout';
-import { OAU_MAP_STYLE } from '@/lib/oau-map-style';
 import type { PlaceResult } from '@/lib/place-search';
 import { useSkin } from '@/lib/skin';
 import { useTagIcons } from '@/lib/tag-icons';
@@ -126,8 +125,8 @@ export function VenueMap({
   bottomInset = 0,
 }: VenueMapProps) {
   const mapRef = React.useRef<MapView>(null);
-  // OAU draws its own pins and, on Android, its own base map. A marker is a
-  // bitmap Android captures once, so the skin is part of its key.
+  // OAU draws its own pins on Google's map as it is. A marker is a bitmap
+  // Android captures once, so the skin is part of its key.
   const oau = useSkin().skin === 'oau';
   const skinKey = oau ? 'oau' : 'plain';
   const [ready, setReady] = React.useState(false);
@@ -247,7 +246,6 @@ export function VenueMap({
     <MapView
       ref={mapRef}
       style={StyleSheet.absoluteFill}
-      customMapStyle={oau && Platform.OS === 'android' ? OAU_MAP_STYLE : undefined}
       initialRegion={initialRegion}
       // Complete, not onRegionChange: the latter fires continuously through the
       // whole gesture and would fire a query per frame.
