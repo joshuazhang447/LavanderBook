@@ -84,8 +84,6 @@ export default function MapScreen() {
   // Bumped to re-run the camera move even when the target has not changed.
   const [recenterToken, setRecenterToken] = React.useState(0);
   const [refreshing, setRefreshing] = React.useState(false);
-  // Boxes the user closed because they overlapped something. Session-only.
-  const [dismissed, setDismissed] = React.useState<Set<string>>(new Set());
   // The place picked out of the search box, pinned on the map until cleared.
   // Not a NearbyVenue: nobody has reviewed it yet, and it may never be reviewed.
   const [searchResult, setSearchResult] = React.useState<PlaceResult | null>(null);
@@ -141,11 +139,6 @@ export default function MapScreen() {
     FOLLOW_REFETCH_METERS
   );
 
-  // Stable identity, or React.memo on the marker would hold a stale closure.
-  const dismissVenue = React.useCallback((venueId: string) => {
-    setDismissed((previous) => new Set(previous).add(venueId));
-  }, []);
-
   const refreshTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   React.useEffect(
     () => () => {
@@ -156,10 +149,6 @@ export default function MapScreen() {
 
   const refresh = React.useCallback(() => {
     setSavedCount((count) => count + 1);
-    // Bring back every box closed with its x. Refresh means "show me what is
-    // here again", and dismissing is otherwise one-way - there is no undo.
-    // Returning previous when it is already empty lets React skip the render.
-    setDismissed((previous) => (previous.size === 0 ? previous : new Set()));
     setRefreshing(true);
     if (refreshTimer.current) clearTimeout(refreshTimer.current);
     refreshTimer.current = setTimeout(() => setRefreshing(false), REFRESH_SPIN_MS);
@@ -217,11 +206,7 @@ export default function MapScreen() {
     };
   }, [goTo, following, followAnchor, pannedRegion, span]);
 
-  const { venues: allVenues } = useNearbyVenues(fetchRegion, String(savedCount));
-  const venues = React.useMemo(
-    () => (dismissed.size === 0 ? allVenues : allVenues.filter((v) => !dismissed.has(v.id))),
-    [allVenues, dismissed]
-  );
+  const { venues } = useNearbyVenues(fetchRegion, String(savedCount));
 
   // Searching for somewhere that already has reviews draws its rating box, and
   // a pin for the same point would sit on top of it - two labels, one place.
@@ -335,7 +320,6 @@ export default function MapScreen() {
           }}
           onSelectVenue={setViewingVenue}
           onDismiss={() => setSelected(null)}
-          onDismissVenue={dismissVenue}
           searchResult={searchPin}
           onSelectSearchResult={(place) => {
             // No venue id: nobody has reviewed this place yet, so the sheet

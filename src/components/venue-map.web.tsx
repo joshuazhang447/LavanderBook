@@ -5,10 +5,27 @@
 /// <reference types="google.maps" />
 
 import { AdvancedMarker, APIProvider, Map, useMap } from '@vis.gl/react-google-maps';
+import { Star } from 'lucide-react-native';
 import * as React from 'react';
 import { Pressable, View } from 'react-native';
 
 import { Text } from '@/components/ui/text';
+import {
+  groupGeometry,
+  groupSize,
+  groupTarget,
+  layoutMarkers,
+  layoutZoom,
+  PIN_SIZE,
+  PIN_TAIL,
+  placeGeometry,
+  quoteText,
+  ratingText,
+  spokenPlace,
+  type GroupItem,
+  type PlaceItem,
+} from '@/lib/map-layout';
+import { kindIcon } from '@/lib/kind-icons';
 import type { PlaceResult } from '@/lib/place-search';
 import { lookupPlace } from '@/lib/place-search';
 import { useSkin } from '@/lib/skin';
@@ -48,67 +65,18 @@ function zoomForRadius(latitude: number, radiusMeters: number): number {
 }
 
 // ---------------------------------------------------------------------------
-// Rating box
+// Pins, labels and groups
 //
-// Deliberately a second implementation of venue-marker.tsx rather than a shared
-// one. That file imports react-native-maps, which has no web build, and its
-// shape is dictated by an Android constraint that does not exist here: a marker
-// view is rasterised to a bitmap once, which is why native splits the box and
-// its close button into two markers and draws stars as text glyphs. On the web
-// the marker is live DOM, so the close button can simply live inside the box.
-// The numbers below are copied from that file on purpose - the two platforms
-// are meant to look identical.
+// The website's twin of venue-marker.tsx. Where things go is shared
+// (map-layout.ts); the drawing here is plain DOM with inline styles, because
+// AdvancedMarker portals its children into a div of its own, outside the
+// react-native-web tree, where className would never be resolved. The numbers
+// match that file: the two are meant to look the same.
 // ---------------------------------------------------------------------------
 
-const BOX_WIDTH = 168;
-/** Two lines: the name and its chip, then "Listed by LavenderBook". */
-const BOX_HEIGHT = 44;
-/** Three: the name and its chip, the rating, the latest quote. */
-const REVIEWED_BOX_HEIGHT = 58;
-const SNIPPET_CHARS = 40;
-/** Clearance above the point, so the box does not sit on Google's own label. */
+/** Clearance above the point for the search pin, so it does not sit on Google's own label. */
 const LIFT = 35;
-const CLOSE_SIZE = 26;
 const ENTER_MS = 160;
-
-/** Matches venue-marker.tsx: earned stars only, with a half as a literal glyph. */
-function starGlyphs(average: number): string {
-  const rounded = Math.round(average * 2) / 2;
-  const full = Math.floor(rounded);
-  return '★'.repeat(full) + (rounded - full === 0.5 ? '½' : '');
-}
-
-function summarise(venue: NearbyVenue): string {
-  const body = venue.latest_review_body?.trim();
-  if (body) {
-    return body.length > SNIPPET_CHARS ? `${body.slice(0, SNIPPET_CHARS).trimEnd()}...` : body;
-  }
-  // Tagged but unreviewed: it is on the map because we listed it, so say that
-  // rather than counting to zero. The tag itself is on the line above.
-  if (venue.review_count === 0) return 'Listed by LavenderBook';
-  return venue.review_count === 1 ? '1 review' : `${venue.review_count} reviews`;
-}
-
-// Plain DOM and inline styles, not NativeWind: AdvancedMarker portals its
-// children into a div it owns, outside the react-native-web tree, so className
-// would never be resolved.
-const boxStyle: React.CSSProperties = {
-  position: 'relative',
-  boxSizing: 'border-box',
-  width: BOX_WIDTH,
-  display: 'flex',
-  flexDirection: 'column',
-  justifyContent: 'center',
-  padding: '0 10px',
-  borderRadius: 10,
-  border: '1px solid #e5e5e5',
-  // Solid, because markers cannot occlude Google's own place labels; a fill
-  // and shadow is what keeps the box readable where they overlap.
-  background: '#ffffff',
-  boxShadow: '0 2px 4px rgba(0,0,0,0.18)',
-  cursor: 'pointer',
-  userSelect: 'none',
-};
 
 const lineStyle: React.CSSProperties = {
   whiteSpace: 'nowrap',
@@ -116,27 +84,109 @@ const lineStyle: React.CSSProperties = {
   textOverflow: 'ellipsis',
 };
 
-const starsStyle: React.CSSProperties = {
-  ...lineStyle,
-  fontSize: 13,
-  lineHeight: '16px',
-  color: '#f59e0b',
-  fontWeight: 600,
+/**
+ * False for the first frame, so a marker fades in rather than popping.
+ * Reanimated does not reach into the marker's portal.
+ */
+function useShown(): boolean {
+  const [shown, setShown] = React.useState(false);
+  React.useEffect(() => {
+    const frame = requestAnimationFrame(() => setShown(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+  return shown;
+}
+
+// The drawing ignores the pointer and its pin and label take it, so the empty
+// corners of a marker's box never swallow a press meant for the map.
+const markerStyle: React.CSSProperties = {
+  position: 'relative',
+  pointerEvents: 'none',
+  cursor: 'pointer',
+  userSelect: 'none',
+  transition: `opacity ${ENTER_MS}ms ease-out`,
 };
 
-const snippetStyle: React.CSSProperties = {
+// The pin's head, a white-rimmed disc with the kind's symbol in it, and its
+// point: a square turned on its corner behind the head, rimmed on its two
+// lower sides so the rim runs on round the tip.
+const headStyle: React.CSSProperties = {
+  position: 'absolute',
+  boxSizing: 'border-box',
+  width: PIN_SIZE,
+  height: PIN_SIZE,
+  borderRadius: PIN_SIZE / 2,
+  border: '2px solid #ffffff',
+  // A light from above: the top of the disc a shade brighter than its foot.
+  backgroundImage: 'linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0) 60%)',
+  boxShadow: '0 2px 5px rgba(0,0,0,0.28)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  pointerEvents: 'auto',
+};
+
+const TIP_SIDE = 10;
+const tipStyle: React.CSSProperties = {
+  position: 'absolute',
+  boxSizing: 'border-box',
+  width: TIP_SIDE,
+  height: TIP_SIDE,
+  borderRight: '2px solid #ffffff',
+  borderBottom: '2px solid #ffffff',
+  borderBottomRightRadius: 2,
+  transform: 'rotate(45deg)',
+  boxShadow: '2px 2px 3px rgba(0,0,0,0.18)',
+  pointerEvents: 'auto',
+};
+
+/** A reviewed place nobody has tagged: somewhere visitors added, not one we list. */
+const UNTAGGED_PIN = '#475569';
+
+// White on every theme, like the map under it, so a chip always takes its
+// light-mode colours.
+const labelStyle: React.CSSProperties = {
+  position: 'absolute',
+  boxSizing: 'border-box',
+  display: 'flex',
+  flexDirection: 'column',
+  justifyContent: 'center',
+  padding: '0 8px',
+  borderRadius: 8,
+  border: '1px solid #e5e5e5',
+  background: '#ffffff',
+  boxShadow: '0 1px 4px rgba(0,0,0,0.18)',
+  pointerEvents: 'auto',
+};
+
+const nameStyle: React.CSSProperties = {
   ...lineStyle,
+  fontSize: 12,
+  lineHeight: '15px',
+  fontWeight: 600,
+  color: '#0a0a0a',
+};
+
+const metaStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 4,
+  minWidth: 0,
+  height: 14,
+};
+
+const ratingStyle: React.CSSProperties = {
+  ...lineStyle,
+  flexShrink: 0,
   fontSize: 11,
   lineHeight: '14px',
   color: '#525252',
+  fontVariantNumeric: 'tabular-nums',
 };
 
-// The box is always white, whatever the app's theme, so the chip always takes
-// its light-mode colours - same as the native marker.
 const chipStyle: React.CSSProperties = {
   ...lineStyle,
-  // Shrinks below its own words and ellipsises, down to 84px, so a long tag
-  // cannot take the whole line from the name. The full label is in the sheet.
+  // Shrinks below its own words, down to nothing, before the rating does.
   flexShrink: 1,
   minWidth: 0,
   maxWidth: 84,
@@ -147,122 +197,272 @@ const chipStyle: React.CSSProperties = {
   fontWeight: 600,
 };
 
-const closeStyle: React.CSSProperties = {
+const quoteStyle: React.CSSProperties = {
+  ...lineStyle,
+  fontSize: 11,
+  lineHeight: '14px',
+  color: '#525252',
+  fontStyle: 'italic',
+};
+
+// A dark disc in a soft halo of itself, the way map apps draw a cluster: it
+// reads as "several", where one more disc would read as one more place.
+const groupStyle: React.CSSProperties = {
   position: 'absolute',
-  // Centred on the box's top-right corner, matching the native close marker.
-  top: -CLOSE_SIZE / 2,
-  right: -CLOSE_SIZE / 2,
-  width: CLOSE_SIZE,
-  height: CLOSE_SIZE,
+  boxSizing: 'border-box',
+  border: '2px solid #ffffff',
+  background: '#262626',
+  backgroundImage: 'linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0) 60%)',
+  boxShadow: '0 0 0 4px rgba(38,38,38,0.2), 0 2px 6px rgba(0,0,0,0.3)',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  padding: 0,
-  borderRadius: CLOSE_SIZE / 2,
-  border: '1px solid #e5e5e5',
-  background: '#ffffff',
-  boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
+  color: '#ffffff',
   fontSize: 13,
   lineHeight: '16px',
   fontWeight: 700,
-  color: '#525252',
-  cursor: 'pointer',
+  fontVariantNumeric: 'tabular-nums',
+  pointerEvents: 'auto',
 };
 
-type VenueBoxProps = {
-  venue: NearbyVenue;
-  onSelect: (venue: NearbyVenue) => void;
-  onDismiss: (venueId: string) => void;
-};
+function onEnterOrSpace(action: () => void) {
+  return (event: React.KeyboardEvent) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      action();
+    }
+  };
+}
 
-function VenueBox({ venue, onSelect, onDismiss }: VenueBoxProps) {
-  // Reanimated does not reach into the marker's portal, so the entrance is a
-  // plain opacity transition flipped on the frame after mount.
-  const [shown, setShown] = React.useState(false);
-  React.useEffect(() => {
-    const frame = requestAnimationFrame(() => setShown(true));
-    return () => cancelAnimationFrame(frame);
-  }, []);
+/**
+ * The kind's own symbol in white, as the Directory draws it; a star for a
+ * place only visitors have added, which has a rating and no kind.
+ */
+function kindGlyph(slug: string | null) {
+  return React.createElement(slug ? kindIcon(slug) : Star, {
+    color: '#ffffff',
+    size: 15,
+    strokeWidth: 2.4,
+  });
+}
 
-  const average = Number(venue.avg_stars ?? 0);
-  // `avg_stars ?? 0` would draw a venue nobody has reviewed as "0.0" - a rating
-  // of zero out of five, about a place we listed ourselves. An absent rating has
-  // to look absent. Same branch as venue-marker.tsx.
-  const unreviewed = venue.review_count === 0;
+/** One place: a pin on its spot, and its label where the layout found room. */
+function PlaceMarker({ item, onSelect }: { item: PlaceItem; onSelect: (venue: NearbyVenue) => void }) {
+  const shown = useShown();
+  const { venue } = item;
+  const geometry = placeGeometry(item);
   const tag = venueTags(venue)[0] ?? null;
-  const tagColors = deriveTagColors(tag?.color ?? '#e5e5e5', tag?.textColor).light;
+  const colors = tag ? deriveTagColors(tag.color, tag.textColor).light : null;
+  const fill = colors?.foreground ?? UNTAGGED_PIN;
+  const rating = ratingText(venue);
+  const quote = item.label?.size === 'full' ? quoteText(venue) : null;
+  const select = () => onSelect(venue);
 
   return (
     <AdvancedMarker
       position={{ lat: venue.lat, lng: venue.lng }}
-      // Without this the library leaves pointer-events 'none' on the content
-      // div and neither the box nor its close button can be clicked.
+      // Without this the library leaves pointer-events 'none' on its own div.
       clickable
-      // The default anchor is the content's bottom centre; the extra -LIFT is
-      // what native expresses as anchor/centerOffset.
-      anchorLeft="-50%"
-      anchorTop={`calc(-100% - ${LIFT}px)`}
-      // Southern markers draw over northern ones, the usual map-label look.
-      //
-      // Offset from the pole rather than negated as on native. react-native-maps
-      // treats zIndex as an ordering among markers, so a negative is harmless
-      // there; here it becomes a real CSS z-index, and a negative one drops the
-      // box behind the map's overlay panes, where it renders but cannot be
-      // clicked. Subtracting from 90 keeps the same ordering, always positive.
-      zIndex={Math.round((90 - venue.lat) * 1000)}>
+      anchorLeft={`${-geometry.anchor.x}px`}
+      anchorTop={`${-geometry.anchor.y}px`}
+      // Positive, always: a negative z-index drops a marker behind the map's
+      // overlay panes, where it draws but cannot be pressed.
+      zIndex={item.z}>
       <div
         role="button"
         tabIndex={0}
-        aria-label={
-          unreviewed
-            ? `${venue.name}, listed, not yet reviewed`
-            : `${venue.name}, ${average.toFixed(1)} of 5`
-        }
-        onClick={() => onSelect(venue)}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') onSelect(venue);
-        }}
-        style={{
-          ...boxStyle,
-          height: unreviewed ? BOX_HEIGHT : REVIEWED_BOX_HEIGHT,
-          opacity: shown ? 1 : 0,
-          transition: `opacity ${ENTER_MS}ms ease-out`,
-        }}>
-        {/* The name always comes first: a box of stars alone could be any of
-            the places around it. It shrinks; the chip beside it does not get
-            pushed out, because the tag is often why the place is on the map.
-            One chip even when a place carries several; the sheet lists them. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <div style={{ ...starsStyle, color: '#0a0a0a', flexGrow: 1, flexShrink: 1, minWidth: 0 }}>
-            {venue.name}
-          </div>
-          {tag ? (
-            <span
-              style={{ ...chipStyle, background: tagColors.background, color: tagColors.foreground }}>
-              {tag.label}
-            </span>
-          ) : null}
-        </div>
-        {unreviewed ? null : (
-          <div style={starsStyle}>
-            {starGlyphs(average)} <span style={{ color: '#0a0a0a' }}>{average.toFixed(1)}</span>
-          </div>
-        )}
-        <div style={snippetStyle}>{summarise(venue)}</div>
-
-        <button
-          type="button"
-          aria-label={`Hide ${venue.name}`}
-          // Or the box's own click fires too and the sheet opens as it closes.
-          onClick={(event) => {
-            event.stopPropagation();
-            onDismiss(venue.id);
+        aria-label={spokenPlace(venue)}
+        title={venue.name}
+        onClick={select}
+        onKeyDown={onEnterOrSpace(select)}
+        style={{ ...markerStyle, width: geometry.width, height: geometry.height, opacity: shown ? 1 : 0 }}>
+        {/* Filled in the tag's strong colour, with its symbol: Google's own
+            place icons are pale, and ours have to stand out from them. The
+            point first, so the head covers its top half. */}
+        <div
+          style={{
+            ...tipStyle,
+            left: geometry.pin.x + (PIN_SIZE - TIP_SIDE) / 2,
+            // Its bottom corner lands on the tip: the turned square reaches
+            // half its diagonal below its centre.
+            top: geometry.pin.y + PIN_SIZE + PIN_TAIL - TIP_SIDE / 2 - (TIP_SIDE * Math.SQRT2) / 2,
+            backgroundColor: fill,
           }}
-          style={closeStyle}>
-          x
-        </button>
+        />
+        <div style={{ ...headStyle, left: geometry.pin.x, top: geometry.pin.y, backgroundColor: fill }}>
+          {kindGlyph(tag?.slug ?? null)}
+        </div>
+
+        {geometry.label ? (
+          <div
+            style={{
+              ...labelStyle,
+              left: geometry.label.x,
+              top: geometry.label.y,
+              width: geometry.label.width,
+              height: geometry.label.height,
+            }}>
+            <div style={nameStyle}>{venue.name}</div>
+            {rating || tag ? (
+              <div style={metaStyle}>
+                {rating ? (
+                  <span style={ratingStyle}>
+                    <span style={{ color: '#f59e0b' }}>★</span>
+                    {rating.slice(1)}
+                  </span>
+                ) : null}
+                {tag && colors ? (
+                  <span style={{ ...chipStyle, background: colors.background, color: colors.foreground }}>
+                    {tag.label}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+            {quote ? <div style={quoteStyle}>“{quote}”</div> : null}
+          </div>
+        ) : null}
       </div>
     </AdvancedMarker>
+  );
+}
+
+/** Places whose pins would touch, as one count. Pressed, it zooms in or fans out. */
+function GroupMarker({ item, onPress }: { item: GroupItem; onPress: (group: GroupItem) => void }) {
+  const shown = useShown();
+  const geometry = groupGeometry(item.venues.length);
+  const size = groupSize(item.venues.length);
+  const press = () => onPress(item);
+  const names = item.venues.map((venue) => venue.name);
+
+  return (
+    <AdvancedMarker
+      position={{ lat: item.lat, lng: item.lng }}
+      clickable
+      anchorLeft={`${-geometry.anchor.x}px`}
+      anchorTop={`${-geometry.anchor.y}px`}
+      zIndex={item.z}>
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label={`${names.length} places here: ${
+          names.length > 12 ? `${names.slice(0, 12).join(', ')}, and ${names.length - 12} more` : names.join(', ')
+        }. Shows them apart.`}
+        // Hovering names them, so a group need not be opened to be read.
+        title={names.length > 12 ? `${names.slice(0, 12).join('\n')}\nand ${names.length - 12} more` : names.join('\n')}
+        onClick={press}
+        onKeyDown={onEnterOrSpace(press)}
+        style={{ ...markerStyle, width: geometry.width, height: geometry.height, opacity: shown ? 1 : 0 }}>
+        <div
+          style={{
+            ...groupStyle,
+            left: geometry.pin.x,
+            top: geometry.pin.y,
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+          }}>
+          {names.length}
+        </div>
+      </div>
+    </AdvancedMarker>
+  );
+}
+
+type PlaceMarkersProps = {
+  venues: NearbyVenue[];
+  onSelect: (venue: NearbyVenue) => void;
+  /** Shared with the camera: true while a fly steps the map, when its idles mean nothing yet. */
+  flyingRef: React.RefObject<boolean>;
+};
+
+/**
+ * Every place on the map, laid out for the current zoom (map-layout.ts):
+ * pins, labels where they fit, and groups where pins would touch.
+ */
+function PlaceMarkers({ venues, onSelect, flyingRef }: PlaceMarkersProps) {
+  const map = useMap();
+  const [zoom, setZoom] = React.useState<number | null>(null);
+  // A group fanned out because zooming could not part it - for the zoom it
+  // was opened at only: any zoom since lays the map out afresh.
+  const [spread, setSpread] = React.useState<{ key: string; zoom: number } | null>(null);
+  const cancelFlightRef = React.useRef<(() => void) | null>(null);
+  // When a group was last pressed: the map hears the same press as a click.
+  const pressedAtRef = React.useRef(0);
+
+  React.useEffect(() => {
+    if (!map) return;
+    let frame = 0;
+    const read = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const current = map.getZoom();
+        if (current !== undefined) setZoom(layoutZoom(current));
+      });
+    };
+    read();
+    const zoomed = map.addListener('zoom_changed', read);
+    // Pressing the map anywhere else closes a fanned-out group.
+    const clicked = map.addListener('click', () => {
+      if (performance.now() - pressedAtRef.current > 300) setSpread(null);
+    });
+    const box = map.getDiv();
+    // Taking hold of the map ends a group's fly where it is.
+    const takeOver = () => {
+      if (!cancelFlightRef.current) return;
+      cancelFlightRef.current();
+      cancelFlightRef.current = null;
+      flyingRef.current = false;
+    };
+    box.addEventListener('pointerdown', takeOver);
+    box.addEventListener('wheel', takeOver, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      zoomed.remove();
+      clicked.remove();
+      box.removeEventListener('pointerdown', takeOver);
+      box.removeEventListener('wheel', takeOver);
+      cancelFlightRef.current?.();
+      cancelFlightRef.current = null;
+    };
+  }, [map, flyingRef]);
+
+  const open = spread && spread.zoom === zoom ? spread.key : null;
+  const items = React.useMemo(
+    () => (zoom === null ? [] : layoutMarkers(venues, zoom, open)),
+    [venues, zoom, open]
+  );
+
+  const pressGroup = React.useCallback(
+    (group: GroupItem) => {
+      if (!map || zoom === null) return;
+      pressedAtRef.current = performance.now();
+      const box = map.getDiv();
+      const target = groupTarget(group.venues, map.getZoom() ?? zoom, {
+        width: box.clientWidth,
+        height: box.clientHeight,
+      });
+      if (!target) {
+        setSpread({ key: group.key, zoom });
+        return;
+      }
+      // Not the camera's own move: the map lands where the person asked to
+      // look, so its idle counts as their pan, and following stops.
+      cancelFlightRef.current?.();
+      flyingRef.current = true;
+      cancelFlightRef.current = flyTo(map, target, target.zoom, () => {
+        cancelFlightRef.current = null;
+        flyingRef.current = false;
+      });
+    },
+    [map, zoom, flyingRef]
+  );
+
+  return items.map((item) =>
+    item.kind === 'group' ? (
+      <GroupMarker key={item.key} item={item} onPress={pressGroup} />
+    ) : (
+      <PlaceMarker key={item.key} item={item} onSelect={onSelect} />
+    )
   );
 }
 
@@ -659,7 +859,6 @@ type VenueMapProps = {
   onDismiss: () => void;
   venues: NearbyVenue[];
   onSelectVenue: (venue: NearbyVenue) => void;
-  onDismissVenue: (venueId: string) => void;
   /** The place the user searched for, pinned until they clear the box. */
   searchResult: PlaceResult | null;
   onSelectSearchResult: (place: PlaceResult) => void;
@@ -698,7 +897,6 @@ export function VenueMap({
   onDismiss,
   venues,
   onSelectVenue,
-  onDismissVenue,
   searchResult,
   onSelectSearchResult,
   followCenter,
@@ -832,7 +1030,9 @@ export function VenueMap({
               reportedSpanRef.current = region.latitudeDelta;
               onSpanChanged?.(region);
             }
-            if (programmaticRef.current) return;
+            // Nor mid-fly: a group's fly is the person's own move, reported
+            // once it lands.
+            if (programmaticRef.current || flyingRef.current) return;
             onUserPannedTo(region);
           }}
           // Strip Google's default chrome - this is our UI, not theirs.
@@ -851,14 +1051,7 @@ export function VenueMap({
             flyingRef={flyingRef}
           />
 
-          {venues.map((venue) => (
-            <VenueBox
-              key={venue.id}
-              venue={venue}
-              onSelect={onSelectVenue}
-              onDismiss={onDismissVenue}
-            />
-          ))}
+          <PlaceMarkers venues={venues} onSelect={onSelectVenue} flyingRef={flyingRef} />
 
           {/* Keyed by place: a new search remounts the pin rather than moving
               it, which is what replays the entrance fade. */}

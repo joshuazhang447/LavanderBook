@@ -34,14 +34,20 @@ export type MapRegion = {
 const METERS_PER_DEGREE_LAT = 111320;
 /** Fetch slightly past the edges so panning does not reveal empty space first. */
 const OVERSCAN = 1.25;
-/** Zoomed right out, stop asking for the whole country. */
-const MAX_RADIUS_METERS = 20000;
 /**
- * Past this the boxes are unreadable clutter rather than information, so they
- * are not drawn - and the query is skipped rather than thrown away.
- * ~0.05 degrees of latitude is roughly 5.5km of map on screen.
+ * Up to here the radius follows the view in grid squares, as it always has.
+ * Further out it doubles in steps instead: zooming out a little asks for
+ * nothing new, and the request says no more about the view than its scale.
  */
-const MAX_VISIBLE_LAT_DELTA = 0.05;
+const STEPPED_FROM_METERS = 20000;
+/** Half the way round the world: everything. */
+const MAX_RADIUS_METERS = 20_000_000;
+/**
+ * The most places one request brings, nearest first. Zoomed out they are
+ * drawn as groups (map-layout.ts), and a group's count is only true if the
+ * places in it all came: the server's default of 60 counted a city short.
+ */
+const MAX_PLACES = 500;
 
 /** Stable so a hidden map does not hand back a new array every render. */
 const NONE: NearbyVenue[] = [];
@@ -67,15 +73,22 @@ function radiusForRegion(region: MapRegion): number {
 function queryForRegion(region: MapRegion): { lat: number; lng: number; radius: number } {
   const centre = snapToGrid(region);
   const needed = Math.min(radiusForRegion(region) + GRID_PADDING_METERS, MAX_RADIUS_METERS);
+  const radius =
+    needed <= STEPPED_FROM_METERS
+      ? Math.ceil(needed / GRID_METERS) * GRID_METERS
+      : STEPPED_FROM_METERS * 2 ** Math.ceil(Math.log2(needed / STEPPED_FROM_METERS));
   return {
     lat: centre.latitude,
     lng: centre.longitude,
-    radius: Math.min(Math.ceil(needed / GRID_METERS) * GRID_METERS, MAX_RADIUS_METERS),
+    radius: Math.min(radius, MAX_RADIUS_METERS),
   };
 }
 
 /**
- * Reviewed venues inside the visible map region.
+ * Reviewed and listed venues inside the visible map region, at any zoom: the
+ * map draws them as pins close in and as groups further out (map-layout.ts).
+ * It used to stop at about 5 km of map, when every place was a card and a
+ * city's worth of cards was a pile; zoomed out, the map was simply empty.
  *
  * Refetches when the region settles into a different grid square or zoom step,
  * when `refreshKey` changes - it folds together posting a review and walking
@@ -88,12 +101,11 @@ function queryForRegion(region: MapRegion): { lat: number; lng: number; radius: 
  */
 export function useNearbyVenues(region: MapRegion | null, refreshKey: string) {
   const [venues, setVenues] = React.useState<NearbyVenue[]>([]);
-  const zoomedOut = !region || region.latitudeDelta > MAX_VISIBLE_LAT_DELTA;
   // Bumped by the Realtime subscription, which must not itself depend on the
   // region or every pan would tear the channel down and rebuild it.
   const [liveKey, setLiveKey] = React.useState(0);
 
-  const query = region && !zoomedOut ? queryForRegion(region) : null;
+  const query = region ? queryForRegion(region) : null;
   // A string, so a pan that stays inside the same square and zoom step is the
   // same dependency and fires nothing.
   const queryKey = query ? `${query.lat},${query.lng},${query.radius}` : null;
@@ -107,7 +119,12 @@ export function useNearbyVenues(region: MapRegion | null, refreshKey: string) {
     // publicSupabase, not supabase: this carries a place, and must not carry
     // the account with it.
     publicSupabase
-      .rpc('venues_near', { p_lat: lat, p_lng: lng, p_radius_meters: radius })
+      .rpc('venues_near', {
+        p_lat: lat,
+        p_lng: lng,
+        p_radius_meters: radius,
+        p_limit: MAX_PLACES,
+      })
       .then(({ data }) => {
         if (active) setVenues(data ?? []);
       });
@@ -136,5 +153,5 @@ export function useNearbyVenues(region: MapRegion | null, refreshKey: string) {
     };
   }, []);
 
-  return { venues: zoomedOut ? NONE : venues };
+  return { venues: region ? venues : NONE };
 }

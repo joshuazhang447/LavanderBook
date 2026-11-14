@@ -1,9 +1,16 @@
 import * as React from 'react';
-import { StyleSheet } from 'react-native';
+import { Dimensions, StyleSheet } from 'react-native';
 import MapView from 'react-native-maps';
 
 import { SearchMarker } from '@/components/search-marker';
-import { VenueCloseMarker, VenueMarker } from '@/components/venue-marker';
+import { GroupMarker, PlaceMarker, placeMarkerKey } from '@/components/venue-marker';
+import {
+  groupTarget,
+  layoutMarkers,
+  layoutZoom,
+  zoomOfRegion,
+  type GroupItem,
+} from '@/lib/map-layout';
 import type { PlaceResult } from '@/lib/place-search';
 import type { Coords } from '@/lib/use-location';
 import {
@@ -52,10 +59,9 @@ type VenueMapProps = {
   onSelectPoi: (poi: SelectedPoi) => void;
   /** Tapping bare map, away from any place label. */
   onDismiss: () => void;
-  /** Reviewed venues nearby, drawn as rating boxes above their point. */
+  /** Places nearby: a pin each, labels where they fit, groups where pins touch. */
   venues: NearbyVenue[];
   onSelectVenue: (venue: NearbyVenue) => void;
-  onDismissVenue: (venueId: string) => void;
   /** The place the user searched for, pinned until they clear the box. */
   searchResult: PlaceResult | null;
   onSelectSearchResult: (place: PlaceResult) => void;
@@ -104,7 +110,6 @@ export function VenueMap({
   onDismiss,
   venues,
   onSelectVenue,
-  onDismissVenue,
   searchResult,
   onSelectSearchResult,
   followCenter,
@@ -139,6 +144,47 @@ export function VenueMap({
   // new camera move cancels the one in flight, and would strand the zoom half
   // way down.
   const zoomingUntilRef = React.useRef(0);
+
+  // The map's size in points, for the zoom the layout is worked out at and
+  // for how far a group may zoom in and still fit.
+  const sizeRef = React.useRef({
+    width: Dimensions.get('window').width,
+    height: Dimensions.get('window').height,
+  });
+  // Where the camera is, exactly, as of the last move that settled.
+  const regionRef = React.useRef<MapRegion>(initialRegion);
+  const [zoom, setZoom] = React.useState(() =>
+    layoutZoom(zoomOfRegion(initialRegion.longitudeDelta, Dimensions.get('window').width))
+  );
+  // A group fanned out because zooming could not part it - for the zoom it
+  // was opened at only: any zoom since lays the map out afresh.
+  const [spread, setSpread] = React.useState<{ key: string; zoom: number } | null>(null);
+  const open = spread && spread.zoom === zoom ? spread.key : null;
+  const items = React.useMemo(() => layoutMarkers(venues, zoom, open), [venues, zoom, open]);
+
+  const pressGroup = React.useCallback(
+    (group: GroupItem) => {
+      const region = regionRef.current;
+      const exact = zoomOfRegion(region.longitudeDelta, sizeRef.current.width);
+      const target = groupTarget(group.venues, exact, sizeRef.current);
+      if (!target) {
+        setSpread({ key: group.key, zoom });
+        return;
+      }
+      const shrink = 2 ** (exact - target.zoom);
+      const next: MapRegion = {
+        latitude: target.latitude,
+        longitude: target.longitude,
+        latitudeDelta: region.latitudeDelta * shrink,
+        longitudeDelta: region.longitudeDelta * shrink,
+      };
+      mapRef.current?.animateToRegion(next, FOLLOW_ANIMATION_MS + 100);
+      // The person asked to look there: it is their move, and following stops.
+      // Said now, because Google reports the move it lands with as not a gesture.
+      onUserPannedTo(next);
+    },
+    [zoom, onUserPannedTo]
+  );
 
   React.useEffect(() => {
     // Waiting on onMapReady rather than firing at mount: a camera move issued
@@ -196,7 +242,13 @@ export function VenueMap({
       // animateCamera fires this exactly like a user pan does, so a naive
       // "region changed, stop following" check would switch itself off on its
       // own first animation. Three guards, cheapest first.
+      onLayout={(event) => {
+        const { width, height } = event.nativeEvent.layout;
+        if (width > 0 && height > 0) sizeRef.current = { width, height };
+      }}
       onRegionChangeComplete={(region, details) => {
+        regionRef.current = region;
+        setZoom(layoutZoom(zoomOfRegion(region.longitudeDelta, sizeRef.current.width)));
         deltasRef.current = {
           latitudeDelta: region.latitudeDelta,
           longitudeDelta: region.longitudeDelta,
@@ -245,6 +297,8 @@ export function VenueMap({
       // closed the review form the search pin had just opened, in the same tick.
       onPress={(event) => {
         if (event.nativeEvent.action === 'marker-press') return;
+        // Pressing the map anywhere else closes a fanned-out group.
+        setSpread(null);
         onDismiss();
       }}
       onPoiClick={(event) => {
@@ -257,17 +311,18 @@ export function VenueMap({
         });
       }}>
       {/*
-        Two flat lists rather than one component rendering both markers: MapView
-        tracks its own children, and a Fragment holding a pair left the close
-        marker on screen after the pair unmounted. Distinct keys also give React
-        an unambiguous identity for each native marker.
+        One flat list of markers, never a Fragment per place: MapView tracks its
+        own children, and a Fragment holding a pair once left a marker on screen
+        after the pair unmounted. A place is keyed by its layout as well as its
+        id: a label that moved or grew remounts, re-capturing Android's bitmap.
       */}
-      {venues.map((venue) => (
-        <VenueMarker key={`${venue.id}-box`} venue={venue} onPress={onSelectVenue} />
-      ))}
-      {venues.map((venue) => (
-        <VenueCloseMarker key={`${venue.id}-close`} venue={venue} onDismiss={onDismissVenue} />
-      ))}
+      {items.map((item) =>
+        item.kind === 'group' ? (
+          <GroupMarker key={item.key} item={item} onPress={pressGroup} />
+        ) : (
+          <PlaceMarker key={placeMarkerKey(item)} item={item} onPress={onSelectVenue} />
+        )
+      )}
       {/* Last, so it draws over the rating boxes when a searched place happens
           to sit among reviewed ones. Keyed by place: a new search remounts the
           pin rather than moving it, which replays the entrance and re-captures
