@@ -440,7 +440,11 @@ function WidePanel(props: ShellProps) {
           SHADOW_WEB
         )}>
         <PaperBackdrop tab="map" />
-        <View className="px-4 pb-3 pt-4">
+        {/* The search bar's own z-20 only ranks it inside this view, which
+            on the website is a stacking context of its own (every view is
+            z-index 0 there): without this one too, the list's header that
+            follows paints over the results. */}
+        <View className="z-20 px-4 pb-3 pt-4">
           <OauSearchBar origin={props.searchOrigin} onPick={props.onPickPlace} onClear={props.onClearPlace} />
         </View>
         {props.venue ? (
@@ -570,7 +574,8 @@ function NarrowSheet(props: ShellProps) {
       pointerEvents="box-none"
       style={StyleSheet.absoluteFill}
       onLayout={(event: LayoutChangeEvent) => setAvailable(event.nativeEvent.layout.height)}>
-      <View pointerEvents="box-none" className="absolute left-4 right-4" style={{ top: searchTop }}>
+      {/* Above the sheet that follows it, or a half-open sheet covers the results. */}
+      <View pointerEvents="box-none" className="absolute left-4 right-4 z-20" style={{ top: searchTop }}>
         <OauSearchBar origin={props.searchOrigin} onPick={props.onPickPlace} onClear={props.onClearPlace} />
       </View>
 
