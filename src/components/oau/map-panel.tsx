@@ -21,7 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DistanceMeter } from '@/components/distance-meter';
 import { useLeaveNowReserve } from '@/components/leave-now';
-import { ListFilterControl } from '@/components/list-filter';
+import { ListFilterControl, ListOrderControl } from '@/components/list-filter';
 import { RecenterButton } from '@/components/map-controls';
 import { usePlaceSearch } from '@/components/map-search';
 import { IconSticker, OauCard } from '@/components/oau/card';
@@ -40,7 +40,7 @@ import {
 } from '@/components/venue-list';
 import { useListPlaceName } from '@/lib/area-name';
 import { arrangePlaces, type PlaceRow } from '@/lib/directory';
-import { DISTANCE_TEXT, LIST_FILTER_TEXT, LIST_TEXT } from '@/lib/directory-text';
+import { DISTANCE_TEXT, LIST_FILTER_TEXT, LIST_ORDER_TEXT, LIST_TEXT } from '@/lib/directory-text';
 import { useMapLocation } from '@/lib/map-location';
 import { materialSpring } from '@/lib/motion';
 import { OAU_MAP_TEXT as T } from '@/lib/oau-text';
@@ -378,7 +378,8 @@ function PlacesHeader({
         <View className="flex-row flex-wrap items-center gap-x-1.5">
           <Text oauStyle="callout" className="text-muted-foreground">
             {DISTANCE_TEXT.within(data.km)}
-            {data.filter !== 'all' ? ` · ${LIST_FILTER_TEXT[data.filter].label}` : ''} ·
+            {data.filter !== 'all' ? ` · ${LIST_FILTER_TEXT[data.filter].label}` : ''}
+            {data.order !== 'nearest' ? ` · ${LIST_ORDER_TEXT[data.order].label}` : ''} ·
           </Text>
           <Pressable
             onPress={onToggleSettings}
@@ -415,7 +416,7 @@ function PlacesBody({
   onSelect: (venue: NearbyVenue) => void;
   onLocate: (venue: NearbyVenue) => void;
 }) {
-  const { places, loading, failed, retry, km, filter, counts } = data;
+  const { places, loading, failed, retry, km, filter, order, counts } = data;
   return (
     <ScrollView
       className="flex-1"
@@ -425,6 +426,7 @@ function PlacesBody({
         <OauCard className="gap-4 p-4">
           <DistanceMeter />
           <ListFilterControl counts={counts} />
+          <ListOrderControl />
         </OauCard>
       ) : null}
 
@@ -443,7 +445,9 @@ function PlacesBody({
         </View>
       ) : places && places.nearby.length + places.online.length > 0 ? (
         <>
-          {bandsOf(places.nearby).map((band, index) => (
+          {/* Best rated first is one run: distance bands would sort it back by distance. */}
+          {(order === 'rated' ? [{ label: null, rows: places.nearby }] : bandsOf(places.nearby)).map(
+            (band, index) => (
             <View key={band.label ?? index} className="gap-2">
               {band.label ? (
                 <Text oauStyle="overline" className="px-1 text-muted-foreground">

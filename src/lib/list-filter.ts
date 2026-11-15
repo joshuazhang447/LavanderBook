@@ -56,3 +56,65 @@ export function countByFilter(rows: readonly PlaceRow[]): Record<ListFilter, num
   for (const row of rows) if (isListed(row)) listed += 1;
   return { all: rows.length, listed, visitors: rows.length - listed };
 }
+
+/**
+ * The order the list is in: nearest first, or the best rated first. Like the
+ * filter, for the session only.
+ *
+ * "Top rated" is what Reviewed was reaching for - the places visitors rate
+ * well - as an order rather than a filter, so it keeps meaning something when
+ * every place has a review.
+ */
+export type ListOrder = 'nearest' | 'rated';
+
+let currentOrder: ListOrder = 'nearest';
+const orderListeners = new Set<() => void>();
+
+export function setListOrder(next: ListOrder) {
+  if (next === currentOrder) return;
+  currentOrder = next;
+  for (const listener of orderListeners) listener();
+}
+
+export function useListOrder(): ListOrder {
+  return React.useSyncExternalStore(
+    (listener) => {
+      orderListeners.add(listener);
+      return () => orderListeners.delete(listener);
+    },
+    () => currentOrder,
+    () => 'nearest'
+  );
+}
+
+/**
+ * How many made-up middling reviews every place starts with, and their stars.
+ * A place's rating is pulled toward 3 until enough real reviews outweigh
+ * them: one 5-star review rates 3.7 here, thirty averaging 4.8 rate 4.7. So a
+ * single review, kind or cruel, never puts a place at the top or the bottom.
+ */
+const PRIOR_REVIEWS = 2;
+const PRIOR_STARS = 3;
+
+/** A place's rating for ordering, weighed by how many reviews it has. Null with none. */
+function weighedRating(row: PlaceRow): number | null {
+  const count = row.venue.review_count;
+  if (count <= 0) return null;
+  const average = Number(row.venue.avg_stars ?? 0);
+  return (average * count + PRIOR_STARS * PRIOR_REVIEWS) / (count + PRIOR_REVIEWS);
+}
+
+/**
+ * `rows` best rated first, by weighedRating; places nobody has rated after
+ * every rated one; equal ones nearest first.
+ */
+export function byRating(rows: readonly PlaceRow[]): PlaceRow[] {
+  const rated = rows.map((row) => ({ row, rating: weighedRating(row) }));
+  rated.sort(
+    (a, b) =>
+      (b.rating ?? -1) - (a.rating ?? -1) ||
+      (a.row.distance ?? Infinity) - (b.row.distance ?? Infinity) ||
+      a.row.venue.name.localeCompare(b.row.venue.name)
+  );
+  return rated.map((entry) => entry.row);
+}

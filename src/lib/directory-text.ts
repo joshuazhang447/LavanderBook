@@ -248,3 +248,10 @@ export const LIST_FILTER_TEXT = {
       : `LavenderBook lists no places within ${km} km yet.`,
   emptyHint: 'Choose All to see every place here.',
 } as const;
+
+/** The list's order: nearest first, or the best rated first. */
+export const LIST_ORDER_TEXT = {
+  label: 'Order',
+  nearest: { label: 'Nearest', title: 'Nearest', spoken: 'Nearest first' },
+  rated: { label: 'Top rated', title: 'Top Rated', spoken: 'Best rated first' },
+} as const;

@@ -11,7 +11,7 @@ import Animated, {
 
 import { useChenfengControlsBottom } from '@/components/chenfeng/map-chrome';
 import { DistanceMeter } from '@/components/distance-meter';
-import { ListFilterControl } from '@/components/list-filter';
+import { ListFilterControl, ListOrderControl } from '@/components/list-filter';
 import { ScrollEdge } from '@/components/chenfeng/large-title-screen';
 import { SwipeRow } from '@/components/chenfeng/swipe-row';
 import { StarRating } from '@/components/star-rating';
@@ -90,6 +90,7 @@ export function ChenfengVenueList({
         <View className="gap-4 px-4 pb-4">
           <DistanceMeter />
           <ListFilterControl counts={counts} />
+          <ListOrderControl />
         </View>
         {loading ? (
           <View className="items-center py-10">
