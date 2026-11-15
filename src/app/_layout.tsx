@@ -4,7 +4,6 @@ import '@/lib/nativewind-animated';
 
 import { PortalHost } from '@rn-primitives/portal';
 import { Stack, ThemeProvider } from 'expo-router';
-import Head from 'expo-router/head';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { useColorScheme } from 'react-native';
@@ -14,6 +13,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { BackdropView, GlassBackdrop, useBackdrop } from '@/components/glass';
 import { BehindSafetyNotice, SafetyLayer } from '@/components/safety-notice';
+import { SeoHead } from '@/components/seo-head';
 import { SkinProvider, Unskinned } from '@/components/skin-provider';
 import { ConfirmHost } from '@/components/ui/confirm';
 import { AuthProvider } from '@/lib/auth';
@@ -34,11 +34,9 @@ export default function RootLayout() {
     // Gestures - Chenfeng's sheets, switches and swipe actions - need this
     // around everything. It is a plain full-screen view; nothing else changes.
     <GestureHandlerRootView style={{ flex: 1 }}>
-      {/* The website's tab title, on every page; without it the browser shows
-          the address. Nothing on a phone. */}
-      <Head>
-        <title>LavenderBook</title>
-      </Head>
+      {/* The website's tab title, description and preview, on every page;
+          without a title the browser shows the address. */}
+      <SeoHead />
       <AuthProvider>
         <KeyboardProvider>
           <ThemeProvider value={SKIN_NAV_THEME[skin][colorScheme]}>
