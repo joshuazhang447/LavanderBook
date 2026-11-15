@@ -1,10 +1,18 @@
 import { ChevronRight, type LucideIcon } from 'lucide-react-native';
 import * as React from 'react';
 import { Platform, Pressable, View } from 'react-native';
+import Animated, {
+  cancelAnimation,
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { LogoImage } from '@/components/logo-image';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
+import { useDisplaySettings } from '@/lib/accessibility';
 import { BOOK_LARGE } from '@/lib/logos';
 import { cn } from '@/lib/utils';
 
@@ -168,14 +176,32 @@ export function IconSticker({
   label,
   onPress,
   size = 32,
+  spinning,
   className,
 }: {
   icon: LucideIcon;
   label: string;
   onPress: () => void;
   size?: 32 | 40 | 48;
+  /**
+   * The glyph turns once each time this becomes true: refresh's arrow, so a
+   * press is seen to have done something. Not while motion is reduced.
+   */
+  spinning?: boolean;
   className?: string;
 }) {
+  const { reduceMotion } = useDisplaySettings();
+  const rotation = useSharedValue(0);
+
+  React.useEffect(() => {
+    if (!spinning || reduceMotion) return;
+    cancelAnimation(rotation);
+    rotation.set(0);
+    rotation.set(withTiming(360, { duration: 700, easing: Easing.inOut(Easing.cubic) }));
+  }, [spinning, rotation, reduceMotion]);
+
+  const spin = useAnimatedStyle(() => ({ transform: [{ rotate: `${rotation.get()}deg` }] }));
+
   return (
     <Pressable
       onPress={onPress}
@@ -190,10 +216,12 @@ export function IconSticker({
         }),
         className
       )}>
-      <Icon
-        as={icon}
-        className={cn(size === 48 ? 'size-[22px]' : size === 40 ? 'size-5' : 'size-4', 'text-foreground')}
-      />
+      <Animated.View style={spin}>
+        <Icon
+          as={icon}
+          className={cn(size === 48 ? 'size-[22px]' : size === 40 ? 'size-5' : 'size-4', 'text-foreground')}
+        />
+      </Animated.View>
     </Pressable>
   );
 }

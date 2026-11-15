@@ -393,7 +393,12 @@ function PlacesHeader({
           </Pressable>
         </View>
       </View>
-      <IconSticker icon={RotateCw} label={refreshing ? T.refreshing : T.refresh} onPress={onRefresh} />
+      <IconSticker
+        icon={RotateCw}
+        label={refreshing ? T.refreshing : T.refresh}
+        onPress={onRefresh}
+        spinning={refreshing}
+      />
     </View>
   );
 }
