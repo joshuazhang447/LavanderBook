@@ -534,6 +534,12 @@ export type TagRef = {
   label: string;
   color: string;
   textColor: string | null;
+  /**
+   * On a place's tag in the Places list: whether it is the place's main kind.
+   * Undefined where the server does not say - elsewhere, or a database from
+   * before main kinds (20261115100000).
+   */
+  primary?: boolean;
 };
 
 /**
@@ -553,6 +559,7 @@ function toTagRefs(value: unknown): TagRef[] {
       label: tag.label as string,
       color: tag.color as string,
       textColor: (tag.text_color as string | null) ?? null,
+      primary: typeof tag.primary === 'boolean' ? tag.primary : undefined,
     };
   });
 }
@@ -1053,6 +1060,19 @@ export async function setVenueTags(venueId: string, tagIds: string[]): Promise<v
   const { error } = await supabase.rpc('admin_set_venue_tags', {
     p_venue_id: venueId,
     p_tag_ids: tagIds,
+  });
+  if (error) throw new Error(describe(error));
+}
+
+/**
+ * Makes one of a place's tags its main kind - what its pin, its badge and the
+ * first ribbon on its card show it as - or, with null, hands it back to the
+ * tags' fixed order. The tag must already be on the place.
+ */
+export async function setVenueMainKind(venueId: string, tagId: string | null): Promise<void> {
+  const { error } = await supabase.rpc('admin_set_venue_main_kind', {
+    p_venue_id: venueId,
+    p_tag_id: tagId,
   });
   if (error) throw new Error(describe(error));
 }

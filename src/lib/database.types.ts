@@ -1044,6 +1044,10 @@ export type Database = {
         Args: { p_archived: boolean; p_id: string }
         Returns: string
       }
+      admin_set_venue_main_kind: {
+        Args: { p_tag_id: string | null; p_venue_id: string }
+        Returns: undefined
+      }
       admin_set_venue_tags: {
         Args: { p_tag_ids: string[]; p_venue_id: string }
         Returns: undefined
