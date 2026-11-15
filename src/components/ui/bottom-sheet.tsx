@@ -107,19 +107,29 @@ export function BottomSheet({
   const start = useSharedValue(0);
   // Full height or not: a shared value for the gesture, which runs on the UI
   // thread, and state for what is rendered (the handle's label).
+  //
+  // The state changes only once the sheet has stopped moving. On the website
+  // the exit animation is played by a copy of the sheet, sized from where it
+  // was the last time React rendered it - its height moves without a render -
+  // so a render at the start of a move would have it close from the old size.
   const atFull = useSharedValue(false);
   const [expanded, setExpanded] = React.useState(false);
 
   const goTo = React.useCallback(
     (full: boolean, velocity = 0) => {
       atFull.set(full);
-      setExpanded(full);
       height.set(
-        withSpring(full ? fullHeight : partialHeight, {
-          ...materialSpring('defaultSpatial', noBounce, velocity),
-          // Never past full height, even in a bounce: the way out's corner.
-          overshootClamping: full,
-        })
+        withSpring(
+          full ? fullHeight : partialHeight,
+          {
+            ...materialSpring('defaultSpatial', noBounce, velocity),
+            // Never past full height, even in a bounce: the way out's corner.
+            overshootClamping: full,
+          },
+          (finished) => {
+            if (finished) runOnJS(setExpanded)(full);
+          }
+        )
       );
     },
     [atFull, fullHeight, partialHeight, height, noBounce]
@@ -137,6 +147,30 @@ export function BottomSheet({
       else goTo(atFull.get());
     });
   }, [confirmClose, onClose, goTo, atFull]);
+
+  // Dragged off the screen: it has already left, so it goes without its exit
+  // animation - which, on the website, would draw the sheet again at its full
+  // height and slide it down a second time. The exit is switched off first,
+  // and only once that has rendered is the parent told to remove it.
+  const [draggedAway, setDraggedAway] = React.useState(false);
+  const told = React.useRef(false);
+  React.useEffect(() => {
+    if (!draggedAway || told.current) return;
+    told.current = true;
+    onClose();
+  }, [draggedAway, onClose]);
+
+  const closeAfterDrag = React.useCallback(() => {
+    if (!confirmClose) {
+      setDraggedAway(true);
+      return;
+    }
+    void confirmClose().then((ok) => {
+      if (ok) setDraggedAway(true);
+      // Kept: back to where it was, from the bottom of the screen.
+      else goTo(atFull.get());
+    });
+  }, [confirmClose, goTo, atFull]);
 
   // The window changed size (rotation, the browser): stay at the same height.
   React.useEffect(() => {
@@ -179,20 +213,22 @@ export function BottomSheet({
       if (projected < partialHeight * 0.55 || (event.velocityY > 1300 && now < partialHeight + 24)) {
         height.set(
           withTiming(0, { duration: 180 }, (done) => {
-            if (done) runOnJS(attemptClose)();
+            if (done) runOnJS(closeAfterDrag)();
           })
         );
         return;
       }
       const full = Math.abs(projected - fullHeight) < Math.abs(projected - partialHeight);
+      atFull.set(full);
       height.set(
         withSpring(
           full ? fullHeight : partialHeight,
-          { ...materialSpring('defaultSpatial', noBounce, -event.velocityY), overshootClamping: full }
+          { ...materialSpring('defaultSpatial', noBounce, -event.velocityY), overshootClamping: full },
+          (finished) => {
+            if (finished) runOnJS(setExpanded)(full);
+          }
         )
       );
-      atFull.set(full);
-      runOnJS(setExpanded)(full);
     });
 
   const sheetStyle = useAnimatedStyle(() => ({ height: height.get() }));
@@ -232,7 +268,7 @@ export function BottomSheet({
   const sheet = (
     <Animated.View
       entering={SlideInDown.duration(260)}
-      exiting={SlideOutDown.duration(200)}
+      exiting={draggedAway ? undefined : SlideOutDown.duration(200)}
       role="dialog"
       aria-modal
       aria-label={accessibilityLabel}

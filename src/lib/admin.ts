@@ -493,6 +493,32 @@ export async function setTagIcon(id: string, icon: string | null): Promise<void>
   if (error) throw new Error(describe(error));
 }
 
+/**
+ * Whether a kind describes the place (every reviewer is asked its questions)
+ * or is a service (asked only of reviewers who say they used it). Null on a
+ * server from before 20261115110000, which has no such setting.
+ */
+export async function fetchTagDescribesPlace(id: string | null): Promise<boolean | null> {
+  // No id: a tag not made yet, which starts as a service - asked only to find
+  // out whether the server has the setting at all.
+  const query = supabase.from('tags').select('describes_place');
+  const { data, error } = await (id ? query.eq('id', id) : query.limit(1)).maybeSingle();
+  if (error) {
+    // 42703: no such column.
+    if (error.code === '42703') return null;
+    throw new Error(describe(error));
+  }
+  return id ? (data?.describes_place ?? false) : false;
+}
+
+export async function setTagDescribesPlace(id: string, value: boolean): Promise<void> {
+  const { error } = await supabase.rpc('admin_set_tag_describes_place', {
+    p_tag_id: id,
+    p_value: value,
+  });
+  if (error) throw new Error(describe(error));
+}
+
 /** Retires a tag without touching anything that references it. Reversible. */
 export async function setTagArchived(id: string, archived: boolean): Promise<string | null> {
   const { data, error } = await supabase.rpc('admin_set_tag_archived', {
@@ -534,6 +560,12 @@ export type TagRef = {
   label: string;
   color: string;
   textColor: string | null;
+  /**
+   * On a place's tag in the Places list: whether it is the place's main kind.
+   * Undefined where the server does not say - elsewhere, or a database from
+   * before main kinds (20261115100000).
+   */
+  primary?: boolean;
 };
 
 /**
@@ -553,6 +585,7 @@ function toTagRefs(value: unknown): TagRef[] {
       label: tag.label as string,
       color: tag.color as string,
       textColor: (tag.text_color as string | null) ?? null,
+      primary: typeof tag.primary === 'boolean' ? tag.primary : undefined,
     };
   });
 }
@@ -1053,6 +1086,19 @@ export async function setVenueTags(venueId: string, tagIds: string[]): Promise<v
   const { error } = await supabase.rpc('admin_set_venue_tags', {
     p_venue_id: venueId,
     p_tag_ids: tagIds,
+  });
+  if (error) throw new Error(describe(error));
+}
+
+/**
+ * Makes one of a place's tags its main kind - what its pin, its badge and the
+ * first ribbon on its card show it as - or, with null, hands it back to the
+ * tags' fixed order. The tag must already be on the place.
+ */
+export async function setVenueMainKind(venueId: string, tagId: string | null): Promise<void> {
+  const { error } = await supabase.rpc('admin_set_venue_main_kind', {
+    p_venue_id: venueId,
+    p_tag_id: tagId,
   });
   if (error) throw new Error(describe(error));
 }

@@ -1,10 +1,10 @@
-import { ArrowDown, CircleAlert, Clock, EyeOff, Trash2, X } from 'lucide-react-native';
+import { ArrowDown, Check, CircleAlert, Clock, EyeOff, Plus, Trash2, X } from 'lucide-react-native';
 import * as React from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, View } from 'react-native';
 
 import { InfoBullets, InfoDialog, InfoPoint } from '@/components/info-dialog';
 import { CautionPaper } from '@/components/oau/caution';
-import { IconSticker, OauCard } from '@/components/oau/card';
+import { IconSticker, OauCard, OauHeading } from '@/components/oau/card';
 import { OauSegments } from '@/components/oau/segments';
 import { showToast } from '@/components/oau/toast';
 import { QuestionField } from '@/components/question-field';
@@ -21,12 +21,13 @@ import { useAuth } from '@/lib/auth';
 import { HELD_AFTER_POST } from '@/lib/moderation-text';
 import { OAU_ACCOUNT_TEXT, OAU_REVIEW_TEXT as T } from '@/lib/oau-text';
 import { SIGN_IN_PITCH } from '@/lib/privacy-text';
-import type { AnswerMap, Questionnaire } from '@/lib/questionnaire';
+import type { AnswerMap, Question, Questionnaire, VisitService } from '@/lib/questionnaire';
 import {
   BATHROOM_OPTIONS,
   BLOCKER_TEXT,
   MAX_BODY,
   useReviewForm,
+  VISIT_TEXT as V,
   WHAT_NOT_TO_WRITE,
 } from '@/lib/review-form';
 import { cn } from '@/lib/utils';
@@ -157,6 +158,159 @@ function TagQuestions({
   );
 }
 
+type Visit = NonNullable<ReturnType<typeof useReviewForm>['visit']>;
+
+/**
+ * What the visit was for: the questions about the place, for everyone; then
+ * "Did you use any of these here?" with a chip per service, and each picked
+ * service's questions straight under the chips, so a pick is seen to add
+ * them. Unpicking a kind with answers asks first: they go with it.
+ */
+function VisitQuestions({
+  visit,
+  answers,
+  problems,
+  flagged,
+  register,
+  disabled,
+  onChange,
+}: {
+  visit: Visit;
+  answers: AnswerMap;
+  problems: ReadonlyMap<string, string>;
+  flagged: ReadonlySet<string>;
+  register: Register;
+  disabled: boolean;
+  onChange: (questionId: string, value: AnswerMap[string]) => void;
+}) {
+  if (visit.place.length === 0 && visit.services.length === 0) return null;
+
+  const card = (question: Question) => (
+    <QuestionCard
+      key={question.id}
+      prompt={question.prompt}
+      required={question.required}
+      hint={question.helpText}
+      problem={problems.get(question.id)}
+      flagged={flagged.has(question.id)}
+      cardRef={register(question.id)}>
+      <QuestionField
+        kind={question.kind}
+        config={question.config}
+        options={question.options}
+        value={answers[question.id] ?? null}
+        onChange={(value) => onChange(question.id, value)}
+        disabled={disabled}
+      />
+    </QuestionCard>
+  );
+
+  async function toggle(service: VisitService) {
+    const lost = visit.picked.has(service.tag.id) ? visit.answersLostIfUnpicked(service.tag.id) : 0;
+    if (lost > 0) {
+      const choice = await confirmActionSheet({
+        title: V.removeTitle(service.tag.label),
+        message: V.removeMessage(lost),
+        actions: [{ label: V.remove, style: 'destructive' }],
+        cancelLabel: V.keep,
+      });
+      if (choice !== 0) return;
+    }
+    visit.toggle(service.tag.id);
+  }
+
+  return (
+    <View className="gap-6">
+      {visit.place.length > 0 ? (
+        <View className="gap-3">
+          <OauHeading title={V.placeTitle} line={V.placeLine} />
+          {visit.place.map(card)}
+        </View>
+      ) : null}
+
+      {visit.services.length > 0 ? (
+        <View className="gap-3">
+          <OauHeading title={V.usedTitle} line={V.usedLine} />
+          <View className="flex-row flex-wrap gap-2">
+            {visit.services.map((service) => (
+              <UsedChip
+                key={service.tag.id}
+                service={service}
+                picked={visit.picked.has(service.tag.id)}
+                disabled={disabled}
+                onPress={() => void toggle(service)}
+              />
+            ))}
+          </View>
+          {visit.sections.map((section) => {
+            const required = section.questions.filter((question) => question.required).length;
+            return (
+              <View key={section.tag.id} className="mt-1 gap-3">
+                <View className="flex-row flex-wrap items-center gap-x-2 gap-y-1">
+                  <TagPill tag={section.tag} />
+                  {required > 0 ? (
+                    <Text oauStyle="caption" className="text-muted-foreground">
+                      {V.needed(required)}
+                    </Text>
+                  ) : null}
+                </View>
+                {section.questions.map(card)}
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+/** A service to pick: a sticker with + that turns to a tick, its name and what it adds. */
+function UsedChip({
+  service,
+  picked,
+  disabled,
+  onPress,
+}: {
+  service: VisitService;
+  picked: boolean;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: picked, disabled }}
+      accessibilityLabel={V.spoken(service.tag.label, service.count, service.required, picked)}
+      className={cn(
+        'flex-row items-center gap-2 rounded-full border-[1.5px] py-1.5 pl-1.5 pr-3 active:opacity-75',
+        picked ? 'border-outline-ink bg-band' : 'border-border bg-card',
+        Platform.select({ web: 'cursor-pointer transition-colors hover:bg-band' })
+      )}>
+      <View
+        className={cn(
+          'size-6 items-center justify-center rounded-full',
+          picked ? 'bg-primary' : 'bg-wash'
+        )}>
+        <Icon
+          as={picked ? Check : Plus}
+          className={cn('size-3.5', picked ? 'text-primary-foreground' : 'text-primary')}
+        />
+      </View>
+      <Text oauStyle="label" className="text-foreground">
+        {service.tag.label}
+      </Text>
+      {/* Nothing to add when picks before it already ask all of it. */}
+      {service.count > 0 ? (
+        <Text oauStyle="caption" className="text-muted-foreground">
+          {V.adds(service.count)}
+        </Text>
+      ) : null}
+    </Pressable>
+  );
+}
+
 /**
  * OAU's review form (LavenderBookStyle/oau-style-guide.md, section 14.6): a
  * tall sheet of paper, the place's name over "Your review", each question on a
@@ -173,6 +327,7 @@ export function OauReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }:
   const form = useReviewForm({
     poi,
     venueId: knownVenueId,
+    askWhatWasUsed: true,
     onSaved: () => {
       showToast(
         pressed.current === 'delete'
@@ -222,7 +377,13 @@ export function OauReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }:
   }
 
   // What the form held once loaded, to tell whether closing loses anything.
-  const current = JSON.stringify([form.stars, form.bathroom, form.body, form.answers]);
+  const current = JSON.stringify([
+    form.stars,
+    form.bathroom,
+    form.body,
+    form.answers,
+    form.visit ? [...form.visit.picked].sort() : null,
+  ]);
   const [initial, setInitial] = React.useState<string | null>(null);
   if (ready && initial === null) setInitial(current);
   const hasChanges = initial !== null && initial !== current;
@@ -410,7 +571,19 @@ export function OauReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }:
               </OauCard>
             </View>
 
-            {form.questionnaire.length > 0 ? (
+            {form.visit ? (
+              <VisitQuestions
+                visit={form.visit}
+                answers={form.answers}
+                problems={form.problems}
+                flagged={flagged}
+                register={register}
+                disabled={form.busy}
+                onChange={(questionId, value) =>
+                  form.setAnswers((current) => ({ ...current, [questionId]: value }))
+                }
+              />
+            ) : form.questionnaire.length > 0 ? (
               <TagQuestions
                 questionnaire={form.questionnaire}
                 answers={form.answers}

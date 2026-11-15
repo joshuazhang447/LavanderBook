@@ -58,6 +58,7 @@ import {
   isOnlineVenue,
   listAdminTags,
   listAdminVenues,
+  setVenueMainKind,
   setVenueTags,
   type AdminTag,
   type AdminVenue,
@@ -117,18 +118,35 @@ type TagsDialogProps = {
 
 function VenueTagsDialog({ venue, allTags, onClose, onSaved }: TagsDialogProps) {
   const [tagIds, setTagIds] = React.useState<string[]>(venue.tags.map((t) => t.id));
+  // The main kind: what the place's pin, badge and first ribbon show it as.
+  // Only offered when the server says which one it is - a database from
+  // before main kinds has nowhere to keep it.
+  const savedMain = venue.tags.find((t) => t.primary)?.id ?? null;
+  const knowsMain = venue.tags.length === 0 || venue.tags.some((t) => t.primary !== undefined);
+  const [mainId, setMainId] = React.useState<string | null>(savedMain);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   // Removing the last tag from a place nobody has reviewed takes it off the map
   // entirely, and nothing else in the UI would say so.
   const willVanish = tagIds.length === 0 && venue.reviewCount === 0;
+  // A choice only means something among two or more, and only for a tag kept.
+  const choosing = knowsMain && tagIds.length > 1;
+  const wantedMain = choosing && mainId && tagIds.includes(mainId) ? mainId : null;
+  // Saving the tags drops a removed main tag's row, and the choice with it.
+  const mainAfterTags = savedMain && tagIds.includes(savedMain) ? savedMain : null;
+
+  function toggle(tagId: string, on: boolean) {
+    setTagIds(on ? tagIds.filter((id) => id !== tagId) : [...tagIds, tagId]);
+    if (on && mainId === tagId) setMainId(null);
+  }
 
   async function save() {
     setBusy(true);
     setError(null);
     try {
       await setVenueTags(venue.id, tagIds);
+      if (knowsMain && wantedMain !== mainAfterTags) await setVenueMainKind(venue.id, wantedMain);
       onSaved();
       onClose();
     } catch (cause) {
@@ -143,7 +161,9 @@ function VenueTagsDialog({ venue, allTags, onClose, onSaved }: TagsDialogProps) 
         <DialogHeader>
           <DialogTitle>Tags for {venue.name}</DialogTitle>
           <DialogDescription>
-            A place is asked the fields of every tag it carries.
+            A place is asked the fields of every tag it carries. Its main kind is what its pin,
+            its badge in a list and its first ribbon show it as; without one, the order in Tags
+            decides.
           </DialogDescription>
         </DialogHeader>
 
@@ -152,19 +172,40 @@ function VenueTagsDialog({ venue, allTags, onClose, onSaved }: TagsDialogProps) 
             .filter((tag) => tag.archivedAt === null)
             .map((tag) => {
               const on = tagIds.includes(tag.id);
+              const main = on && wantedMain === tag.id;
               return (
-                <Pressable
-                  key={tag.id}
-                  onPress={() =>
-                    setTagIds(on ? tagIds.filter((id) => id !== tag.id) : [...tagIds, tag.id])
-                  }
-                  className="flex-row items-center gap-2 rounded-md p-1.5 active:bg-accent">
-                  {/* Non-interactive: the row is the button. See field-dialog.tsx. */}
-                  <View pointerEvents="none">
-                    <Checkbox checked={on} onCheckedChange={() => {}} />
-                  </View>
-                  <TagChip label={tag.label} color={tag.color} textColor={tag.textColor} />
-                </Pressable>
+                <View key={tag.id} className="flex-row items-center gap-2">
+                  <Pressable
+                    onPress={() => toggle(tag.id, on)}
+                    className="flex-1 flex-row items-center gap-2 rounded-md p-1.5 active:bg-accent">
+                    {/* Non-interactive: the row is the button. See field-dialog.tsx. */}
+                    <View pointerEvents="none">
+                      <Checkbox checked={on} onCheckedChange={() => {}} />
+                    </View>
+                    <TagChip label={tag.label} color={tag.color} textColor={tag.textColor} />
+                  </Pressable>
+                  {/* A sibling of the row, not inside it: pressing it must not untick the tag. */}
+                  {choosing && on ? (
+                    <Pressable
+                      onPress={() => setMainId(main ? null : tag.id)}
+                      role="radio"
+                      aria-checked={main}
+                      aria-label={`Main kind: ${tag.label}`}
+                      className={cn(
+                        'rounded-full border px-2.5 py-1',
+                        main ? 'border-primary bg-primary' : 'border-border active:bg-accent',
+                        Platform.select({ web: 'cursor-pointer' })
+                      )}>
+                      <Text
+                        className={cn(
+                          'text-xs font-medium',
+                          main ? 'text-primary-foreground' : 'text-muted-foreground'
+                        )}>
+                        {main ? 'Main kind' : 'Make main'}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </View>
               );
             })}
 

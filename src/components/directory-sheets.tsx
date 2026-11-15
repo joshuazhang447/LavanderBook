@@ -41,6 +41,11 @@ export function usePlaceSheets(onSaved: () => void) {
         <VenueSheet
           venue={viewing}
           onClose={() => setViewing(null)}
+          onShowOnMap={() => {
+            const venue = viewing;
+            setViewing(null);
+            showOnMap(venue);
+          }}
           onWriteReview={() => {
             const venue = viewing;
             setViewing(null);

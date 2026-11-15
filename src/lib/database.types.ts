@@ -344,6 +344,7 @@ export type Database = {
           color: string
           created_at: string
           created_by: string | null
+          describes_place: boolean
           description: string | null
           icon: string | null
           id: string
@@ -357,6 +358,7 @@ export type Database = {
           color: string
           created_at?: string
           created_by?: string | null
+          describes_place?: boolean
           description?: string | null
           icon?: string | null
           id?: string
@@ -370,6 +372,7 @@ export type Database = {
           color?: string
           created_at?: string
           created_by?: string | null
+          describes_place?: boolean
           description?: string | null
           icon?: string | null
           id?: string
@@ -1044,6 +1047,14 @@ export type Database = {
         Args: { p_archived: boolean; p_id: string }
         Returns: string
       }
+      admin_set_tag_describes_place: {
+        Args: { p_tag_id: string; p_value: boolean }
+        Returns: undefined
+      }
+      admin_set_venue_main_kind: {
+        Args: { p_tag_id: string | null; p_venue_id: string }
+        Returns: undefined
+      }
       admin_set_venue_tags: {
         Args: { p_tag_ids: string[]; p_venue_id: string }
         Returns: undefined
@@ -1188,6 +1199,7 @@ export type Database = {
         Returns: string
       }
       my_new_question_count: { Args: { p_venue_id: string }; Returns: number }
+      my_used_kinds: { Args: { p_venue_id: string }; Returns: string[] | null }
       my_reviews: {
         Args: never
         Returns: {
@@ -1241,6 +1253,7 @@ export type Database = {
           p_body?: string
           p_stars: number
           p_trans_bathroom: Database["public"]["Enums"]["answer"]
+          p_used_tags?: string[]
           p_venue_id: string
         }
         Returns: string
@@ -1271,6 +1284,7 @@ export type Database = {
         Args: { p_venue_id: string }
         Returns: {
           config: Json
+          everyone: boolean
           help_text: string
           kind: Database["public"]["Enums"]["question_kind"]
           options: Json

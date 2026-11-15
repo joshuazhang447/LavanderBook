@@ -6,6 +6,7 @@ import {
   Eye,
   EyeOff,
   Flag,
+  MapPin,
   Navigation,
   SquarePen,
   X,
@@ -36,7 +37,7 @@ import { Text } from '@/components/ui/text';
 import { formatDistance } from '@/components/venue-list';
 import type { VenueSheetProps } from '@/components/venue-sheet';
 import { TagPage } from '@/components/venue-tag-page';
-import { ABOUT_TEXT, detailsTeaser, VOICES_TEXT } from '@/lib/directory-text';
+import { ABOUT_TEXT, detailsTeaser, SHOW_ON_MAP_TEXT, VOICES_TEXT } from '@/lib/directory-text';
 import { MASK_TEXT, moderationStatus, REPORT_TEXT, spokenMasked, STATUS_TEXT } from '@/lib/moderation-text';
 import { OAU_DETAILS_TEXT } from '@/lib/oau-text';
 import { postedLabel } from '@/lib/review-dates';
@@ -241,6 +242,11 @@ export type OauPlaceCardProps = VenueSheetProps & {
   distance?: number | null;
   /** In the Map tab's panel: the way back to its list ("28 places"). */
   back?: { label: string; onPress: () => void };
+  /**
+   * Show on map keeps the card open: in the Map tab's panel, where the map is
+   * right there and only moves. A sheet closes first instead.
+   */
+  staysForMap?: boolean;
   /** Lays the card's two parts out: its header (what a sheet drags by) and the rest. */
   children: (parts: {
     header: React.ReactNode;
@@ -266,8 +272,10 @@ export function OauPlaceCard({
   venue,
   onClose,
   onWriteReview,
+  onShowOnMap,
   distance = null,
   back,
+  staysForMap = false,
   children,
 }: OauPlaceCardProps) {
   const {
@@ -290,14 +298,15 @@ export function OauPlaceCard({
   const [returning, setReturning] = React.useState(false);
   // Leaving takes two steps, as Basic's card explains: the pages lose their
   // exits first, so only the container's own move plays.
-  const [leaving, setLeaving] = React.useState<'close' | 'review' | null>(null);
+  const [leaving, setLeaving] = React.useState<'close' | 'review' | 'map' | null>(null);
   const told = React.useRef(false);
   React.useEffect(() => {
     if (!leaving || told.current) return;
     told.current = true;
     if (leaving === 'close') onClose();
+    else if (leaving === 'map') onShowOnMap?.();
     else onWriteReview();
-  }, [leaving, onClose, onWriteReview]);
+  }, [leaving, onClose, onWriteReview, onShowOnMap]);
   const close = React.useCallback(() => setLeaving('close'), []);
 
   function openTagPage() {
@@ -330,7 +339,19 @@ export function OauPlaceCard({
   const stacked = action.length > 16 || (primaryLabel?.length ?? 0) > 16;
   const answered = summary[0]?.answeredReviews ?? 0;
 
-  const closeSticker = <IconSticker icon={X} label="Close" onPress={close} />;
+  // Its pin, beside the close: never for an online group, which has none.
+  const closeSticker = (
+    <View className="flex-row items-center gap-2">
+      {mapped && onShowOnMap ? (
+        <IconSticker
+          icon={MapPin}
+          label={SHOW_ON_MAP_TEXT.spoken(venue.name)}
+          onPress={staysForMap ? onShowOnMap : () => setLeaving('map')}
+        />
+      ) : null}
+      <IconSticker icon={X} label="Close" onPress={close} />
+    </View>
+  );
   const ribbons =
     tags.length > 0 ? (
       <View className="flex-1 flex-row flex-wrap gap-1.5">
