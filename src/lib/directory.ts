@@ -5,6 +5,7 @@ import { provinceAt } from '@/lib/area-province';
 import { DIRECTORY_TEXT } from '@/lib/directory-text';
 import { roundForSearch } from '@/lib/location-privacy';
 import { useMapLocation } from '@/lib/map-location';
+import { matchPlaces } from '@/lib/place-match';
 import { useSearchDistance } from '@/lib/search-distance';
 import { publicSupabase } from '@/lib/supabase';
 import { distanceMeters, useCurrentLocation, type Coords } from '@/lib/use-location';
@@ -389,22 +390,13 @@ function ofKind(rows: readonly PlaceRow[], slug: string): PlaceRow[] {
 }
 
 /**
- * The rows a search finds: every word typed must appear somewhere in a place's
- * name, its description or the names of its kinds. So "trans clinic" finds a
- * health centre tagged Trans healthcare whose description says clinic, and
- * "youth" finds both the places tagged for young people and the ones that
- * mention them.
+ * The rows a search finds, best first: by a place's name, its kinds and its
+ * description, and by what the words mean - "doctor" finds Affirming
+ * healthcare, "food bank" Food & essentials - with small words, accents,
+ * plurals and typos taken care of. See @/lib/place-match.
  */
 export function matching(rows: readonly PlaceRow[], query: string): PlaceRow[] {
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return [...rows];
-
-  return rows.filter((row) => {
-    const text = [row.venue.name, row.venue.description ?? '', ...row.tags.map((tag) => tag.label)]
-      .join(' ')
-      .toLowerCase();
-    return words.every((word) => text.includes(word));
-  });
+  return matchPlaces(rows, query);
 }
 
 export type DirectoryOrigin =
