@@ -85,6 +85,8 @@ export const OAU_MAP_TEXT = {
   placesWord: (count: number) => (count === 1 ? 'place' : 'places'),
   near: (where: string | null) => (where ? `near ${where}` : 'near you'),
   placesLoading: (where: string | null) => `Places ${where ? `near ${where}` : 'near you'}`,
+  /** Where the list is, once the map is panned somewhere no city is near. */
+  mapMiddle: 'the middle of the map',
   /** The place card's way back to the list. */
   back: (count: number) => (count === 1 ? '1 place' : `${count} places`),
   change: 'Change',

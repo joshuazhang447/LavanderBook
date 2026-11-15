@@ -32,6 +32,7 @@ import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { OnlineSection, PlaceRowCard, useListRows } from '@/components/venue-list';
+import { useListPlaceName } from '@/lib/area-name';
 import type { PlaceRow } from '@/lib/directory';
 import { DISTANCE_TEXT, LIST_FILTER_TEXT, LIST_TEXT } from '@/lib/directory-text';
 import { useMapLocation } from '@/lib/map-location';
@@ -364,10 +365,14 @@ export type OauMapChromeProps = {
 
 export function OauMapChrome(props: OauMapChromeProps) {
   const { isWide } = useIsWideViewport();
-  const { usingDevice, place } = useMapLocation();
+  const { place } = useMapLocation();
   const data = useListRows(props.origin, '', props.refreshKey);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
-  const where = usingDevice ? null : (place?.label ?? null);
+  // The list follows the middle of the map once it is panned: named after
+  // where it is, not after the city chosen when the map opened.
+  const placeName = useListPlaceName(props.origin, props.following, place);
+  const where =
+    placeName.kind === 'you' ? null : placeName.kind === 'named' ? placeName.label : T.mapMiddle;
   const count = data.places ? data.places.nearby.length + data.places.online.length : 0;
 
   // How far the open card's place is, measured here on the device: a row
