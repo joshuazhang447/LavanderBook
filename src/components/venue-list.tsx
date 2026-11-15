@@ -461,8 +461,16 @@ export function useListRows(origin: Coords | null, query: string, refreshKey: st
   // screen it is only a refresh that did not happen.
   const failed = area.failed && area.venues === null;
 
+  // Every row the search and distance allow, whatever the filter: what a
+  // search box over the list looks through (OAU's search bar does).
+  const everyRow = React.useMemo(
+    () => (narrowed ? [...narrowed.nearby, ...narrowed.online] : []),
+    [narrowed]
+  );
+
   return {
     places,
+    everyRow,
     km,
     filter,
     counts,

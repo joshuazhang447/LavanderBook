@@ -31,15 +31,25 @@ import { useIsWideViewport } from '@/components/tab-bar';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
-import { OnlineSection, PlaceRowCard, useListRows } from '@/components/venue-list';
+import { KindBadge } from '@/components/kind-badge';
+import {
+  formatDistance,
+  OnlineSection,
+  PlaceRowCard,
+  useListRows,
+} from '@/components/venue-list';
 import { useListPlaceName } from '@/lib/area-name';
-import type { PlaceRow } from '@/lib/directory';
+import { arrangePlaces, type PlaceRow } from '@/lib/directory';
 import { DISTANCE_TEXT, LIST_FILTER_TEXT, LIST_TEXT } from '@/lib/directory-text';
 import { useMapLocation } from '@/lib/map-location';
 import { materialSpring } from '@/lib/motion';
 import { OAU_MAP_TEXT as T } from '@/lib/oau-text';
+import { EVERY_KIND_ICON, kindIcon } from '@/lib/kind-icons';
+import { matchPlaces } from '@/lib/place-match';
 import type { PlaceResult } from '@/lib/place-search';
+import { useTagIcons } from '@/lib/tag-icons';
 import { useFieldText } from '@/lib/use-field-text';
+import { useVenueNameSearch } from '@/lib/venue-search';
 import { distanceMeters, type Coords } from '@/lib/use-location';
 import { isMapped, type NearbyVenue } from '@/lib/use-nearby-venues';
 import { cn } from '@/lib/utils';
@@ -73,28 +83,88 @@ const fieldStyles = StyleSheet.create({
   },
 });
 
-const MAX_RESULTS = 5;
+/** At most this many of LavenderBook's own places, then this many others. */
+const MAX_OURS = 4;
+const MAX_OTHERS = 5;
 
 /**
  * The search bar (section 13.5): a cream card you type into, a 1.5 ink
- * outline, 52 tall; its results drop under it. It searches any place, as the
- * other skins' search pill does, through the same billed-call guards
- * (usePlaceSearch), and keeps its own text on a phone (useFieldText).
+ * outline, 52 tall; its results drop under it. Keeps its own text on a phone
+ * (useFieldText).
+ *
+ * LavenderBook's own places come first, as you type: the ones around here,
+ * searched on the device the way the Directory is (@/lib/place-match), and
+ * any further away whose name holds what was typed (useVenueNameSearch).
+ * Picking one opens its card, as a row does. Then any other place, from the
+ * place search the other skins' pill uses, through the same billed-call
+ * guards (usePlaceSearch); picking one moves the map there.
  */
 function OauSearchBar({
   origin,
+  rows,
+  measureFrom,
   onPick,
+  onPickVenue,
   onClear,
 }: {
+  /** Biases the other places toward what is on screen. */
   origin: Coords | null;
+  /** The list's places, whatever its filter: searched first. */
+  rows: readonly PlaceRow[];
+  /** Where the list measures from, for the distance of a place further away. */
+  measureFrom: Coords | null;
   onPick: (place: PlaceResult) => void;
+  onPickVenue: (venue: NearbyVenue) => void;
   onClear: () => void;
 }) {
   const search = usePlaceSearch(origin, true);
   const { query, trimmed, results, setResults, error, busy, change, reset } = search;
-  const field = useFieldText({ value: query, onChangeText: change });
+  // Closed by a pick and opened again by typing: LavenderBook's places are
+  // there for as long as the text is, so the results alone cannot say.
+  const [open, setOpen] = React.useState(true);
+  const type = React.useCallback(
+    (next: string) => {
+      change(next);
+      setOpen(true);
+    },
+    [change]
+  );
+  const field = useFieldText({ value: query, onChangeText: type });
   const inputRef = React.useRef<TextInput>(null);
-  const showResults = query.length > 0 && (error !== null || results !== null);
+
+  const further = useVenueNameSearch(trimmed, origin);
+  const ours = React.useMemo(() => {
+    if (trimmed.length === 0) return [];
+    const known = new Set(rows.map((row) => row.venue.id));
+    const extra = arrangePlaces(
+      further.filter((venue) => !known.has(venue.id)),
+      measureFrom
+    );
+    const far = new Set([...extra.nearby, ...extra.online]);
+    // Further than the list goes counts for half: the places around here
+    // first, unless the one further away is plainly what was typed.
+    return matchPlaces([...rows, ...far], trimmed, (row) => (far.has(row) ? 0.5 : 1)).slice(
+      0,
+      MAX_OURS
+    );
+  }, [rows, further, measureFrom, trimmed]);
+
+  // A place LavenderBook already has is shown once, as LavenderBook's.
+  const others = React.useMemo(() => {
+    const ourPlaces = new Set(ours.map((row) => row.venue.google_place_id).filter(Boolean));
+    return (results ?? [])
+      .filter((place) => !ourPlaces.has(place.placeId))
+      .slice(0, ours.length > 0 ? MAX_OTHERS - 1 : MAX_OTHERS);
+  }, [results, ours]);
+
+  const answered = error !== null || results !== null;
+  const showResults = open && trimmed.length > 0 && (ours.length > 0 || answered);
+
+  const close = () => {
+    setResults(null);
+    setOpen(false);
+    inputRef.current?.blur();
+  };
 
   return (
     // Above whatever follows it, so its results cover the list rather than
@@ -139,58 +209,122 @@ function OauSearchBar({
             'absolute left-0 right-0 top-[60px] overflow-hidden rounded-[18px] border border-border bg-card',
             SHADOW_WEB
           )}>
-          {error ? (
+          {ours.length > 0 ? (
+            <>
+              <ResultsHeading label={T.ours} first />
+              {ours.map((row) => (
+                <OurResult
+                  key={row.venue.id}
+                  row={row}
+                  onPress={() => {
+                    close();
+                    onPickVenue(row.venue);
+                  }}
+                />
+              ))}
+            </>
+          ) : null}
+
+          {error && ours.length === 0 ? (
             <Text oauStyle="callout" className="px-4 py-3 text-muted-foreground">
               {error}
             </Text>
-          ) : results && results.length === 0 ? (
+          ) : results && results.length === 0 && ours.length === 0 ? (
             <Text oauStyle="callout" className="px-4 py-3 text-muted-foreground">
               {T.nothingFound(trimmed)}
             </Text>
-          ) : (
-            (results ?? []).slice(0, MAX_RESULTS).map((place, index) => (
-              <Pressable
-                key={place.placeId}
-                onPress={() => {
-                  setResults(null);
-                  inputRef.current?.blur();
-                  onPick(place);
-                }}
-                accessibilityRole="button"
-                accessibilityLabel={`Show ${place.name} on the map`}
-                className={cn(
-                  'flex-row items-center gap-3 px-4 py-3 active:bg-muted',
-                  index > 0 && 'border-t border-border',
-                  Platform.select({ web: 'cursor-pointer hover:bg-muted/60' })
-                )}>
-                <View className="size-8 items-center justify-center rounded-full bg-wash">
-                  <Icon as={MapPin} className="size-4 text-primary" />
-                </View>
-                <View className="flex-1">
-                  <View className="flex-row items-center gap-2">
-                    <Text oauStyle="label" numberOfLines={1} className="flex-1 text-foreground">
-                      {place.name}
-                    </Text>
-                    {place.reviewable === false ? (
-                      <View className="rounded-full bg-muted px-2 py-0.5">
-                        <Text oauStyle="micro" className="text-muted-foreground">
-                          {T.area}
-                        </Text>
-                      </View>
+          ) : others.length > 0 ? (
+            <>
+              {ours.length > 0 ? <ResultsHeading label={T.others} /> : null}
+              {others.map((place, index) => (
+                <Pressable
+                  key={place.placeId}
+                  onPress={() => {
+                    close();
+                    onPick(place);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Show ${place.name} on the map`}
+                  className={cn(
+                    'flex-row items-center gap-3 px-4 py-3 active:bg-muted',
+                    index > 0 && 'border-t border-border',
+                    Platform.select({ web: 'cursor-pointer hover:bg-muted/60' })
+                  )}>
+                  <View className="size-8 items-center justify-center rounded-full bg-wash">
+                    <Icon as={MapPin} className="size-4 text-primary" />
+                  </View>
+                  <View className="flex-1">
+                    <View className="flex-row items-center gap-2">
+                      <Text oauStyle="label" numberOfLines={1} className="flex-1 text-foreground">
+                        {place.name}
+                      </Text>
+                      {place.reviewable === false ? (
+                        <View className="rounded-full bg-muted px-2 py-0.5">
+                          <Text oauStyle="micro" className="text-muted-foreground">
+                            {T.area}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    {place.address ? (
+                      <Text oauStyle="caption" numberOfLines={1} className="text-muted-foreground">
+                        {place.address}
+                      </Text>
                     ) : null}
                   </View>
-                  {place.address ? (
-                    <Text oauStyle="caption" numberOfLines={1} className="text-muted-foreground">
-                      {place.address}
-                    </Text>
-                  ) : null}
-                </View>
-              </Pressable>
-            ))
-          )}
+                </Pressable>
+              ))}
+            </>
+          ) : null}
         </View>
       ) : null}
     </View>
+  );
+}
+
+/** "On LavenderBook", "Other places": over each part of the results. */
+function ResultsHeading({ label, first }: { label: string; first?: boolean }) {
+  return (
+    <Text
+      oauStyle="overline"
+      role="heading"
+      className={cn('px-4 pb-1 pt-3 text-muted-foreground', !first && 'border-t border-border')}>
+      {label}
+    </Text>
+  );
+}
+
+/** One of LavenderBook's places in the results: its kind's badge, name, kind and how far. */
+function OurResult({ row, onPress }: { row: PlaceRow; onPress: () => void }) {
+  const tagIcons = useTagIcons();
+  const lead = row.tags[0];
+  const away = formatDistance(row.distance);
+  const detail = [lead?.label, away].filter(Boolean).join(' · ');
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={[T.openPlace(row.venue.name), detail].filter(Boolean).join(', ')}
+      className={cn(
+        'flex-row items-center gap-3 px-4 py-2.5 active:bg-muted',
+        Platform.select({ web: 'cursor-pointer hover:bg-muted/60' })
+      )}>
+      <KindBadge
+        tag={lead}
+        icon={lead ? kindIcon(lead.slug, tagIcons[lead.slug]) : EVERY_KIND_ICON}
+        size={32}
+      />
+      <View className="flex-1">
+        <Text oauStyle="label" numberOfLines={1} className="text-foreground">
+          {row.venue.name}
+        </Text>
+        {detail ? (
+          <Text oauStyle="caption" numberOfLines={1} className="text-muted-foreground">
+            {detail}
+          </Text>
+        ) : null}
+      </View>
+    </Pressable>
   );
 }
 
@@ -450,7 +584,14 @@ function WidePanel(props: ShellProps) {
             z-index 0 there): without this one too, the list's header that
             follows paints over the results. */}
         <View className="z-20 px-4 pb-3 pt-4">
-          <OauSearchBar origin={props.searchOrigin} onPick={props.onPickPlace} onClear={props.onClearPlace} />
+          <OauSearchBar
+            origin={props.searchOrigin}
+            rows={props.data.everyRow}
+            measureFrom={props.origin}
+            onPick={props.onPickPlace}
+            onPickVenue={props.onSelectVenue}
+            onClear={props.onClearPlace}
+          />
         </View>
         {props.venue ? (
           <Card props={props}>
@@ -581,7 +722,14 @@ function NarrowSheet(props: ShellProps) {
       onLayout={(event: LayoutChangeEvent) => setAvailable(event.nativeEvent.layout.height)}>
       {/* Above the sheet that follows it, or a half-open sheet covers the results. */}
       <View pointerEvents="box-none" className="absolute left-4 right-4 z-20" style={{ top: searchTop }}>
-        <OauSearchBar origin={props.searchOrigin} onPick={props.onPickPlace} onClear={props.onClearPlace} />
+        <OauSearchBar
+          origin={props.searchOrigin}
+          rows={props.data.everyRow}
+          measureFrom={props.origin}
+          onPick={props.onPickPlace}
+          onPickVenue={props.onSelectVenue}
+          onClear={props.onClearPlace}
+        />
       </View>
 
       {detent !== 'full' ? (

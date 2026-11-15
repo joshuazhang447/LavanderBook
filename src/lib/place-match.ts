@@ -495,11 +495,23 @@ function termScore(term: Term, place: Indexed): number {
 /** What a word that rules nothing out adds when it matches: enough to order, never to lead. */
 const SOFT_SCORE = 0.25;
 
+/** The least a place missing one word must score to be listed anyway: a word of its name. */
+const NEAR_MISS_MIN_SCORE = 3;
+
 /**
  * The rows `query` finds, best first. An empty query finds every row, in the
  * order given.
+ *
+ * `weight` scales a row's score: the map's search bar halves it for places
+ * beyond the distance, so a youth group 150 km away whose name says "youth"
+ * does not come before the youth services nearby - but "Kind Space", typed
+ * from another city, still finds Kind Space.
  */
-export function matchPlaces(rows: readonly PlaceRow[], query: string): PlaceRow[] {
+export function matchPlaces(
+  rows: readonly PlaceRow[],
+  query: string,
+  weight?: (row: PlaceRow) => number
+): PlaceRow[] {
   if (wordsOf(query).length === 0) return [...rows];
 
   const indexed = rows.map((row) => ({ row, place: indexOf(row) }));
@@ -542,6 +554,7 @@ export function matchPlaces(rows: readonly PlaceRow[], query: string): PlaceRow[
     }
     if (missing > 1) continue;
     score += lineBonus(place.nameLine);
+    if (weight) score *= weight(row);
     (missing === 0 ? found : nearly).push({ row, score });
   }
 
@@ -556,10 +569,14 @@ export function matchPlaces(rows: readonly PlaceRow[], query: string): PlaceRow[
   // Pride Network. After everything that matches all of a search of three
   // words or more; for a shorter one only when nothing does, since "trans
   // clinic" missing a word would be every trans place and every clinic.
+  // Only a strong near miss, though - about as good as the matches, and more
+  // than a couple of words a description happens to use: "one among us" must
+  // not bring every description that says "one" and "us".
   const required = terms.filter((term) => !term.soft).length;
   if (required >= 3 || (required === 2 && found.length === 0)) {
-    nearly.sort(best);
-    return [...found, ...nearly].map((entry) => entry.row);
+    const bar = Math.max(NEAR_MISS_MIN_SCORE, (found[0]?.score ?? 0) / 2);
+    const kept = nearly.filter((entry) => entry.score >= bar).sort(best);
+    return [...found, ...kept].map((entry) => entry.row);
   }
   return found.map((entry) => entry.row);
 }

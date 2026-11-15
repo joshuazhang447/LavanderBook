@@ -78,6 +78,10 @@ export const OAU_MAP_TEXT = {
   searchLabel: 'Search for any place',
   clear: 'Clear search',
   nothingFound: (query: string) => `Nothing found for "${query}".`,
+  /** Over the search's results: LavenderBook's own places, then any other. */
+  ours: 'On LavenderBook',
+  others: 'Other places',
+  openPlace: (name: string) => `Open ${name}`,
   area: 'Area',
   /** The sheet's title: "28 places near Ottawa, Ontario", the count in the tab's colour. */
   places: (count: number, where: string | null) =>
