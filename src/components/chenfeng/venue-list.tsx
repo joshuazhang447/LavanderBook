@@ -338,6 +338,7 @@ function PlaceListRow({
         accessibilityLabel={[
           venue.name,
           unreviewed ? 'listed, not yet reviewed' : `${average.toFixed(1)} out of 5, ${count}`,
+          tags.length === 0 ? LIST_TEXT.foundByVisitorsSpoken : null,
           away,
           venue.description,
         ]
@@ -373,6 +374,12 @@ function PlaceListRow({
           {tags.map((tag) => (
             <TagPill key={tag.slug} tag={tag} />
           ))}
+          {/* Not one of ours: LavenderBook has not checked it. */}
+          {tags.length === 0 ? (
+            <Text textStyle="footnote" className="text-label-secondary">
+              {LIST_TEXT.foundByVisitors}
+            </Text>
+          ) : null}
         </View>
       </Row>
     </View>

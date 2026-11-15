@@ -10,13 +10,13 @@ import { setListFilter, useListFilter, type ListFilter } from '@/lib/list-filter
 import { useSkin } from '@/lib/skin';
 import { cn } from '@/lib/utils';
 
-const ORDER: readonly ListFilter[] = ['all', 'listed', 'reviewed'];
+const ORDER: readonly ListFilter[] = ['all', 'listed', 'visitors'];
 
 /**
  * Which places the list shows: all of them, the ones LavenderBook lists (a
  * place with a tag - a centre, a clinic, a queer-owned shop, whether or not
- * anyone has reviewed it), or the ones somebody has reviewed. A place can be
- * both, and is then in both.
+ * anyone has reviewed it), or the ones visitors found and reviewed that
+ * LavenderBook does not list. Every place is one or the other.
  *
  * Each choice says how many it would show, so a choice that would empty the
  * list can be seen to before it is made. Chenfeng draws iOS's segmented

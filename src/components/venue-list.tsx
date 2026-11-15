@@ -87,6 +87,7 @@ function BasicPlaceRow({ row, first, listed, onSelect, onLocate }: PlaceRowCardP
         accessibilityLabel={[
           venue.name,
           unreviewed ? 'listed, not yet reviewed' : `${average.toFixed(1)} of 5`,
+          tags.length === 0 ? LIST_TEXT.foundByVisitorsSpoken : null,
           away,
           venue.description,
         ]
@@ -131,6 +132,8 @@ function BasicPlaceRow({ row, first, listed, onSelect, onLocate }: PlaceRowCardP
               <StarRating value={average} size="sm" />
               <Text numberOfLines={1} className="flex-1 text-xs text-muted-foreground">
                 {venue.review_count === 1 ? '1 review' : `${venue.review_count} reviews`}
+                {/* Not one of ours: LavenderBook has not checked it. */}
+                {tags.length === 0 ? ` · ${LIST_TEXT.foundByVisitors}` : ''}
               </Text>
             </>
           )}
@@ -178,6 +181,7 @@ function OauPlaceRow({ row, first, listed, onSelect, onLocate }: PlaceRowCardPro
         accessibilityLabel={[
           venue.name,
           unreviewed ? 'listed, not yet reviewed' : `${average.toFixed(1)} of 5`,
+          tags.length === 0 ? LIST_TEXT.foundByVisitorsSpoken : null,
           away,
           venue.description,
         ]
@@ -230,6 +234,12 @@ function OauPlaceRow({ row, first, listed, onSelect, onLocate }: PlaceRowCardPro
                 </Text>
               </View>
             )}
+            {/* Not one of ours: LavenderBook has not checked it. */}
+            {tags.length === 0 ? (
+              <Text oauStyle="caption" className="text-muted-foreground">
+                · {LIST_TEXT.foundByVisitors}
+              </Text>
+            ) : null}
           </View>
         </View>
       </Pressable>
@@ -445,7 +455,7 @@ export function useListRows(origin: Coords | null, query: string, refreshKey: st
     () =>
       narrowed
         ? countByFilter([...narrowed.nearby, ...narrowed.online])
-        : { all: 0, listed: 0, reviewed: 0 },
+        : { all: 0, listed: 0, visitors: 0 },
     [narrowed]
   );
 
