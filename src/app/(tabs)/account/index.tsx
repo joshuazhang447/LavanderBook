@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { Lock, ShieldAlert } from 'lucide-react-native';
+import { Info, Lock, ShieldAlert } from 'lucide-react-native';
 import * as React from 'react';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,6 +20,7 @@ import { useIsWideViewport, useTabBarOverlap } from '@/components/tab-bar';
 import { useAuth } from '@/lib/auth';
 import { reopenSafetyNotice } from '@/lib/safety';
 import { useSkin } from '@/lib/skin';
+import { ABOUT_TEXT, ABOUT_URL, pressLink, webLinkProps } from '@/lib/about-link';
 
 export default function AccountScreen() {
   const { skin } = useSkin();
@@ -130,6 +131,17 @@ function BasicAccountScreen() {
             <Button variant="ghost" onPress={() => router.push('/account/privacy')}>
               <Icon as={Lock} className="size-4 text-muted-foreground" />
               <Text className="text-muted-foreground">Privacy policy</Text>
+            </Button>
+            <Button
+              variant="ghost"
+              onPress={() => pressLink(ABOUT_URL)}
+              {...webLinkProps(ABOUT_URL)}
+              // Button says role="button", which the website draws as a <button>
+              // whatever its href: a link has to say so to be an <a>.
+              role="link"
+              accessibilityLabel={ABOUT_TEXT.spoken}>
+              <Icon as={Info} className="size-4 text-muted-foreground" />
+              <Text className="text-muted-foreground">{ABOUT_TEXT.label}</Text>
             </Button>
           </View>
 

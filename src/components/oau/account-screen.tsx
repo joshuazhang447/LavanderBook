@@ -7,6 +7,7 @@ import {
   ChevronRight,
   CircleUser,
   Clock,
+  Info,
   Lock,
   LogOut,
   MapPin,
@@ -56,6 +57,7 @@ import { chooseSkin, DEFAULT_SKIN, SKINS, useSkinChoice, type Skin } from '@/lib
 import { skinColor } from '@/lib/theme';
 import { cn } from '@/lib/utils';
 import type { SelectedPoi } from '@/lib/venues';
+import { ABOUT_TEXT, ABOUT_URL, pressLink } from '@/lib/about-link';
 
 /**
  * OAU's My Account (LavenderBookStyle/oau-style-guide.md, section 14.9): pink
@@ -167,6 +169,14 @@ export function OauAccountScreen() {
                   title={T.privacyPolicy}
                   chevron
                   onPress={() => router.push('/account/privacy')}
+                />
+                <OauRow
+                  icon={Info}
+                  title={ABOUT_TEXT.label}
+                  chevron
+                  onPress={() => pressLink(ABOUT_URL)}
+                  href={ABOUT_URL}
+                  accessibilityLabel={ABOUT_TEXT.spoken}
                 />
               </OauCard>
             </View>

@@ -5,10 +5,12 @@ import { Text } from '@/components/ui/text';
 import { OAU_LEAVES } from '@/lib/logos';
 import { useSkin } from '@/lib/skin';
 import { cn } from '@/lib/utils';
+import { ABOUT_URL, pressLink, webLinkProps } from '@/lib/about-link';
 
 const OAU_URL = 'https://oneamongus.ca/';
 const CREDIT = 'Created by OAU';
 const CREDIT_LABEL = `${CREDIT}. Opens oneamongus.ca.`;
+const HEADER_CREDIT_LABEL = `${CREDIT}. About LavenderBook, opens its website.`;
 
 function openOau() {
   if (Platform.OS === 'web') {
@@ -61,6 +63,8 @@ export function OauBadge({ className }: { className?: string }) {
 /**
  * The same credit in the website's header, beside "LavenderBook" - Basic and
  * Material only, since Chenfeng's floating bar has no app name to sit beside.
+ * Here it opens LavenderBook's own website (ABOUT_URL) as a real link; that
+ * page says who made it and links on to OAU.
  * It comes after the name, past a hairline, so the leaves read as OAU's and not
  * as LavenderBook's own logo.
  *
@@ -74,9 +78,10 @@ export function OauHeaderCredit({ wordsFrom = 900 }: { wordsFrom?: number }) {
     <View className="flex-row items-center gap-3">
       <View className="h-5 w-px bg-border" />
       <Pressable
-        onPress={openOau}
+        onPress={() => pressLink(ABOUT_URL)}
+        {...webLinkProps(ABOUT_URL)}
         accessibilityRole="link"
-        accessibilityLabel={CREDIT_LABEL}
+        accessibilityLabel={HEADER_CREDIT_LABEL}
         hitSlop={6}
         className={cn(
           'flex-row items-center gap-1.5 rounded-full active:opacity-60',
