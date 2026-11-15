@@ -1,4 +1,4 @@
-import { CircleAlert, Clock, EyeOff, Trash2, X } from 'lucide-react-native';
+import { ArrowDown, CircleAlert, Clock, EyeOff, Trash2, X } from 'lucide-react-native';
 import * as React from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, View } from 'react-native';
 
@@ -22,43 +22,63 @@ import { HELD_AFTER_POST } from '@/lib/moderation-text';
 import { OAU_ACCOUNT_TEXT, OAU_REVIEW_TEXT as T } from '@/lib/oau-text';
 import { SIGN_IN_PITCH } from '@/lib/privacy-text';
 import type { AnswerMap, Questionnaire } from '@/lib/questionnaire';
-import { BATHROOM_OPTIONS, MAX_BODY, useReviewForm, WHAT_NOT_TO_WRITE } from '@/lib/review-form';
+import {
+  BATHROOM_OPTIONS,
+  BLOCKER_TEXT,
+  MAX_BODY,
+  useReviewForm,
+  WHAT_NOT_TO_WRITE,
+} from '@/lib/review-form';
 import { cn } from '@/lib/utils';
 
-/** A question on a card of its own: the prompt, a line under it, the control, a problem. */
+/** Hands a card's view to the form, by its blocker key, so Post can scroll to it. */
+type Register = (key: string) => (node: View | null) => void;
+
+/**
+ * A question on a card of its own: the prompt, a line under it, the control, a
+ * problem. Flagged - in the way of Post once the form has shown what is
+ * missing - it is outlined in red and says what it needs.
+ */
 function QuestionCard({
   prompt,
   required,
   hint,
   problem,
+  flagged,
+  cardRef,
   children,
 }: React.PropsWithChildren<{
   prompt: string;
   required?: boolean;
   hint?: string | null;
   problem?: string | null;
+  flagged?: boolean;
+  cardRef?: (node: View | null) => void;
 }>) {
+  const message = problem ?? (flagged ? BLOCKER_TEXT.missing : null);
   return (
-    <OauCard className="gap-3 p-4">
-      <Text oauStyle="subheading" className="text-foreground">
-        {prompt}
-        {required ? <Text className="text-destructive"> *</Text> : null}
-      </Text>
-      {children}
-      {hint ? (
-        <Text oauStyle="caption" className="text-muted-foreground">
-          {hint}
+    <View ref={cardRef}>
+      <OauCard className={cn('gap-3 p-4', flagged && 'border-[1.5px] border-destructive')}>
+        <Text oauStyle="subheading" className="text-foreground">
+          {prompt}
+          {required ? <Text className="text-destructive"> *</Text> : null}
         </Text>
-      ) : null}
-      {problem ? (
-        <View className="flex-row items-start gap-1.5">
-          <Icon as={CircleAlert} className="mt-0.5 size-4 text-destructive" />
-          <Text oauStyle="callout" className="flex-1 text-destructive">
-            {problem}
+        {children}
+        {hint ? (
+          <Text oauStyle="caption" className="text-muted-foreground">
+            {hint}
           </Text>
-        </View>
-      ) : null}
-    </OauCard>
+        ) : null}
+        {message ? (
+          <View className="flex-row items-start gap-1.5">
+            <Icon as={CircleAlert} className="mt-0.5 size-4 text-destructive" />
+            <Text oauStyle="callout" className="flex-1 text-destructive">
+              {message}
+            </Text>
+          </View>
+        ) : null}
+      </OauCard>
+    </View>
   );
 }
 
@@ -67,12 +87,17 @@ function TagQuestions({
   questionnaire,
   answers,
   problems,
+  flagged,
+  register,
   disabled,
   onChange,
 }: {
   questionnaire: Questionnaire;
   answers: AnswerMap;
   problems: ReadonlyMap<string, string>;
+  /** The questions in the way of Post, once the form has shown them. */
+  flagged: ReadonlySet<string>;
+  register: Register;
   disabled: boolean;
   onChange: (questionId: string, value: AnswerMap[string]) => void;
 }) {
@@ -113,7 +138,9 @@ function TagQuestions({
               prompt={question.prompt}
               required={question.required}
               hint={question.helpText}
-              problem={problems.get(question.id)}>
+              problem={problems.get(question.id)}
+              flagged={flagged.has(question.id)}
+              cardRef={register(question.id)}>
               <QuestionField
                 kind={question.kind}
                 config={question.config}
@@ -163,6 +190,36 @@ export function OauReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }:
   const bodyTop = React.useRef(0);
   const held = form.outcome === 'held';
   const ready = !!session && !form.loading && !held;
+
+  // With many tag questions, a * somewhere up the sheet is a hunt. The footer
+  // says how many are left, and "Show me" scrolls to the first one in the way;
+  // from then on every card in the way is outlined with what it needs.
+  const [showMissing, setShowMissing] = React.useState(false);
+  const flagged = React.useMemo(
+    () => new Set(showMissing ? form.blockers.map((blocker) => blocker.key) : []),
+    [showMissing, form.blockers]
+  );
+  // The cards by blocker key, and the column they sit in, to measure from.
+  const content = React.useRef<View>(null);
+  const cards = React.useRef(new Map<string, View>());
+  const register = React.useCallback<Register>(
+    (key) => (node) => {
+      if (node) cards.current.set(key, node);
+      else cards.current.delete(key);
+    },
+    []
+  );
+  function showFirstBlocker() {
+    setShowMissing(true);
+    const first = form.blockers[0];
+    const card = first ? cards.current.get(first.key) : undefined;
+    if (!card || !content.current) return;
+    card.measureLayout(
+      content.current,
+      (_x, y) => scrollRef.current?.scrollTo({ y: Math.max(0, y - 12), animated: true }),
+      () => {}
+    );
+  }
 
   // What the form held once loaded, to tell whether closing loses anything.
   const current = JSON.stringify([form.stars, form.bathroom, form.body, form.answers]);
@@ -254,8 +311,12 @@ export function OauReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }:
         </View>
       ) : (
         <ScrollView ref={scrollRef} className="flex-1" keyboardShouldPersistTaps="handled">
-          <View className="gap-4 px-5 pb-6 pt-1">
-            <QuestionCard prompt={T.rating}>
+          <View ref={content} className="gap-4 px-5 pb-6 pt-1">
+            <QuestionCard
+              prompt={T.rating}
+              required
+              flagged={flagged.has('stars')}
+              cardRef={register('stars')}>
               <View className="items-center gap-2">
                 <StarRating value={form.stars} onChange={form.setStars} />
                 {form.stars ? (
@@ -270,7 +331,12 @@ export function OauReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }:
               </View>
             </QuestionCard>
 
-            <QuestionCard prompt={T.bathroom} hint={T.bathroomHint}>
+            <QuestionCard
+              prompt={T.bathroom}
+              hint={T.bathroomHint}
+              required
+              flagged={flagged.has('bathroom')}
+              cardRef={register('bathroom')}>
               <OauSegments
                 options={BATHROOM_OPTIONS}
                 value={form.bathroom}
@@ -282,8 +348,11 @@ export function OauReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }:
 
             {/* Straight after the questions every review has, before the ones
                 only some kinds ask: what happened is what readers look for. */}
-            <View onLayout={(event) => (bodyTop.current = event.nativeEvent.layout.y)}>
-              <OauCard className="gap-3 p-4">
+            <View
+              ref={register('body')}
+              onLayout={(event) => (bodyTop.current = event.nativeEvent.layout.y)}>
+              <OauCard
+                className={cn('gap-3 p-4', flagged.has('body') && 'border-[1.5px] border-destructive')}>
                 <View className="flex-row items-baseline gap-1.5">
                   <Text oauStyle="subheading" className="text-foreground">
                     {T.body}
@@ -346,6 +415,8 @@ export function OauReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }:
                 questionnaire={form.questionnaire}
                 answers={form.answers}
                 problems={form.problems}
+                flagged={flagged}
+                register={register}
                 disabled={form.busy}
                 onChange={(questionId, value) =>
                   form.setAnswers((current) => ({ ...current, [questionId]: value }))
@@ -402,11 +473,31 @@ export function OauReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }:
       {/* Pinned, so Post is always in reach however long the form. */}
       {ready ? (
         <View className="gap-2 border-t border-border bg-band px-5 pb-6 pt-3.5">
-          {form.blockingHint ? (
-            <Text oauStyle="caption" className="text-center text-muted-foreground">
-              {form.blockingHint}
-            </Text>
+          {form.blockers.length > 0 && !form.busy ? (
+            // How much is left, and a way to it.
+            <View className="flex-row flex-wrap items-center justify-center gap-x-2 gap-y-1">
+              <Text
+                oauStyle="caption"
+                className={showMissing ? 'text-destructive' : 'text-muted-foreground'}>
+                {BLOCKER_TEXT.line(form.blockers)}
+              </Text>
+              <Pressable
+                onPress={showFirstBlocker}
+                accessibilityRole="button"
+                accessibilityLabel={BLOCKER_TEXT.showMeSpoken}
+                hitSlop={8}
+                className={cn(
+                  'flex-row items-center gap-1 active:opacity-60',
+                  Platform.select({ web: 'cursor-pointer' })
+                )}>
+                <Icon as={ArrowDown} className="size-3.5 text-foreground" />
+                <Text oauStyle="label" className="text-foreground underline">
+                  {BLOCKER_TEXT.showMe}
+                </Text>
+              </Pressable>
+            </View>
           ) : null}
+          {/* Sunk until everything needed is answered; "Show me" is the way there. */}
           <Button size="lg" disabled={!form.canSubmit} onPress={post}>
             {form.busy ? <ActivityIndicator size="small" /> : null}
             <Text>{form.busy ? T.saving : form.isExisting ? T.save : T.post}</Text>
