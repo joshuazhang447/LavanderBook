@@ -159,6 +159,8 @@ export function OauReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }:
   });
   const [explainingBody, setExplainingBody] = React.useState(false);
   const scrollRef = React.useRef<ScrollView>(null);
+  // Where the free text's card starts in the form, to scroll it into view.
+  const bodyTop = React.useRef(0);
   const held = form.outcome === 'held';
   const ready = !!session && !form.loading && !held;
 
@@ -278,6 +280,67 @@ export function OauReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }:
               />
             </QuestionCard>
 
+            {/* Straight after the questions every review has, before the ones
+                only some kinds ask: what happened is what readers look for. */}
+            <View onLayout={(event) => (bodyTop.current = event.nativeEvent.layout.y)}>
+              <OauCard className="gap-3 p-4">
+                <View className="flex-row items-baseline gap-1.5">
+                  <Text oauStyle="subheading" className="text-foreground">
+                    {T.body}
+                  </Text>
+                  <Text oauStyle="caption" className="text-muted-foreground">
+                    {T.optional}
+                  </Text>
+                </View>
+                {/* The free text is the one part of a review no switch can
+                    protect, so the warning sits where the writing starts. */}
+                <CautionPaper>
+                  <Text oauStyle="callout" className="text-foreground">
+                    {WHAT_NOT_TO_WRITE.lead} {T.bodyWarning}
+                  </Text>
+                  <Pressable
+                    onPress={() => setExplainingBody(true)}
+                    accessibilityRole="button"
+                    hitSlop={6}
+                    className={cn(
+                      'self-start py-0.5 active:opacity-60',
+                      Platform.select({ web: 'cursor-pointer' })
+                    )}>
+                    <Text oauStyle="label" className="text-caution-foreground underline">
+                      {T.whatToLeaveOut}
+                    </Text>
+                  </Pressable>
+                </CautionPaper>
+                {/* Lined paper: faint rules every 26 points, the text's own line
+                    height, so the words sit on them. */}
+                <View className="overflow-hidden rounded-[12px] border-[1.5px] border-input bg-card">
+                  <View pointerEvents="none" className="absolute bottom-0 left-3.5 right-3.5 top-1.5">
+                    {Array.from({ length: 12 }, (_, line) => (
+                      <View key={line} className="h-[26px] border-b border-border" />
+                    ))}
+                  </View>
+                  <Textarea
+                    value={form.body}
+                    onChangeText={form.setBody}
+                    // Up to the top of the sheet, clear of a phone's keyboard.
+                    onFocus={() =>
+                      scrollRef.current?.scrollTo({ y: Math.max(0, bodyTop.current - 12), animated: true })
+                    }
+                    maxLength={MAX_BODY}
+                    placeholder={T.bodyPlaceholder}
+                    numberOfLines={6}
+                    className="min-h-[164px] rounded-none border-0 bg-transparent px-3.5 pb-2 pt-2 text-oau-body leading-[26px] shadow-none"
+                  />
+                </View>
+                <Text
+                  oauStyle="caption"
+                  className={cn('self-end', form.tooLong ? 'text-destructive' : 'text-muted-foreground')}
+                  style={{ fontVariant: ['tabular-nums'] }}>
+                  {form.body.length} / {MAX_BODY}
+                </Text>
+              </OauCard>
+            </View>
+
             {form.questionnaire.length > 0 ? (
               <TagQuestions
                 questionnaire={form.questionnaire}
@@ -289,60 +352,6 @@ export function OauReviewSheet({ poi, venueId: knownVenueId, onClose, onSaved }:
                 }
               />
             ) : null}
-
-            <OauCard className="gap-3 p-4">
-              <View className="flex-row items-baseline gap-1.5">
-                <Text oauStyle="subheading" className="text-foreground">
-                  {T.body}
-                </Text>
-                <Text oauStyle="caption" className="text-muted-foreground">
-                  {T.optional}
-                </Text>
-              </View>
-              {/* The free text is the one part of a review no switch can
-                  protect, so the warning sits where the writing starts. */}
-              <CautionPaper>
-                <Text oauStyle="callout" className="text-foreground">
-                  {WHAT_NOT_TO_WRITE.lead} {T.bodyWarning}
-                </Text>
-                <Pressable
-                  onPress={() => setExplainingBody(true)}
-                  accessibilityRole="button"
-                  hitSlop={6}
-                  className={cn(
-                    'self-start py-0.5 active:opacity-60',
-                    Platform.select({ web: 'cursor-pointer' })
-                  )}>
-                  <Text oauStyle="label" className="text-caution-foreground underline">
-                    {T.whatToLeaveOut}
-                  </Text>
-                </Pressable>
-              </CautionPaper>
-              {/* Lined paper: faint rules every 26 points, the text's own line
-                  height, so the words sit on them. */}
-              <View className="overflow-hidden rounded-[12px] border-[1.5px] border-input bg-card">
-                <View pointerEvents="none" className="absolute bottom-0 left-3.5 right-3.5 top-1.5">
-                  {Array.from({ length: 12 }, (_, line) => (
-                    <View key={line} className="h-[26px] border-b border-border" />
-                  ))}
-                </View>
-                <Textarea
-                  value={form.body}
-                  onChangeText={form.setBody}
-                  onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })}
-                  maxLength={MAX_BODY}
-                  placeholder={T.bodyPlaceholder}
-                  numberOfLines={6}
-                  className="min-h-[164px] rounded-none border-0 bg-transparent px-3.5 pb-2 pt-2 text-oau-body leading-[26px] shadow-none"
-                />
-              </View>
-              <Text
-                oauStyle="caption"
-                className={cn('self-end', form.tooLong ? 'text-destructive' : 'text-muted-foreground')}
-                style={{ fontVariant: ['tabular-nums'] }}>
-                {form.body.length} / {MAX_BODY}
-              </Text>
-            </OauCard>
 
             {form.identity.length > 0 ? (
               <OauCard className="gap-2 p-4">

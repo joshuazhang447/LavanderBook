@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DistanceMeter } from '@/components/distance-meter';
 import { KindBadge } from '@/components/kind-badge';
-import { ListFilterControl } from '@/components/list-filter';
+import { ListFilterControl, ListOrderControl } from '@/components/list-filter';
 import { useLeaveNowReserve } from '@/components/leave-now';
 import { MAP_CONTROLS_CLEARANCE } from '@/components/map-controls';
 import { IconSticker, OauCard, OauHeading } from '@/components/oau/card';
@@ -28,7 +28,13 @@ import {
 } from '@/lib/directory';
 import { LIST_FILTER_TEXT, LIST_TEXT, ONLINE_TEXT } from '@/lib/directory-text';
 import { EVERY_KIND_ICON, kindIcon } from '@/lib/kind-icons';
-import { countByFilter, passesListFilter, useListFilter } from '@/lib/list-filter';
+import {
+  byRating,
+  countByFilter,
+  passesListFilter,
+  useListFilter,
+  useListOrder,
+} from '@/lib/list-filter';
 import { useSearchDistance } from '@/lib/search-distance';
 import { useSkin } from '@/lib/skin';
 import { useTagIcons } from '@/lib/tag-icons';
@@ -87,6 +93,7 @@ function BasicPlaceRow({ row, first, listed, onSelect, onLocate }: PlaceRowCardP
         accessibilityLabel={[
           venue.name,
           unreviewed ? 'listed, not yet reviewed' : `${average.toFixed(1)} of 5`,
+          tags.length === 0 ? LIST_TEXT.foundByVisitorsSpoken : null,
           away,
           venue.description,
         ]
@@ -131,6 +138,8 @@ function BasicPlaceRow({ row, first, listed, onSelect, onLocate }: PlaceRowCardP
               <StarRating value={average} size="sm" />
               <Text numberOfLines={1} className="flex-1 text-xs text-muted-foreground">
                 {venue.review_count === 1 ? '1 review' : `${venue.review_count} reviews`}
+                {/* Not one of ours: LavenderBook has not checked it. */}
+                {tags.length === 0 ? ` · ${LIST_TEXT.foundByVisitors}` : ''}
               </Text>
             </>
           )}
@@ -178,6 +187,7 @@ function OauPlaceRow({ row, first, listed, onSelect, onLocate }: PlaceRowCardPro
         accessibilityLabel={[
           venue.name,
           unreviewed ? 'listed, not yet reviewed' : `${average.toFixed(1)} of 5`,
+          tags.length === 0 ? LIST_TEXT.foundByVisitorsSpoken : null,
           away,
           venue.description,
         ]
@@ -230,6 +240,12 @@ function OauPlaceRow({ row, first, listed, onSelect, onLocate }: PlaceRowCardPro
                 </Text>
               </View>
             )}
+            {/* Not one of ours: LavenderBook has not checked it. */}
+            {tags.length === 0 ? (
+              <Text oauStyle="caption" className="text-muted-foreground">
+                · {LIST_TEXT.foundByVisitors}
+              </Text>
+            ) : null}
           </View>
         </View>
       </Pressable>
@@ -426,6 +442,7 @@ export function PlaceSearchField({
 export function useListRows(origin: Coords | null, query: string, refreshKey: string) {
   const km = useSearchDistance();
   const filter = useListFilter();
+  const order = useListOrder();
   const area = useAreaVenues(origin, km * 1000, refreshKey);
 
   const trimmed = query.trim();
@@ -445,26 +462,43 @@ export function useListRows(origin: Coords | null, query: string, refreshKey: st
     () =>
       narrowed
         ? countByFilter([...narrowed.nearby, ...narrowed.online])
-        : { all: 0, listed: 0, reviewed: 0 },
+        : { all: 0, listed: 0, visitors: 0 },
     [narrowed]
   );
 
+  // Nearest first (or, searching, best match first) unless Top rated is
+  // chosen, which orders whatever is shown, a search's results too.
   const places = React.useMemo<ArrangedPlaces | null>(() => {
-    if (!narrowed || filter === 'all') return narrowed;
-    return {
-      nearby: narrowed.nearby.filter((row) => passesListFilter(row, filter)),
-      online: narrowed.online.filter((row) => passesListFilter(row, filter)),
-    };
-  }, [narrowed, filter]);
+    if (!narrowed) return null;
+    const shown =
+      filter === 'all'
+        ? narrowed
+        : {
+            nearby: narrowed.nearby.filter((row) => passesListFilter(row, filter)),
+            online: narrowed.online.filter((row) => passesListFilter(row, filter)),
+          };
+    return order === 'rated'
+      ? { nearby: byRating(shown.nearby), online: byRating(shown.online) }
+      : shown;
+  }, [narrowed, filter, order]);
 
   // A failed load with nothing to show is an error; with rows already on
   // screen it is only a refresh that did not happen.
   const failed = area.failed && area.venues === null;
 
+  // Every row the search and distance allow, whatever the filter: what a
+  // search box over the list looks through (OAU's search bar does).
+  const everyRow = React.useMemo(
+    () => (narrowed ? [...narrowed.nearby, ...narrowed.online] : []),
+    [narrowed]
+  );
+
   return {
     places,
+    everyRow,
     km,
     filter,
+    order,
     counts,
     loading: places === null && !failed,
     failed,
@@ -518,6 +552,7 @@ export function VenueList({ origin, refreshKey, onSelectVenue, onLocateVenue }: 
         <PlaceSearchField value={query} onChangeText={setQuery} placeholder={LIST_TEXT.search} />
         <DistanceMeter />
         <ListFilterControl counts={counts} />
+        <ListOrderControl />
       </View>
 
       {loading ? (

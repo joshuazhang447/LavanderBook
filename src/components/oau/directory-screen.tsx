@@ -55,6 +55,7 @@ export function OauDirectoryScreen() {
   const topInset = (isWide ? 0 : insets.top) + leaveNow;
 
   const directory = useDirectory();
+  const lead = directoryLead(directory);
   const { open, showOnMap, sheets } = usePlaceSheets(directory.refresh);
 
   // A kind opened from far down starts at its top.
@@ -91,7 +92,14 @@ export function OauDirectoryScreen() {
               {DIRECTORY_TEXT.title}
             </Text>
             <Text oauStyle="body" className="text-muted-foreground">
-              {directoryLead(directory)}
+              {lead.before}
+              {/* Where it is looking stands out: it follows the map. */}
+              {lead.place ? (
+                <Text oauStyle="body" className="font-semibold text-foreground">
+                  {lead.place}
+                </Text>
+              ) : null}
+              {lead.after}
             </Text>
           </View>
 

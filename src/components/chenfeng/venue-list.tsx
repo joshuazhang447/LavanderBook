@@ -11,7 +11,7 @@ import Animated, {
 
 import { useChenfengControlsBottom } from '@/components/chenfeng/map-chrome';
 import { DistanceMeter } from '@/components/distance-meter';
-import { ListFilterControl } from '@/components/list-filter';
+import { ListFilterControl, ListOrderControl } from '@/components/list-filter';
 import { ScrollEdge } from '@/components/chenfeng/large-title-screen';
 import { SwipeRow } from '@/components/chenfeng/swipe-row';
 import { StarRating } from '@/components/star-rating';
@@ -90,6 +90,7 @@ export function ChenfengVenueList({
         <View className="gap-4 px-4 pb-4">
           <DistanceMeter />
           <ListFilterControl counts={counts} />
+          <ListOrderControl />
         </View>
         {loading ? (
           <View className="items-center py-10">
@@ -338,6 +339,7 @@ function PlaceListRow({
         accessibilityLabel={[
           venue.name,
           unreviewed ? 'listed, not yet reviewed' : `${average.toFixed(1)} out of 5, ${count}`,
+          tags.length === 0 ? LIST_TEXT.foundByVisitorsSpoken : null,
           away,
           venue.description,
         ]
@@ -373,6 +375,12 @@ function PlaceListRow({
           {tags.map((tag) => (
             <TagPill key={tag.slug} tag={tag} />
           ))}
+          {/* Not one of ours: LavenderBook has not checked it. */}
+          {tags.length === 0 ? (
+            <Text textStyle="footnote" className="text-label-secondary">
+              {LIST_TEXT.foundByVisitors}
+            </Text>
+          ) : null}
         </View>
       </Row>
     </View>

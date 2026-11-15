@@ -4,7 +4,10 @@ import { BackHandler, Platform } from 'react-native';
 import { provinceAt } from '@/lib/area-province';
 import { DIRECTORY_TEXT } from '@/lib/directory-text';
 import { roundForSearch } from '@/lib/location-privacy';
+import { useListPlaceName, type ListPlaceName } from '@/lib/area-name';
 import { useMapLocation } from '@/lib/map-location';
+import { choiceKey, useMapView } from '@/lib/map-view';
+import { matchPlaces } from '@/lib/place-match';
 import { useSearchDistance } from '@/lib/search-distance';
 import { publicSupabase } from '@/lib/supabase';
 import { distanceMeters, useCurrentLocation, type Coords } from '@/lib/use-location';
@@ -389,22 +392,13 @@ function ofKind(rows: readonly PlaceRow[], slug: string): PlaceRow[] {
 }
 
 /**
- * The rows a search finds: every word typed must appear somewhere in a place's
- * name, its description or the names of its kinds. So "trans clinic" finds a
- * health centre tagged Trans healthcare whose description says clinic, and
- * "youth" finds both the places tagged for young people and the ones that
- * mention them.
+ * The rows a search finds, best first: by a place's name, its kinds and its
+ * description, and by what the words mean - "doctor" finds Affirming
+ * healthcare, "food bank" Food & essentials - with small words, accents,
+ * plurals and typos taken care of. See @/lib/place-match.
  */
 export function matching(rows: readonly PlaceRow[], query: string): PlaceRow[] {
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return [...rows];
-
-  return rows.filter((row) => {
-    const text = [row.venue.name, row.venue.description ?? '', ...row.tags.map((tag) => tag.label)]
-      .join(' ')
-      .toLowerCase();
-    return words.every((word) => text.includes(word));
-  });
+  return matchPlaces(rows, query);
 }
 
 export type DirectoryOrigin =
@@ -415,15 +409,19 @@ export type DirectoryOrigin =
   | {
       state: 'ready';
       origin: Coords;
-      /** Whether `origin` is the phone itself rather than a chosen place. */
+      /** Whether `origin` is the phone itself rather than a chosen place or the map. */
       onDevice: boolean;
-      /** "Ottawa, Ontario" or "Ottawa area" - for a chosen place only. */
-      label: string | null;
+      /** What to call where `origin` is: "you" (in Ottawa), "Ottawa, Ontario". */
+      name: ListPlaceName;
     };
 
 /**
- * Where the Directory looks around: the same place the map starts - the phone,
- * or the city or general area chosen on this device (see @/lib/map-location).
+ * Where the Directory looks around: wherever the Map tab's list is - the
+ * reader while the map follows them, else the middle of the map, so panning
+ * the map to another city moves the Directory there too (@/lib/map-view).
+ * Before the map has been shown, or once the location choice has changed
+ * since, the place the map would start: the phone, or the city or general
+ * area chosen on this device (see @/lib/map-location).
  *
  * Like the map, it never asks the OS for anything: useCurrentLocation only
  * reads a permission that "Near me" was given. A phone whose position cannot
@@ -438,10 +436,20 @@ function useDirectoryOrigin(): DirectoryOrigin {
   const deviceLatitude = location.status === 'granted' ? location.latitude : null;
   const deviceLongitude = location.status === 'granted' ? location.longitude : null;
   const place = mapLocation.place;
+  const mapView = useMapView();
+  const fromMap = mapView && mapView.choice === choiceKey(mapLocation) ? mapView : null;
 
-  return React.useMemo<DirectoryOrigin>(() => {
+  const where = React.useMemo<Exclude<DirectoryOrigin, { state: 'ready' }> | {
+    state: 'ready';
+    origin: Coords;
+    onDevice: boolean;
+  }>(() => {
     if (!mapLocation.ready) return { state: 'loading' };
     if (mapLocation.mode === null) return { state: 'unchosen' };
+
+    if (fromMap) {
+      return { state: 'ready', origin: fromMap.origin, onDevice: fromMap.following };
+    }
 
     if (onDevice) {
       return deviceLatitude !== null && deviceLongitude !== null
@@ -449,7 +457,6 @@ function useDirectoryOrigin(): DirectoryOrigin {
             state: 'ready',
             origin: { latitude: deviceLatitude, longitude: deviceLongitude },
             onDevice: true,
-            label: null,
           }
         : { state: 'loading' };
     }
@@ -459,10 +466,19 @@ function useDirectoryOrigin(): DirectoryOrigin {
           state: 'ready',
           origin: { latitude: place.latitude, longitude: place.longitude },
           onDevice: false,
-          label: place.label,
         }
       : { state: 'unchosen' };
-  }, [mapLocation.ready, mapLocation.mode, onDevice, deviceLatitude, deviceLongitude, place]);
+  }, [mapLocation.ready, mapLocation.mode, fromMap, onDevice, deviceLatitude, deviceLongitude, place]);
+
+  const name = useListPlaceName(
+    where.state === 'ready' ? where.origin : null,
+    where.state === 'ready' && where.onDevice,
+    place
+  );
+  return React.useMemo<DirectoryOrigin>(
+    () => (where.state === 'ready' ? { ...where, name } : where),
+    [where, name]
+  );
 }
 
 /** What the Directory is showing. */
@@ -580,11 +596,34 @@ export function useDirectory() {
 
 export type Directory = ReturnType<typeof useDirectory>;
 
-/** What the Directory is a list of, in a sentence: "...near Ottawa, Ontario...". */
-export function directoryLead(directory: Directory): string {
+/** Marks where the place's name sits in the lead, so it can be drawn apart. */
+const PLACE_MARK = '\u0001';
+
+/**
+ * What the Directory is a list of, in a sentence - "...near you in Ottawa,
+ * Ontario..." - in three parts, so a screen can make the place's name stand
+ * out: what comes before it, the name (null when there is none to name: "near
+ * you", "around the middle of the map"), and what comes after.
+ */
+export function directoryLead(directory: Directory): {
+  before: string;
+  place: string | null;
+  after: string;
+} {
+  const name = directory.where.state === 'ready' ? directory.where.name : null;
+  const mark = (label: string) => `${PLACE_MARK}${label}${PLACE_MARK}`;
   const where =
-    directory.where.state === 'ready' && !directory.where.onDevice && directory.where.label
-      ? DIRECTORY_TEXT.near(directory.where.label)
-      : DIRECTORY_TEXT.nearYou;
-  return DIRECTORY_TEXT.lead(where);
+    name === null
+      ? DIRECTORY_TEXT.nearYou
+      : name.kind === 'you'
+        ? name.city
+          ? DIRECTORY_TEXT.nearYouIn(mark(name.city))
+          : DIRECTORY_TEXT.nearYou
+        : name.kind === 'named'
+          ? DIRECTORY_TEXT.near(mark(name.label))
+          : DIRECTORY_TEXT.mapMiddle;
+  const [before, place, after] = DIRECTORY_TEXT.lead(where).split(PLACE_MARK);
+  return place === undefined
+    ? { before, place: null, after: '' }
+    : { before, place, after: after ?? '' };
 }

@@ -176,6 +176,9 @@ export const LIST_TEXT = {
   search: 'Search the list',
   searchTitle: 'Search the List',
   listedNoReviews: 'Listed by LavenderBook · no reviews yet',
+  /** On a place LavenderBook does not list: somebody reviewed it, nobody here checked it. */
+  foundByVisitors: 'Found by visitors',
+  foundByVisitorsSpoken: 'found by visitors, not listed by LavenderBook',
   /** Where every row is a listed place, and saying so on each would be noise. */
   noReviews: 'No reviews yet',
   empty: (km: number) => `Nothing is listed or reviewed within ${km} km of here yet.`,
@@ -198,7 +201,10 @@ export const DIRECTORY_TEXT = {
   lead: (where: string) =>
     `LGBTQ+ community centres, clinics, support groups, shelters and queer-owned places ${where}, checked and listed by LavenderBook.`,
   nearYou: 'near you',
+  nearYouIn: (label: string) => `near you in ${label}`,
   near: (label: string) => `near ${label}`,
+  /** Where the map was panned to somewhere no city is near. */
+  mapMiddle: 'around the middle of the map',
   search: 'Search: trans clinic, youth, bar…',
   searchLabel: 'Search the directory',
   /** Over the kinds, where it opens. */
@@ -228,16 +234,27 @@ export const DIRECTORY_TEXT = {
   failed: 'Check your connection and try again.',
 } as const;
 
-/** The list's filter: every place, the ones LavenderBook lists, or the reviewed ones. */
+/** The list's filter: every place, the ones LavenderBook lists, or the ones visitors found. */
 export const LIST_FILTER_TEXT = {
   label: 'Show',
   all: { label: 'All', title: 'All', spoken: 'All places' },
   listed: { label: 'Listed', title: 'Listed', spoken: 'Listed by LavenderBook' },
-  reviewed: { label: 'Reviewed', title: 'Reviewed', spoken: 'Reviewed by visitors' },
+  visitors: {
+    label: 'Visitors',
+    title: 'Visitors',
+    spoken: 'Found by visitors, not listed by LavenderBook',
+  },
   /** When the filter, not the distance, is what empties the list. */
-  empty: (filter: 'listed' | 'reviewed', km: number) =>
-    filter === 'reviewed'
-      ? `Nobody has reviewed a place within ${km} km yet.`
+  empty: (filter: 'listed' | 'visitors', km: number) =>
+    filter === 'visitors'
+      ? `Every place within ${km} km is listed by LavenderBook.`
       : `LavenderBook lists no places within ${km} km yet.`,
   emptyHint: 'Choose All to see every place here.',
+} as const;
+
+/** The list's order: nearest first, or the best rated first. */
+export const LIST_ORDER_TEXT = {
+  label: 'Order',
+  nearest: { label: 'Nearest', title: 'Nearest', spoken: 'Nearest first' },
+  rated: { label: 'Top rated', title: 'Top Rated', spoken: 'Best rated first' },
 } as const;

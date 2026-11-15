@@ -25,6 +25,7 @@ import { Text } from '@/components/ui/text';
 import { VenueMap } from '@/components/venue-map';
 import { VenueSheet } from '@/components/venue-sheet';
 import { useMapLocation } from '@/lib/map-location';
+import { choiceKey, publishMapView } from '@/lib/map-view';
 import { useSkin } from '@/lib/skin';
 import {
   AREA_RADIUS_METERS,
@@ -230,6 +231,25 @@ export default function MapScreen() {
     return alreadyDrawn ? null : searchResult;
   }, [searchResult, venues]);
 
+  // Everything around the user themselves while following, otherwise around
+  // the middle of the map - measured from there, exactly, on the device.
+  const listOrigin = following
+    ? (followPosition ?? (location.status === 'granted' ? location : fetchRegion))
+    : fetchRegion;
+
+  // The Directory looks around the same place, so panning here moves it too.
+  const viewChoice = choiceKey(mapLocation);
+  const viewLatitude = listOrigin?.latitude ?? null;
+  const viewLongitude = listOrigin?.longitude ?? null;
+  React.useEffect(() => {
+    if (viewLatitude === null || viewLongitude === null) return;
+    publishMapView({
+      origin: { latitude: viewLatitude, longitude: viewLongitude },
+      following,
+      choice: viewChoice,
+    });
+  }, [viewLatitude, viewLongitude, following, viewChoice]);
+
   // Where the map starts is unknown until the saved choice has been read.
   if (!mapLocation.ready) {
     return (
@@ -285,12 +305,6 @@ export default function MapScreen() {
       place.reviewable === false ? AREA_RADIUS_METERS : VIEW_RADIUS_METERS
     );
   };
-
-  // Everything around the user themselves while following, otherwise around
-  // the middle of the map - measured from there, exactly, on the device.
-  const listOrigin = following
-    ? (followPosition ?? (location.status === 'granted' ? location : fetchRegion))
-    : fetchRegion;
 
   // From a place's card to the review form for it.
   const writeReviewFor = (venue: NearbyVenue) => {
