@@ -71,6 +71,7 @@ function BasicDirectoryScreen() {
   const topInset = (isWide ? 0 : insets.top) + leaveNow;
 
   const directory = useDirectory();
+  const lead = directoryLead(directory);
   const { open, showOnMap, sheets } = usePlaceSheets(directory.refresh);
 
   // A kind opened from far down the list starts at its top, not wherever the
@@ -108,7 +109,12 @@ function BasicDirectoryScreen() {
               {DIRECTORY_TEXT.title}
             </Text>
             <Text className="text-sm leading-5 text-muted-foreground">
-              {directoryLead(directory)}
+              {lead.before}
+              {/* Where it is looking stands out: it follows the map. */}
+              {lead.place ? (
+                <Text className="text-sm leading-5 font-semibold text-foreground">{lead.place}</Text>
+              ) : null}
+              {lead.after}
             </Text>
           </View>
 

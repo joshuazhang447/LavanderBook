@@ -54,6 +54,7 @@ const TILE = 30;
  */
 export function ChenfengDirectoryScreen() {
   const directory = useDirectory();
+  const lead = directoryLead(directory);
   const { open, showOnMap, sheets } = usePlaceSheets(directory.refresh);
 
   const [refreshing, setRefreshing] = React.useState(false);
@@ -101,7 +102,14 @@ export function ChenfengDirectoryScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={pull} />}>
         <View className="gap-5">
           <Text textStyle="subheadline" className="px-4 text-label-secondary">
-            {directoryLead(directory)}
+            {lead.before}
+            {/* Where it is looking stands out: it follows the map. */}
+            {lead.place ? (
+              <Text textStyle="subheadline" className="font-semibold text-foreground">
+                {lead.place}
+              </Text>
+            ) : null}
+            {lead.after}
           </Text>
 
           <View className="gap-4 px-4">

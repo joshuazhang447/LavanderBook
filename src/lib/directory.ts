@@ -596,18 +596,34 @@ export function useDirectory() {
 
 export type Directory = ReturnType<typeof useDirectory>;
 
-/** What the Directory is a list of, in a sentence: "...near you in Ottawa, Ontario...". */
-export function directoryLead(directory: Directory): string {
+/** Marks where the place's name sits in the lead, so it can be drawn apart. */
+const PLACE_MARK = '\u0001';
+
+/**
+ * What the Directory is a list of, in a sentence - "...near you in Ottawa,
+ * Ontario..." - in three parts, so a screen can make the place's name stand
+ * out: what comes before it, the name (null when there is none to name: "near
+ * you", "around the middle of the map"), and what comes after.
+ */
+export function directoryLead(directory: Directory): {
+  before: string;
+  place: string | null;
+  after: string;
+} {
   const name = directory.where.state === 'ready' ? directory.where.name : null;
+  const mark = (label: string) => `${PLACE_MARK}${label}${PLACE_MARK}`;
   const where =
     name === null
       ? DIRECTORY_TEXT.nearYou
       : name.kind === 'you'
         ? name.city
-          ? DIRECTORY_TEXT.nearYouIn(name.city)
+          ? DIRECTORY_TEXT.nearYouIn(mark(name.city))
           : DIRECTORY_TEXT.nearYou
         : name.kind === 'named'
-          ? DIRECTORY_TEXT.near(name.label)
+          ? DIRECTORY_TEXT.near(mark(name.label))
           : DIRECTORY_TEXT.mapMiddle;
-  return DIRECTORY_TEXT.lead(where);
+  const [before, place, after] = DIRECTORY_TEXT.lead(where).split(PLACE_MARK);
+  return place === undefined
+    ? { before, place: null, after: '' }
+    : { before, place, after: after ?? '' };
 }
