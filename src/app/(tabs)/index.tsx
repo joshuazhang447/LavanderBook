@@ -18,13 +18,16 @@ import { VenueList } from '@/components/venue-list';
 import { clearMapFocus, focusMapOn, useMapFocus } from '@/lib/map-focus';
 import type { MapViewMode } from '@/components/map-controls';
 import { MapControls, RecenterButton } from '@/components/map-controls';
+import { FloatingMapFilter } from '@/components/map-filter';
 import { MapSearch } from '@/components/map-search';
 import { OauMapChrome } from '@/components/oau/map-panel';
 import { ReviewSheet } from '@/components/review-sheet';
 import { Text } from '@/components/ui/text';
 import { VenueMap } from '@/components/venue-map';
 import { VenueSheet } from '@/components/venue-sheet';
+import { mapShows, useListFilter } from '@/lib/list-filter';
 import { useMapLocation } from '@/lib/map-location';
+import { useMapSearchOpen } from '@/lib/map-search-state';
 import { choiceKey, publishMapView } from '@/lib/map-view';
 import { useSkin } from '@/lib/skin';
 import {
@@ -100,6 +103,8 @@ export default function MapScreen() {
   const [listQuery, setListQuery] = React.useState('');
   const { skin } = useSkin();
   const chenfeng = skin === 'chenfeng';
+  // Chenfeng's search opens from the tab bar, over the map: the chips give way.
+  const chenfengSearchOpen = useMapSearchOpen();
   // OAU has no Map | List switch: the places are a sheet over the map (a panel
   // on a wide screen), so its map is always showing.
   const oau = skin === 'oau';
@@ -214,6 +219,13 @@ export default function MapScreen() {
   }, [goTo, following, followAnchor, pannedRegion, span]);
 
   const { venues } = useNearbyVenues(fetchRegion, String(savedCount));
+  // The pins the filter chips leave on the map: the list's own filter, so the
+  // two always agree (see map-filter.tsx).
+  const filter = useListFilter();
+  const mapVenues = React.useMemo(
+    () => (filter === 'all' ? venues : venues.filter((venue) => mapShows(venue, filter))),
+    [venues, filter]
+  );
 
   // Searching for somewhere that already has reviews draws its rating box, and
   // a pin for the same point would sit on top of it - two labels, one place.
@@ -225,11 +237,11 @@ export default function MapScreen() {
     // Explicitly false, never falsy: an older function omits the field, and
     // that must not silently make everything unreviewable.
     if (searchResult.reviewable === false) return null;
-    const alreadyDrawn = venues.some(
+    const alreadyDrawn = mapVenues.some(
       (venue) => venue.google_place_id === searchResult.placeId
     );
     return alreadyDrawn ? null : searchResult;
-  }, [searchResult, venues]);
+  }, [searchResult, mapVenues]);
 
   // Everything around the user themselves while following, otherwise around
   // the middle of the map - measured from there, exactly, on the device.
@@ -342,7 +354,7 @@ export default function MapScreen() {
           center={goTo ?? start}
           initialRadiusMeters={focus ? focus.radius : start.radius}
           showsUser={onDevice}
-          venues={venues}
+          venues={mapVenues}
           followCenter={goTo ?? (following ? followPosition : null)}
           // Either a new Locate request or a recentre press re-issues the move,
           // zooming in to this much ground if the map is further out: the
@@ -419,6 +431,7 @@ export default function MapScreen() {
             refreshing={refreshing}
             onRefresh={refresh}
           />
+          {mode === 'map' && !chenfengSearchOpen ? <FloatingMapFilter /> : null}
           {mode === 'map' ? (
             <ChenfengLocateButton
               following={following}
@@ -482,6 +495,7 @@ export default function MapScreen() {
             ) : null}
           </MapControls>
 
+          {mode === 'map' && !searchOpen ? <FloatingMapFilter /> : null}
           {mode === 'map' ? (
             <RecenterButton following={following} usingLocation={onDevice} onPress={recenter} />
           ) : null}

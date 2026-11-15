@@ -16,6 +16,7 @@ import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { CONTINUOUS } from '@/lib/shape';
 import { cn } from '@/lib/utils';
+import { webLinkProps } from '@/lib/about-link';
 
 /**
  * iOS's inset grouped list - the grammar of every settings-like screen in
@@ -180,6 +181,8 @@ export type RowProps = {
   /** Centred, for an action alone in its section ("Sign Out"). */
   centered?: boolean;
   onPress?: () => void;
+  /** A link: on the website the row is a real <a href> (webLinkProps). */
+  href?: string;
   onLongPress?: () => void;
   disabled?: boolean;
   /** Instead of title and subtitle: the row's own body. */
@@ -249,6 +252,7 @@ export function Row({
   tone = 'default',
   centered,
   onPress,
+  href,
   onLongPress,
   disabled,
   children,
@@ -366,6 +370,7 @@ export function Row({
   return (
     <Pressable
       onPress={onPress}
+      {...(href ? webLinkProps(href) : {})}
       onLongPress={onLongPress}
       disabled={disabled}
       // Long enough that a finger starting a scroll does not flash the row.

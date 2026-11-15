@@ -6,10 +6,11 @@ import {
   CircleUser,
   Clock,
   DoorOpen,
+  Info,
+  Lock,
   Map as MapIcon,
   Navigation,
   Palette,
-  Lock,
   ShieldAlert,
   SquarePen,
   Trash2,
@@ -47,6 +48,7 @@ import { reopenSafetyNotice, useSafety } from '@/lib/safety';
 import { SKINS, useSkinChoice } from '@/lib/skin';
 import { supabase } from '@/lib/supabase';
 import type { SelectedPoi } from '@/lib/venues';
+import { ABOUT_TEXT, ABOUT_URL, pressLink } from '@/lib/about-link';
 
 /**
  * Chenfeng's Account tab (guideline section 14.5): a grouped list under the
@@ -230,6 +232,15 @@ function SafetySection() {
         tile={{ icon: Lock, className: 'bg-system-gray' }}
         accessory="chevron"
         onPress={() => router.push('/account/privacy')}
+      />
+      <Row
+        title={ABOUT_TEXT.label}
+        tile={{ icon: Info, className: 'bg-system-gray' }}
+        accessory="chevron"
+        onPress={() => pressLink(ABOUT_URL)}
+        href={ABOUT_URL}
+        accessibilityRole="link"
+        accessibilityLabel={ABOUT_TEXT.spoken}
       />
     </Section>
   );

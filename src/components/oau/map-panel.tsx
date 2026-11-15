@@ -22,6 +22,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DistanceMeter } from '@/components/distance-meter';
 import { useLeaveNowReserve } from '@/components/leave-now';
 import { ListFilterControl, ListOrderControl } from '@/components/list-filter';
+import { MapFilterChips } from '@/components/map-filter';
 import { RecenterButton } from '@/components/map-controls';
 import { usePlaceSearch } from '@/components/map-search';
 import { IconSticker, OauCard } from '@/components/oau/card';
@@ -601,6 +602,8 @@ function WidePanel(props: ShellProps) {
             onPickVenue={props.onSelectVenue}
             onClear={props.onClearPlace}
           />
+          {/* Which pins the map shows; the list below follows. */}
+          <MapFilterChips className="mt-3" />
         </View>
         {props.venue ? (
           <Card props={props}>
@@ -656,8 +659,8 @@ function NarrowSheet(props: ShellProps) {
     if (next > 0 && next !== headerHeight) setHeaderHeight(next);
   };
   const searchTop = insets.top + leaveNow.top + 12;
-  // Full height stops under the search bar.
-  const full = Math.max(PEEK, available - (searchTop + 52 + 12));
+  // Full height stops under the search bar and the filter chips under it.
+  const full = Math.max(PEEK, available - (searchTop + 52 + 8 + 36 + 12));
   const half = Math.min(full, Math.max(PEEK, Math.round(available * 0.55)));
   const heights: Record<Detent, number> = { peek: PEEK, half, full };
 
@@ -739,6 +742,7 @@ function NarrowSheet(props: ShellProps) {
           onPickVenue={props.onSelectVenue}
           onClear={props.onClearPlace}
         />
+        <MapFilterChips className="mt-2" />
       </View>
 
       {detent !== 'full' ? (

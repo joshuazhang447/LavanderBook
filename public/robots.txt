@@ -1,0 +1,10 @@
+# LavenderBook, https://lavenderbook.oau.app
+# The map, the directory and the privacy policy are for everyone. The admin
+# panel is not a page to find.
+
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /_sitemap
+
+Sitemap: https://lavenderbook.oau.app/sitemap.xml

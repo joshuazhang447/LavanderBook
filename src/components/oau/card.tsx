@@ -15,6 +15,7 @@ import { Text } from '@/components/ui/text';
 import { useDisplaySettings } from '@/lib/accessibility';
 import { BOOK_LARGE } from '@/lib/logos';
 import { cn } from '@/lib/utils';
+import { webLinkProps } from '@/lib/about-link';
 
 /**
  * OAU's cards, rows, headings and round icon stickers
@@ -110,6 +111,8 @@ type OauRowProps = {
   chevron?: boolean;
   trailing?: React.ReactNode;
   onPress?: () => void;
+  /** A link: on the website the row is a real <a href> (webLinkProps). */
+  href?: string;
   accessibilityLabel?: string;
 };
 
@@ -125,6 +128,7 @@ export function OauRow({
   chevron,
   trailing,
   onPress,
+  href,
   accessibilityLabel,
 }: OauRowProps) {
   const body = (
@@ -155,7 +159,8 @@ export function OauRow({
   return (
     <Pressable
       onPress={onPress}
-      accessibilityRole="button"
+      {...(href ? webLinkProps(href) : {})}
+      accessibilityRole={href ? 'link' : 'button'}
       accessibilityLabel={accessibilityLabel}
       className={cn(
         className,
