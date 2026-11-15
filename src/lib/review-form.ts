@@ -63,6 +63,39 @@ export const WHAT_NOT_TO_WRITE = {
     'How you were treated, whether you felt safe, whether there were any LGBTQ+ employees, and anything someone like you should know before going.',
 };
 
+/**
+ * One thing between the form and Post: a question with no answer yet, or an
+ * answer that will not pass. `key` is 'stars', 'bathroom', 'body' or a
+ * question's id, so a skin can find the card it belongs to.
+ */
+export type Blocker = { key: string; kind: 'missing' | 'problem' };
+
+/**
+ * What a form that leads to its unanswered questions says, beside a Post that
+ * waits for them, so they are not left to be found: how many are left, a way
+ * there, and a line on each card.
+ */
+export const BLOCKER_TEXT = {
+  /** Under a required question with no answer, once the form has shown what is missing. */
+  missing: 'Answer this to post.',
+  showMe: 'Show me',
+  showMeSpoken: 'Go to the first question that still needs an answer',
+  /** The footer's line: how much is still in the way. */
+  line(blockers: readonly Blocker[]): string {
+    const missing = blockers.filter((blocker) => blocker.kind === 'missing').length;
+    const fix = blockers.length - missing;
+    if (fix === 0) {
+      return missing === 1
+        ? '1 question still needs an answer.'
+        : `${missing} questions still need an answer.`;
+    }
+    if (missing === 0) {
+      return fix === 1 ? '1 answer needs fixing.' : `${fix} answers need fixing.`;
+    }
+    return `${missing} to answer and ${fix} to fix before you can post.`;
+  },
+};
+
 /** PostgREST errors carry the SQLSTATE; the form reacts to one of them. */
 function hasCode(error: unknown, code: string): boolean {
   return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === code;
@@ -261,6 +294,20 @@ export function useReviewForm({ poi, venueId: knownVenueId, onSaved }: ReviewFor
     problems.size === 0 &&
     !busy;
 
+  // Everything in the way, in the order the questions are asked: the two every
+  // review has, the free text, then the tag questions.
+  const blockers: Blocker[] = [];
+  if (stars === null) blockers.push({ key: 'stars', kind: 'missing' });
+  if (bathroom === null) blockers.push({ key: 'bathroom', kind: 'missing' });
+  if (tooLong) blockers.push({ key: 'body', kind: 'problem' });
+  for (const question of questions) {
+    if (question.required && !isAnswered(question.kind, answers[question.id] ?? null)) {
+      blockers.push({ key: question.id, kind: 'missing' });
+    } else if (problems.has(question.id)) {
+      blockers.push({ key: question.id, kind: 'problem' });
+    }
+  }
+
   const identity = profile ? postingAs(profile, isExisting ? shown : null) : [];
 
   // One sentence about whatever is in the way, or nothing.
@@ -394,6 +441,8 @@ export function useReviewForm({ poi, venueId: knownVenueId, onSaved }: ReviewFor
     problems,
     tooLong,
     canSubmit,
+    /** What is in the way, in the form's order; empty when Post would go through. */
+    blockers,
     identity,
     basicsMissing,
     blockingHint,
