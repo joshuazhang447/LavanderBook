@@ -1,6 +1,8 @@
 import * as React from 'react';
 
 import type { PlaceRow } from '@/lib/directory';
+import type { NearbyVenue } from '@/lib/use-nearby-venues';
+import { venueTags } from '@/lib/venue-tags';
 
 /**
  * Which places the Map tab's list shows: all, the ones LavenderBook lists
@@ -48,6 +50,21 @@ export function passesListFilter(row: PlaceRow, filter: ListFilter): boolean {
   if (filter === 'listed') return isListed(row);
   if (filter === 'visitors') return !isListed(row);
   return true;
+}
+
+/** The tag LavenderBook marks a warning with (20261018100000). */
+const WARNING_KIND = 'dangerous';
+
+/**
+ * Whether the map shows a venue's pin under `filter`: the same split as the
+ * list's, except that a warning always shows. Choosing "Visitors" must never
+ * hide the pin that says a place is dangerous.
+ */
+export function mapShows(venue: Pick<NearbyVenue, 'tags'>, filter: ListFilter): boolean {
+  if (filter === 'all') return true;
+  const tags = venueTags(venue);
+  if (tags.some((tag) => tag.slug === WARNING_KIND)) return true;
+  return filter === 'listed' ? tags.length > 0 : tags.length === 0;
 }
 
 /** How many of `rows` each filter would show. */
