@@ -19,9 +19,12 @@ import {
 } from '@/lib/moderation-text';
 import {
   answerProblem,
+  arrangeVisit,
   fetchMyAnswers,
   fetchQuestionnaire,
+  fetchUsedKinds,
   isAnswered,
+  knowsWhoIsAsked,
   submitReview,
   toRpcAnswer,
   type AnswerMap,
@@ -94,6 +97,37 @@ export const BLOCKER_TEXT = {
     }
     return `${missing} to answer and ${fix} to fix before you can post.`;
   },
+};
+
+/**
+ * The words around "what did you use here?", for every skin that asks it. A
+ * place's questions about itself go to everyone; a service's own only to
+ * those who pick it, and nothing unpicked is ever required.
+ */
+export const VISIT_TEXT = {
+  placeTitle: 'About the place',
+  placeLine: 'Anyone who has been can answer these. Skip what you do not know.',
+  usedTitle: 'Did you use any of these here?',
+  usedLine: 'Pick what you used and we will ask a little about it. Nothing else is asked.',
+  /** On a chip: what picking it adds. */
+  adds: (count: number) => (count === 1 ? '1 question' : `${count} questions`),
+  /** Read out with a chip. */
+  spoken: (label: string, count: number, required: number, picked: boolean) =>
+    label +
+    (count > 0 ? `, ${count === 1 ? '1 question' : `${count} questions`}` : '') +
+    (required > 0 ? `, ${required} needed to post` : '') +
+    (picked ? ', picked' : ''),
+  /** Under a picked kind's heading, when Post waits for some of it. */
+  needed: (required: number) =>
+    required === 1 ? '1 question here is needed to post.' : `${required} questions here are needed to post.`,
+  /** Asked before unpicking a kind that has answers, since they go with it. */
+  removeTitle: (label: string) => `Remove your answers about ${label}?`,
+  removeMessage: (count: number) =>
+    count === 1
+      ? 'You answered 1 question about it. It will not be saved.'
+      : `You answered ${count} questions about it. They will not be saved.`,
+  remove: 'Remove',
+  keep: 'Keep them',
 };
 
 /** PostgREST errors carry the SQLSTATE; the form reacts to one of them. */
@@ -173,6 +207,14 @@ type ReviewFormOptions = {
   venueId?: string;
   /** After a save or a delete went through. */
   onSaved: () => void;
+  /**
+   * Ask what the visit was for (VISIT_TEXT): the questions about the place
+   * for everyone, each service's only for those who pick it. A skin that
+   * leaves it off shows every question and is held to every required one,
+   * as before; so is any form against a server that does not say who is
+   * asked what.
+   */
+  askWhatWasUsed?: boolean;
 };
 
 /**
@@ -181,7 +223,12 @@ type ReviewFormOptions = {
  * what blocks posting, and posting and deleting themselves. The checks here
  * are the ones the database enforces anyway; the form only says so sooner.
  */
-export function useReviewForm({ poi, venueId: knownVenueId, onSaved }: ReviewFormOptions) {
+export function useReviewForm({
+  poi,
+  venueId: knownVenueId,
+  onSaved,
+  askWhatWasUsed = false,
+}: ReviewFormOptions) {
   const { session, profile } = useAuth();
 
   const [stars, setStars] = React.useState<number | null>(null);
@@ -196,6 +243,8 @@ export function useReviewForm({ poi, venueId: knownVenueId, onSaved }: ReviewFor
   const [shown, setShown] = React.useState<Shown | null>(null);
   const [questionnaire, setQuestionnaire] = React.useState<Questionnaire>([]);
   const [answers, setAnswers] = React.useState<AnswerMap>({});
+  /** The venue's kinds the reviewer says they used, by tag id. */
+  const [picked, setPicked] = React.useState<string[]>([]);
   /**
    * 'held' once a save went through and the review is waiting for a person:
    * the form says so before it closes, and finish() closes it.
@@ -234,12 +283,13 @@ export function useReviewForm({ poi, venueId: knownVenueId, onSaved }: ReviewFor
         // spinner: prefilled answers have to be there at first paint, and a
         // section appearing under a thumb already heading for Post is worse
         // than a slightly longer wait.
-        const [{ data: review }, tags] = await Promise.all([
+        const [{ data: review }, tags, used] = await Promise.all([
           supabase.rpc('my_reviews').eq('venue_id', resolvedVenueId).maybeSingle(),
           // An untagged venue has no questions. A failed fetch looks the same,
           // and the review still posts - stars and the bathroom answer are
           // worth more than a blocked form.
           fetchQuestionnaire(resolvedVenueId).catch((): Questionnaire => []),
+          askWhatWasUsed ? fetchUsedKinds(resolvedVenueId) : Promise.resolve(null),
         ]);
         if (!active) return;
         setQuestionnaire(tags);
@@ -263,6 +313,25 @@ export function useReviewForm({ poi, venueId: knownVenueId, onSaved }: ReviewFor
           const mine = await fetchMyAnswers(review.id, byId).catch((): AnswerMap => ({}));
           if (!active) return;
           setAnswers(mine);
+
+          // What they said they used last time; for a review saved before the
+          // question, the kinds they answered something of their own about.
+          if (askWhatWasUsed && knowsWhoIsAsked(tags)) {
+            setPicked(
+              used ??
+                tags
+                  .filter((tag) =>
+                    tag.asks.some((id) => {
+                      const question = byId.get(id);
+                      return (
+                        question?.asked === 'if-used' &&
+                        isAnswered(question.kind, mine[id] ?? null)
+                      );
+                    })
+                  )
+                  .map((tag) => tag.id)
+            );
+          }
         }
       }
 
@@ -272,11 +341,43 @@ export function useReviewForm({ poi, venueId: knownVenueId, onSaved }: ReviewFor
     return () => {
       active = false;
     };
-  }, [userId, poi.placeId, knownVenueId]);
+  }, [userId, poi.placeId, knownVenueId, askWhatWasUsed]);
 
   const tooLong = body.length > MAX_BODY;
 
-  const questions = questionnaire.flatMap((tag) => tag.questions);
+  // Asked what the visit was for: the form is laid out by what was picked,
+  // and only what it shows is checked and sent.
+  const asking = askWhatWasUsed && knowsWhoIsAsked(questionnaire);
+  const pickedSet = new Set(picked);
+  const layout = asking ? arrangeVisit(questionnaire, pickedSet) : null;
+  const questions = layout ? layout.asked : questionnaire.flatMap((tag) => tag.questions);
+
+  /** Answers that unpicking this kind would take away, as the form would send them. */
+  function answeredOnlyFor(tagId: string): string[] {
+    if (!layout) return [];
+    const without = new Set(picked.filter((id) => id !== tagId));
+    const after = new Set(arrangeVisit(questionnaire, without).asked.map((q) => q.id));
+    return layout.asked
+      .filter((q) => !after.has(q.id) && isAnswered(q.kind, answers[q.id] ?? null))
+      .map((q) => q.id);
+  }
+
+  /** Picks or unpicks a kind. Unpicking drops its answers: they would not be saved. */
+  function togglePicked(tagId: string) {
+    if (pickedSet.has(tagId)) {
+      const lost = answeredOnlyFor(tagId);
+      if (lost.length > 0) {
+        setAnswers((current) => {
+          const next = { ...current };
+          for (const id of lost) delete next[id];
+          return next;
+        });
+      }
+      setPicked(picked.filter((id) => id !== tagId));
+    } else {
+      setPicked([...picked, tagId]);
+    }
+  }
   const missingRequired = questions.filter(
     (question) => question.required && !isAnswered(question.kind, answers[question.id] ?? null)
   );
@@ -389,6 +490,11 @@ export function useReviewForm({ poi, venueId: knownVenueId, onSaved }: ReviewFor
           const value = toRpcAnswer(question, answers[question.id] ?? null);
           return value === null ? [] : [{ question_id: question.id, value }];
         }),
+        // Only the kinds still offered here: a tag removed while the form was
+        // open is not the reviewer's to claim.
+        usedTags: layout
+          ? picked.filter((id) => layout.services.some((service) => service.tag.id === id))
+          : undefined,
       });
 
       // Waiting for a person? Then say so before closing - otherwise the
@@ -436,6 +542,19 @@ export function useReviewForm({ poi, venueId: knownVenueId, onSaved }: ReviewFor
     questionnaire,
     answers,
     setAnswers,
+    /**
+     * What the visit was for, when this form asks it and the server says who
+     * is asked what; null otherwise, and the skin lays out `questionnaire`.
+     */
+    visit: layout
+      ? {
+          ...layout,
+          picked: pickedSet,
+          toggle: togglePicked,
+          /** How many answers unpicking would take away: ask first when it is any. */
+          answersLostIfUnpicked: (tagId: string) => answeredOnlyFor(tagId).length,
+        }
+      : null,
     questions,
     missingRequired,
     problems,

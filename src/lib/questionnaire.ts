@@ -27,6 +27,12 @@ export type Question = {
   config: Record<string, unknown>;
   required: boolean;
   options: QuestionOption[];
+  /**
+   * Who is asked it (venue_question_audience): 'everyone' - it is about the
+   * place - or 'if-used', only reviewers who say they used a kind that asks
+   * it. Null from a server older than 20261115110000: everyone, as before.
+   */
+  asked: 'everyone' | 'if-used' | null;
 };
 
 export type QuestionnaireTag = {
@@ -43,6 +49,8 @@ export type QuestionnaireTag = {
    * no questions of its own and still be part of the intro.
    */
   questions: Question[];
+  /** Every question this tag asks, shared ones included, by id: for arrangeVisit. */
+  asks: string[];
 };
 
 export type Questionnaire = QuestionnaireTag[];
@@ -106,12 +114,16 @@ export async function fetchQuestionnaire(venueId: string): Promise<Questionnaire
         color: row.tag_color,
         textColor: row.tag_text_color,
         questions: [],
+        asks: [],
       };
       tags.push(tag);
     }
+    tag.asks.push(row.question_id);
     if (seen.has(row.question_id)) continue;
     seen.add(row.question_id);
 
+    // A server from before 20261115110000 sends no `everyone`.
+    const everyone = (row as { everyone?: unknown }).everyone;
     tag.questions.push({
       id: row.question_id,
       prompt: row.prompt,
@@ -120,10 +132,104 @@ export async function fetchQuestionnaire(venueId: string): Promise<Questionnaire
       config: asRecord(row.config),
       required: row.required,
       options: asOptions(row.options),
+      asked: typeof everyone === 'boolean' ? (everyone ? 'everyone' : 'if-used') : null,
     });
   }
 
   return tags;
+}
+
+// ---------------------------------------------------------------------------
+// What the visit was for
+// ---------------------------------------------------------------------------
+
+/** A kind as a chip or a heading: the tag without its questions. */
+export type VisitKind = Omit<QuestionnaireTag, 'questions' | 'asks'>;
+
+/** A kind the reviewer can say they used: its chip, and how much it adds. */
+export type VisitService = {
+  tag: VisitKind;
+  /**
+   * Questions picking it adds, as things stand: what nothing picked asks yet
+   * (for a picked one, what it added). Can be 0 when picks before it share
+   * them all.
+   */
+  count: number;
+  /** How many of those Post waits for. */
+  required: number;
+};
+
+/**
+ * The form a reviewer sees, given what they say they used: the questions
+ * about the place, asked of everyone; a chip per service with questions of
+ * its own; and, under the chips, each picked service with its questions. A
+ * question two picked services share is asked once, under the first.
+ */
+export type VisitLayout = {
+  place: Question[];
+  services: VisitService[];
+  sections: { tag: VisitKind; questions: Question[] }[];
+  /** Everything asked, in the form's order: what Post checks and what is sent. */
+  asked: Question[];
+};
+
+/**
+ * Whether the server says who each question is for. Without it (a server from
+ * before 20261115110000) a form asks everything, as before.
+ */
+export function knowsWhoIsAsked(questionnaire: Questionnaire): boolean {
+  return questionnaire.some((tag) => tag.questions.some((question) => question.asked !== null));
+}
+
+export function arrangeVisit(questionnaire: Questionnaire, picked: ReadonlySet<string>): VisitLayout {
+  const all = questionnaire.flatMap((tag) => tag.questions);
+  const byId = new Map(all.map((question) => [question.id, question] as const));
+  const place = all.filter((question) => question.asked !== 'if-used');
+
+  // Each service's own questions: those only reviewers who used it are asked.
+  const kinds = questionnaire.flatMap((entry) => {
+    const { questions: _questions, asks, ...tag } = entry;
+    const own = asks.flatMap((id) => {
+      const question = byId.get(id);
+      return question && question.asked === 'if-used' ? [question] : [];
+    });
+    return own.length > 0 ? [{ tag, own }] : [];
+  });
+
+  const sections: VisitLayout['sections'] = [];
+  const shown = new Set(place.map((question) => question.id));
+  for (const { tag, own } of kinds) {
+    if (!picked.has(tag.id)) continue;
+    const fresh = own.filter((question) => !shown.has(question.id));
+    fresh.forEach((question) => shown.add(question.id));
+    if (fresh.length > 0) sections.push({ tag, questions: fresh });
+  }
+
+  // What each chip adds as things stand: a picked one, its own section; any
+  // other, what no pick has asked yet - so a question two services share is
+  // counted once, by whichever comes first.
+  const sectionOf = new Map(
+    sections.map((section) => [section.tag.id, new Set(section.questions.map((q) => q.id))] as const)
+  );
+  const services: VisitService[] = kinds.map(({ tag, own }) => {
+    const mine = sectionOf.get(tag.id);
+    const left = own.filter((question) => !shown.has(question.id) || mine?.has(question.id));
+    return { tag, count: left.length, required: left.filter((q) => q.required).length };
+  });
+
+  return {
+    place,
+    services,
+    sections,
+    asked: [...place, ...sections.flatMap((section) => section.questions)],
+  };
+}
+
+/** What the caller said they used at a venue, or null: no review, or none saved with picks. */
+export async function fetchUsedKinds(venueId: string): Promise<string[] | null> {
+  const { data, error } = await supabase.rpc('my_used_kinds', { p_venue_id: venueId });
+  if (error) return null;
+  return Array.isArray(data) ? data : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -319,6 +425,11 @@ export async function submitReview(input: {
   bathroom: Answer;
   body: string | null;
   answers: RpcAnswer[];
+  /**
+   * The venue's kinds the reviewer used, from a form that asks. Left out
+   * otherwise - and so never sent to a server that would not know it.
+   */
+  usedTags?: string[];
 }): Promise<string> {
   const { data, error } = await supabase.rpc('submit_review', {
     p_venue_id: input.venueId,
@@ -326,6 +437,7 @@ export async function submitReview(input: {
     p_trans_bathroom: input.bathroom,
     p_body: input.body ?? undefined,
     p_answers: input.answers as unknown as Json,
+    ...(input.usedTags ? { p_used_tags: input.usedTags } : {}),
   });
   if (error) throw error;
   return data;
@@ -379,7 +491,7 @@ export type AnswerSummaryRow = {
   /** Superseded or retired: shown under the wording it was asked in, marked. */
   archived: boolean;
   /** The first of the venue's current tags that asks it; null = nothing here does any more. */
-  tag: Omit<QuestionnaireTag, 'questions'> | null;
+  tag: VisitKind | null;
   respondents: number;
   /** Reviews at this venue with at least one answer - the coverage line. */
   answeredReviews: number;

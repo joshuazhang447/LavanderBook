@@ -20,7 +20,15 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Text } from '@/components/ui/text';
 import { Textarea } from '@/components/ui/textarea';
-import { createTag, setTagIcon, updateTag, type AdminTag, type TagDraft } from '@/lib/admin';
+import {
+  createTag,
+  fetchTagDescribesPlace,
+  setTagDescribesPlace,
+  setTagIcon,
+  updateTag,
+  type AdminTag,
+  type TagDraft,
+} from '@/lib/admin';
 import { defaultKindIconKey, kindIcon, kindIconEntry, kindIconKey } from '@/lib/kind-icons';
 import { refreshTagIcons, useTagIcons, useTagIconsSupported } from '@/lib/tag-icons';
 import { isValidHex, TAG_COLOR_PRESETS } from '@/lib/tag-colors';
@@ -75,6 +83,24 @@ export function TagDialog({ tag, onClose, onSaved }: TagDialogProps) {
   const [chosenIcon, setChosenIcon] = React.useState<string | null | undefined>(undefined);
   const icon = chosenIcon === undefined ? storedIcon : chosenIcon;
   const [pickingIcon, setPickingIcon] = React.useState(false);
+  // Whether its questions go to every reviewer or only to those who used it.
+  // Read when the window opens; undefined until then, null on a server
+  // without the setting (the switch is then left out).
+  const [storedDescribes, setStoredDescribes] = React.useState<boolean | null | undefined>(
+    undefined
+  );
+  const [chosenDescribes, setChosenDescribes] = React.useState<boolean | undefined>(undefined);
+  const describesPlace = chosenDescribes ?? storedDescribes ?? false;
+  const tagId = tag?.id ?? null;
+  React.useEffect(() => {
+    let active = true;
+    fetchTagDescribesPlace(tagId)
+      .then((value) => active && setStoredDescribes(value))
+      .catch(() => active && setStoredDescribes(null));
+    return () => {
+      active = false;
+    };
+  }, [tagId]);
 
   function onLabelChange(next: string) {
     setLabel(next);
@@ -117,6 +143,13 @@ export function TagDialog({ tag, onClose, onSaved }: TagDialogProps) {
       if (chosenIcon !== undefined && chosenIcon !== storedIcon) {
         await setTagIcon(id, chosenIcon);
         await refreshTagIcons();
+      }
+      if (
+        typeof storedDescribes === 'boolean' &&
+        chosenDescribes !== undefined &&
+        chosenDescribes !== storedDescribes
+      ) {
+        await setTagDescribesPlace(id, chosenDescribes);
       }
       onSaved();
       onClose();
@@ -204,6 +237,27 @@ export function TagDialog({ tag, onClose, onSaved }: TagDialogProps) {
               </View>
             )}
           </View>
+
+          {/* Who is asked its questions in a review. Left out until it is
+              known, and on a server without the setting. */}
+          {typeof storedDescribes === 'boolean' ? (
+            <View className="gap-2">
+              <View className="flex-row items-center justify-between gap-3">
+                <Label nativeID="tag-describes-place">Describes the place</Label>
+                <Switch
+                  aria-labelledby="tag-describes-place"
+                  checked={describesPlace}
+                  onCheckedChange={setChosenDescribes}
+                  disabled={busy}
+                />
+              </View>
+              <Text className="text-xs text-muted-foreground">
+                {describesPlace
+                  ? 'Every reviewer of a place with this tag is asked its questions, as anyone who walked in could answer them. For what a place is, like a community hub or a campus centre.'
+                  : 'A service: its questions go only to reviewers who say they used it. Its required questions are never asked of anyone else.'}
+              </Text>
+            </View>
+          ) : null}
 
           <View className="gap-1.5">
             <Label nativeID="tag-description">Description</Label>
