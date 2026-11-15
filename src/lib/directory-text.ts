@@ -201,7 +201,10 @@ export const DIRECTORY_TEXT = {
   lead: (where: string) =>
     `LGBTQ+ community centres, clinics, support groups, shelters and queer-owned places ${where}, checked and listed by LavenderBook.`,
   nearYou: 'near you',
+  nearYouIn: (label: string) => `near you in ${label}`,
   near: (label: string) => `near ${label}`,
+  /** Where the map was panned to somewhere no city is near. */
+  mapMiddle: 'around the middle of the map',
   search: 'Search: trans clinic, youth, bar…',
   searchLabel: 'Search the directory',
   /** Over the kinds, where it opens. */

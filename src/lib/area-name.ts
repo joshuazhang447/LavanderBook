@@ -59,17 +59,17 @@ function nearestCityLabel(cities: readonly City[], point: Coords): string | null
 }
 
 export type ListPlaceName =
-  /** Around the reader themselves. */
-  | { kind: 'you' }
+  /** Around the reader themselves, and the city they are in if one is near. */
+  | { kind: 'you'; city: string | null }
   /** Around a city, by name. */
   | { kind: 'named'; label: string }
   /** Around the middle of the map, somewhere no city is near. */
   | { kind: 'map' };
 
 /**
- * What the map's list is around: the reader while the map follows them; the
- * place chosen on this device while the list is still there; else the city
- * nearest the list's middle.
+ * What a list of places is around: the reader while the map follows them (and
+ * which city that is); the place chosen on this device while the list is
+ * still there; else the city nearest the list's middle.
  */
 export function useListPlaceName(
   origin: Coords | null,
@@ -84,7 +84,7 @@ export function useListPlaceName(
 
   const latitude = origin?.latitude ?? null;
   const longitude = origin?.longitude ?? null;
-  const needsName = !following && !atChosen && latitude !== null && longitude !== null;
+  const needsName = !atChosen && latitude !== null && longitude !== null;
 
   const [named, setNamed] = React.useState<{ key: string; label: string | null } | null>(null);
   const key = needsName ? `${latitude},${longitude}` : null;
@@ -100,10 +100,10 @@ export function useListPlaceName(
     };
   }, [key, latitude, longitude]);
 
-  if (following) return { kind: 'you' };
   if (atChosen && chosen) return { kind: 'named', label: chosen.label };
   // Still working it out: the last name found, which is right for any pan
   // within a city, rather than a flash of "the middle of the map".
   const label = named?.key === key ? named.label : (named?.label ?? null);
+  if (following) return { kind: 'you', city: label };
   return label ? { kind: 'named', label } : { kind: 'map' };
 }

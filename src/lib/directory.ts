@@ -4,7 +4,9 @@ import { BackHandler, Platform } from 'react-native';
 import { provinceAt } from '@/lib/area-province';
 import { DIRECTORY_TEXT } from '@/lib/directory-text';
 import { roundForSearch } from '@/lib/location-privacy';
+import { useListPlaceName, type ListPlaceName } from '@/lib/area-name';
 import { useMapLocation } from '@/lib/map-location';
+import { choiceKey, useMapView } from '@/lib/map-view';
 import { matchPlaces } from '@/lib/place-match';
 import { useSearchDistance } from '@/lib/search-distance';
 import { publicSupabase } from '@/lib/supabase';
@@ -407,15 +409,19 @@ export type DirectoryOrigin =
   | {
       state: 'ready';
       origin: Coords;
-      /** Whether `origin` is the phone itself rather than a chosen place. */
+      /** Whether `origin` is the phone itself rather than a chosen place or the map. */
       onDevice: boolean;
-      /** "Ottawa, Ontario" or "Ottawa area" - for a chosen place only. */
-      label: string | null;
+      /** What to call where `origin` is: "you" (in Ottawa), "Ottawa, Ontario". */
+      name: ListPlaceName;
     };
 
 /**
- * Where the Directory looks around: the same place the map starts - the phone,
- * or the city or general area chosen on this device (see @/lib/map-location).
+ * Where the Directory looks around: wherever the Map tab's list is - the
+ * reader while the map follows them, else the middle of the map, so panning
+ * the map to another city moves the Directory there too (@/lib/map-view).
+ * Before the map has been shown, or once the location choice has changed
+ * since, the place the map would start: the phone, or the city or general
+ * area chosen on this device (see @/lib/map-location).
  *
  * Like the map, it never asks the OS for anything: useCurrentLocation only
  * reads a permission that "Near me" was given. A phone whose position cannot
@@ -430,10 +436,20 @@ function useDirectoryOrigin(): DirectoryOrigin {
   const deviceLatitude = location.status === 'granted' ? location.latitude : null;
   const deviceLongitude = location.status === 'granted' ? location.longitude : null;
   const place = mapLocation.place;
+  const mapView = useMapView();
+  const fromMap = mapView && mapView.choice === choiceKey(mapLocation) ? mapView : null;
 
-  return React.useMemo<DirectoryOrigin>(() => {
+  const where = React.useMemo<Exclude<DirectoryOrigin, { state: 'ready' }> | {
+    state: 'ready';
+    origin: Coords;
+    onDevice: boolean;
+  }>(() => {
     if (!mapLocation.ready) return { state: 'loading' };
     if (mapLocation.mode === null) return { state: 'unchosen' };
+
+    if (fromMap) {
+      return { state: 'ready', origin: fromMap.origin, onDevice: fromMap.following };
+    }
 
     if (onDevice) {
       return deviceLatitude !== null && deviceLongitude !== null
@@ -441,7 +457,6 @@ function useDirectoryOrigin(): DirectoryOrigin {
             state: 'ready',
             origin: { latitude: deviceLatitude, longitude: deviceLongitude },
             onDevice: true,
-            label: null,
           }
         : { state: 'loading' };
     }
@@ -451,10 +466,19 @@ function useDirectoryOrigin(): DirectoryOrigin {
           state: 'ready',
           origin: { latitude: place.latitude, longitude: place.longitude },
           onDevice: false,
-          label: place.label,
         }
       : { state: 'unchosen' };
-  }, [mapLocation.ready, mapLocation.mode, onDevice, deviceLatitude, deviceLongitude, place]);
+  }, [mapLocation.ready, mapLocation.mode, fromMap, onDevice, deviceLatitude, deviceLongitude, place]);
+
+  const name = useListPlaceName(
+    where.state === 'ready' ? where.origin : null,
+    where.state === 'ready' && where.onDevice,
+    place
+  );
+  return React.useMemo<DirectoryOrigin>(
+    () => (where.state === 'ready' ? { ...where, name } : where),
+    [where, name]
+  );
 }
 
 /** What the Directory is showing. */
@@ -572,11 +596,18 @@ export function useDirectory() {
 
 export type Directory = ReturnType<typeof useDirectory>;
 
-/** What the Directory is a list of, in a sentence: "...near Ottawa, Ontario...". */
+/** What the Directory is a list of, in a sentence: "...near you in Ottawa, Ontario...". */
 export function directoryLead(directory: Directory): string {
+  const name = directory.where.state === 'ready' ? directory.where.name : null;
   const where =
-    directory.where.state === 'ready' && !directory.where.onDevice && directory.where.label
-      ? DIRECTORY_TEXT.near(directory.where.label)
-      : DIRECTORY_TEXT.nearYou;
+    name === null
+      ? DIRECTORY_TEXT.nearYou
+      : name.kind === 'you'
+        ? name.city
+          ? DIRECTORY_TEXT.nearYouIn(name.city)
+          : DIRECTORY_TEXT.nearYou
+        : name.kind === 'named'
+          ? DIRECTORY_TEXT.near(name.label)
+          : DIRECTORY_TEXT.mapMiddle;
   return DIRECTORY_TEXT.lead(where);
 }
