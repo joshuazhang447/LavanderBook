@@ -4,6 +4,7 @@ import {
   EyeOff,
   Flag,
   ListChecks,
+  Map as MapIcon,
   Route,
   SquarePen,
 } from 'lucide-react-native';
@@ -15,6 +16,7 @@ import { AboutPill, aboutPillLabel } from '@/components/about-pill';
 import { ChenfengReportSheet } from '@/components/chenfeng/report-sheet';
 import { CONTACT_ICONS, contactSpoken } from '@/components/contact-list';
 import { openDirections } from '@/components/directions-button';
+import { GlassButton } from '@/components/glass';
 import { LinkedText, openLink } from '@/components/linked-text';
 import { StarRating } from '@/components/star-rating';
 import { TagPill } from '@/components/tag-pill';
@@ -29,10 +31,17 @@ import {
   SheetPush,
   SheetScrollView,
   SheetToolbar,
+  useSheet,
 } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import type { VenueSheetProps } from '@/components/venue-sheet';
-import { ABOUT_TEXT, CONTACT_TEXT, DETAILS_TEXT, detailsTeaser } from '@/lib/directory-text';
+import {
+  ABOUT_TEXT,
+  CONTACT_TEXT,
+  DETAILS_TEXT,
+  detailsTeaser,
+  SHOW_ON_MAP_TEXT,
+} from '@/lib/directory-text';
 import { lightImpact } from '@/lib/haptics';
 import { MASK_TEXT, moderationStatus, REPORT_TEXT, spokenMasked, STATUS_TEXT } from '@/lib/moderation-text';
 import type { AnswerSummaryRow } from '@/lib/questionnaire';
@@ -57,8 +66,11 @@ import { useVenueDetails, type Note, type VenueReview } from '@/lib/venue-detail
  * The data, and every rule about what is shown, is the other skins' card's
  * (useVenueDetails).
  */
-export function ChenfengVenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
+export function ChenfengVenueSheet({ venue, onClose, onWriteReview, onShowOnMap }: VenueSheetProps) {
   const details = useVenueDetails(venue);
+  // Show on Map lowers the sheet the usual way, and only once it is gone
+  // asks for the map: set by the button, read when the sheet reports closed.
+  const toMap = React.useRef(false);
   const [pushed, setPushed] = React.useState(false);
   const [popToken, setPopToken] = React.useState(0);
   /** The review being reported, in a sheet of its own beside this one. */
@@ -74,7 +86,7 @@ export function ChenfengVenueSheet({ venue, onClose, onWriteReview }: VenueSheet
         undimmedThrough="medium"
         grouped
         accessibilityLabel={venue.name}
-        onClose={onClose}>
+        onClose={() => (toMap.current && onShowOnMap ? onShowOnMap() : onClose())}>
         <SheetPush
           base={
             <PlaceCard
@@ -92,6 +104,13 @@ export function ChenfengVenueSheet({ venue, onClose, onWriteReview }: VenueSheet
                   : undefined
               }
               onWriteReview={onWriteReview}
+              onShowOnMap={
+                isMapped(venue) && onShowOnMap
+                  ? () => {
+                      toMap.current = true;
+                    }
+                  : undefined
+              }
               onMoreDetails={() => setPushed(true)}
               onAbout={() => setAbout(true)}
               onReport={setReporting}
@@ -209,11 +228,27 @@ function AboutSheet({
 
 type Details = ReturnType<typeof useVenueDetails>;
 
+/** The map in a glass circle beside ✕: closes the card, then the map moves to its pin. */
+function ShowOnMapButton({ name, onPress }: { name: string; onPress: () => void }) {
+  const sheet = useSheet();
+  return (
+    <GlassButton
+      onPress={() => {
+        onPress();
+        sheet.requestDismiss();
+      }}
+      accessibilityLabel={SHOW_ON_MAP_TEXT.spoken(name)}>
+      <Icon as={MapIcon} size={19} weight="medium" strokeWidth={2.25} className="text-foreground" />
+    </GlassButton>
+  );
+}
+
 function PlaceCard({
   details,
   name,
   onDirections,
   onWriteReview,
+  onShowOnMap,
   onMoreDetails,
   onAbout,
   onReport,
@@ -223,6 +258,8 @@ function PlaceCard({
   /** Absent for a venue with no coordinates; the button goes with it. */
   onDirections?: () => void;
   onWriteReview: () => void;
+  /** Marks the close as a trip to the map; absent where there is no pin. */
+  onShowOnMap?: () => void;
   onMoreDetails: () => void;
   /** Opens the whole description. */
   onAbout: () => void;
@@ -329,7 +366,10 @@ function PlaceCard({
             </Pressable>
           ) : null}
         </View>
-        <SheetCloseButton />
+        <View className="flex-row gap-2">
+          {onShowOnMap ? <ShowOnMapButton name={name} onPress={onShowOnMap} /> : null}
+          <SheetCloseButton />
+        </View>
       </View>
 
       {/* Side by side while both labels fit; a long one ("Answer 2 New

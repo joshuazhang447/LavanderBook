@@ -190,6 +190,13 @@ export const LIST_TEXT = {
   retryTitle: 'Try Again',
 } as const;
 
+/** A place card's way to its pin: on the Map tab it moves the map there, elsewhere it goes over to it. */
+export const SHOW_ON_MAP_TEXT = {
+  label: 'Show on map',
+  title: 'Show on Map',
+  spoken: (name: string) => `Show ${name} on the map`,
+} as const;
+
 /**
  * The Directory tab: every place LavenderBook lists around here, by kind - for
  * somebody new to a city asking where the community centres, the trans

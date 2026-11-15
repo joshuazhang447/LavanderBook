@@ -5,6 +5,7 @@ import {
   EyeOff,
   Flag,
   ListChecks,
+  MapPin,
   X,
 } from 'lucide-react-native';
 import * as React from 'react';
@@ -39,7 +40,13 @@ import {
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { TagPage } from '@/components/venue-tag-page';
-import { ABOUT_TEXT, CONTACT_TEXT, DETAILS_TEXT, detailsTeaser } from '@/lib/directory-text';
+import {
+  ABOUT_TEXT,
+  CONTACT_TEXT,
+  DETAILS_TEXT,
+  detailsTeaser,
+  SHOW_ON_MAP_TEXT,
+} from '@/lib/directory-text';
 import { MASK_TEXT, moderationStatus, REPORT_TEXT, spokenMasked, STATUS_TEXT } from '@/lib/moderation-text';
 import { postedLabel } from '@/lib/review-dates';
 import { useSkin } from '@/lib/skin';
@@ -253,6 +260,12 @@ export type VenueSheetProps = {
   onClose: () => void;
   /** Hands off to the review form for this venue. */
   onWriteReview: () => void;
+  /**
+   * The way to its pin. The card closes first and then this is called, so
+   * the caller moves the map (or goes over to it) with the card out of the
+   * way. Never offered for a place with no coordinates.
+   */
+  onShowOnMap?: () => void;
 };
 
 export function VenueSheet(props: VenueSheetProps) {
@@ -265,7 +278,7 @@ export function VenueSheet(props: VenueSheetProps) {
   return <BasicVenueSheet {...props} />;
 }
 
-function BasicVenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
+function BasicVenueSheet({ venue, onClose, onWriteReview, onShowOnMap }: VenueSheetProps) {
   const {
     reviews,
     description,
@@ -299,14 +312,15 @@ function BasicVenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
    * that has rendered, the parent is told and unmounts the sheet, whose own
    * slide down is the only thing left to play.
    */
-  const [leaving, setLeaving] = React.useState<'close' | 'review' | null>(null);
+  const [leaving, setLeaving] = React.useState<'close' | 'review' | 'map' | null>(null);
   const told = React.useRef(false);
   React.useEffect(() => {
     if (!leaving || told.current) return;
     told.current = true;
     if (leaving === 'close') onClose();
+    else if (leaving === 'map') onShowOnMap?.();
     else onWriteReview();
-  }, [leaving, onClose, onWriteReview]);
+  }, [leaving, onClose, onWriteReview, onShowOnMap]);
   const close = React.useCallback(() => setLeaving('close'), []);
   /** The description's window. While it is open the sheet under it stays. */
   const [aboutOpen, setAboutOpen] = React.useState(false);
@@ -415,7 +429,17 @@ function BasicVenueSheet({ venue, onClose, onWriteReview }: VenueSheetProps) {
             ) : null}
 
           </View>
-          {/* An online organisation has nowhere to route to. */}
+          {/* Its pin, beside the way there. Neither for an online
+              organisation, which has nowhere to show or route to. */}
+          {isMapped(venue) && onShowOnMap ? (
+            <Pressable
+              onPress={() => setLeaving('map')}
+              accessibilityRole="button"
+              accessibilityLabel={SHOW_ON_MAP_TEXT.spoken(venue.name)}
+              className="rounded-full p-2 active:bg-accent">
+              <Icon as={MapPin} className="size-5 text-muted-foreground" />
+            </Pressable>
+          ) : null}
           {isMapped(venue) ? (
             <DirectionsButton
               name={venue.name}

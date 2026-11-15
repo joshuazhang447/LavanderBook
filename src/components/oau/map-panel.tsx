@@ -499,7 +499,10 @@ export type OauMapChromeProps = {
   onSelectVenue: (venue: NearbyVenue) => void;
   onCloseVenue: () => void;
   onWriteReview: (venue: NearbyVenue) => void;
+  /** From a row: closes any card and moves the map to the place. */
   onLocate: (venue: NearbyVenue) => void;
+  /** From the open card, or a search pick: moves the map to it and leaves the card open. */
+  onShowOnMap: (venue: NearbyVenue) => void;
   onPickPlace: (place: PlaceResult) => void;
   onClearPlace: () => void;
   following: boolean;
@@ -520,12 +523,31 @@ export function OauMapChrome(props: OauMapChromeProps) {
   const count = data.places ? data.places.nearby.length + data.places.online.length : 0;
 
   // How far the open card's place is, measured here on the device: a row
-  // knows it already; a pin's is worked out from the same origin.
+  // knows it already; a pin's is worked out from the same origin. Unless the
+  // list is following the user, that origin is the map's middle, which Show
+  // on map then moves onto the place itself: so it is taken as it was when
+  // the card opened, and "0 m" never replaces how far it really was.
+  const venueId = props.venue?.id ?? null;
+  const [openedAt, setOpenedAt] = React.useState<{ id: string | null; from: Coords | null }>({
+    id: null,
+    from: null,
+  });
+  if (openedAt.id !== venueId) setOpenedAt({ id: venueId, from: props.origin });
+  const measureFrom = props.following ? props.origin : openedAt.id === venueId ? openedAt.from : props.origin;
   const distance = React.useMemo(() => {
     const venue = props.venue;
-    if (!venue || !isMapped(venue) || !props.origin) return null;
-    return distanceMeters(props.origin, { latitude: venue.lat, longitude: venue.lng });
-  }, [props.venue, props.origin]);
+    if (!venue || !isMapped(venue) || !measureFrom) return null;
+    return distanceMeters(measureFrom, { latitude: venue.lat, longitude: venue.lng });
+  }, [props.venue, measureFrom]);
+
+  // A pick from the search opens the card and moves the map in one go, so
+  // the card would first draw with the map already on the place: where it
+  // was measured from is noted here, before either happens.
+  const pickVenue = (venue: NearbyVenue) => {
+    setOpenedAt({ id: venue.id, from: props.origin });
+    props.onSelectVenue(venue);
+    if (isMapped(venue)) props.onShowOnMap(venue);
+  };
 
   const header = (
     <PlacesHeader
@@ -538,7 +560,15 @@ export function OauMapChrome(props: OauMapChromeProps) {
     />
   );
 
-  const shell = { data, header, settingsOpen, count, distance, title: T.places(count, where) };
+  const shell = {
+    data,
+    header,
+    settingsOpen,
+    count,
+    distance,
+    title: T.places(count, where),
+    onPickVenue: pickVenue,
+  };
   return isWide ? <WidePanel {...props} {...shell} /> : <NarrowSheet {...props} {...shell} />;
 }
 
@@ -550,6 +580,8 @@ type ShellProps = OauMapChromeProps & {
   distance: number | null;
   /** Read out as the sheet's name while it shows the list. */
   title: string;
+  /** One of LavenderBook's places picked from the search: its card, and its pin. */
+  onPickVenue: (venue: NearbyVenue) => void;
 };
 
 /** The card for the open place, keyed by it so each opens fresh. */
@@ -569,7 +601,10 @@ function Card({
       distance={props.distance}
       back={{ label: T.back(props.count), onPress: props.onCloseVenue }}
       onClose={props.onCloseVenue}
-      onWriteReview={() => props.onWriteReview(venue)}>
+      onWriteReview={() => props.onWriteReview(venue)}
+      // The map is right beside the card here: it moves, the card stays.
+      onShowOnMap={() => props.onShowOnMap(venue)}
+      staysForMap>
       {children}
     </OauPlaceCard>
   );
@@ -599,7 +634,8 @@ function WidePanel(props: ShellProps) {
             rows={props.data.everyRow}
             measureFrom={props.origin}
             onPick={props.onPickPlace}
-            onPickVenue={props.onSelectVenue}
+            // Its card in the panel, and its pin on the map beside it.
+            onPickVenue={props.onPickVenue}
             onClear={props.onClearPlace}
           />
           {/* Which pins the map shows; the list below follows. */}
@@ -680,18 +716,29 @@ function NarrowSheet(props: ShellProps) {
 
   // A card opens at half; closing it goes back to the list where it was.
   // Worked out while rendering, so the sheet never draws a frame at the old height.
+  // A place picked from the search opens at peek instead, the way a map app
+  // shows a search: its pin in the clear above, its name along the bottom.
   const venueId = props.venue?.id ?? null;
   const [returnTo, setReturnTo] = React.useState<Detent>('peek');
   const [shownVenue, setShownVenue] = React.useState<string | null>(null);
+  const [openLow, setOpenLow] = React.useState(false);
   if (venueId !== shownVenue) {
     setShownVenue(venueId);
-    if (venueId && !shownVenue) {
-      setReturnTo(detent);
+    if (venueId && !shownVenue) setReturnTo(detent);
+    if (venueId && openLow) {
+      setOpenLow(false);
+      setDetent('peek');
+    } else if (venueId && !shownVenue) {
       if (detent === 'peek') setDetent('half');
     } else if (!venueId) {
       setDetent(returnTo);
     }
   }
+  const showOnMap = (venue: NearbyVenue) => {
+    // Lowered, so the pin it goes to can be seen.
+    snapTo('peek');
+    props.onShowOnMap(venue);
+  };
 
   const order: Detent[] = ['peek', 'half', 'full'];
   const stops = [PEEK, half, full];
@@ -739,7 +786,15 @@ function NarrowSheet(props: ShellProps) {
           rows={props.data.everyRow}
           measureFrom={props.origin}
           onPick={props.onPickPlace}
-          onPickVenue={props.onSelectVenue}
+          onPickVenue={(venue) => {
+            // Somewhere to show: the card low, with the map on its pin. An
+            // online group has no pin, so its card opens as from a row.
+            if (isMapped(venue)) {
+              if (venue.id === props.venue?.id) snapTo('peek');
+              else setOpenLow(true);
+            }
+            props.onPickVenue(venue);
+          }}
           onClear={props.onClearPlace}
         />
         <MapFilterChips className="mt-2" />
@@ -764,7 +819,7 @@ function NarrowSheet(props: ShellProps) {
         )}>
         <PaperBackdrop tab="map" />
         {props.venue ? (
-          <Card props={props}>
+          <Card props={{ ...props, onShowOnMap: showOnMap }}>
             {({ header, content }) => (
               <View className="flex-1">
                 <GestureDetector gesture={drag}>

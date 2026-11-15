@@ -465,6 +465,7 @@ export default function MapScreen() {
               setViewingVenue(null);
               locateVenue(venue);
             }}
+            onShowOnMap={locateVenue}
             onPickPlace={pickPlace}
             onClearPlace={() => setSearchResult(null)}
             following={following}
@@ -514,6 +515,10 @@ export default function MapScreen() {
           venue={viewingVenue}
           onClose={() => setViewingVenue(null)}
           onWriteReview={() => writeReviewFor(viewingVenue)}
+          onShowOnMap={() => {
+            setViewingVenue(null);
+            locateVenue(viewingVenue);
+          }}
         />
       ) : null}
 
